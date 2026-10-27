@@ -10,6 +10,7 @@
 #include <ui/qt/widgets/learn_card_widget.h>
 #include <ui_learn_card_widget.h>
 
+#include <ui/qt/utils/zoom_scaling.h>
 #include <ui/qt/utils/theme_manager.h>
 #include <ui/qt/utils/theme_styler.h>
 #include <ui/qt/utils/workspace_state.h>
@@ -34,6 +35,7 @@ LearnCardWidget::LearnCardWidget(QWidget *parent) :
     links_collapsed_(false)
 {
     ui_->setupUi(this);
+    ZoomScaling::scaleSizeLimits(this);
 
     loadLinksFromRessource();
     applyTheme();
@@ -139,6 +141,9 @@ void LearnCardWidget::setupLinks()
         link_layout->setContentsMargins(16, 4, 16, 4);
         link_layout->setSpacing(0);
     }
+    // Registers the layout for zoom updates; the replaced layout is deleted
+    // above, which ends its connection.
+    ZoomScaling::scaleLayoutMetrics(link_layout);
 
     for (const LinkType &link : links_) {
         if (link.validity != LearnCardWidget::AllVersions) {
@@ -173,8 +178,16 @@ void LearnCardWidget::setupLinks()
 
 void LearnCardWidget::applyTheme()
 {
-    setStyleSheet(ThemeManager::styleSheet(QStringLiteral("widgets/learn-card")));
+    applyStyleSheet();
     setupActionButtons();
+    if (!styled_by_parent_)
+        card_link_color_ = ThemeManager::instance()->color(ThemeManager::CardLink);
+    applyCardLinkPalette();
+}
+
+void LearnCardWidget::setCardLinkColor(const QColor &color)
+{
+    card_link_color_ = color;
     applyCardLinkPalette();
 }
 
@@ -185,7 +198,7 @@ void LearnCardWidget::applyCardLinkPalette()
     // the card and on its hover fill (in dark mode it is lifted past
     // the application Link), so the labels get it locally, and the
     // application Link stays as it is.
-    const QColor card_link = ThemeManager::instance()->color(ThemeManager::CardLink);
+    const QColor card_link = card_link_color_;
     const QList<QLabel *> labels = ui_->learnLinkContainer->findChildren<QLabel *>(
         QStringLiteral("learnLink"), Qt::FindDirectChildrenOnly);
     for (QLabel *label : labels) {
@@ -265,6 +278,17 @@ void LearnCardWidget::setLinksCollapsed(bool collapsed)
 bool LearnCardWidget::isLinksCollapsed() const
 {
     return links_collapsed_;
+}
+
+void LearnCardWidget::setStyledByParent(bool styled_by_parent)
+{
+    styled_by_parent_ = styled_by_parent;
+    applyStyleSheet();
+}
+
+void LearnCardWidget::applyStyleSheet()
+{
+    setStyleSheet(styled_by_parent_ ? QString() : ThemeManager::styleSheet(QStringLiteral("widgets/learn-card")));
 }
 
 bool LearnCardWidget::event(QEvent *event)

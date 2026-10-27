@@ -24,7 +24,7 @@ namespace {
 //
 //   - macOS (any Qt) and
 //     Windows (Qt ≥ 6.8): caller-supplied snapshot.  ThemeManager
-//                         takes this from the platform style at
+//                         captures the platform palette at
 //                         construction time (pristine, before any
 //                         setPalette() pollution) and refreshes it on
 //                         scheme flips.  Reading
@@ -174,7 +174,8 @@ QPalette ThemePaletteBuilder::build(const TokenMap                              
                                     const QHash<QString, ThemeManager::ThemeToken>     &tokenNameCache,
                                     const QHash<QString, QPalette::ColorRole>          &paletteRoleCache,
                                     const QPalette                                     &osBaseline,
-                                    const ColorMath::ContrastRatios                    &ratios)
+                                    const ColorMath::ContrastRatios                    &ratios,
+                                    QHash<ThemeManager::ThemeToken, const char *>      *sources)
 {
     QPalette pal = baselinePalette(isDarkMode, osBaseline);
 
@@ -241,7 +242,9 @@ QPalette ThemePaletteBuilder::build(const TokenMap                              
     // HighlightedText is the theme's `palette.highlightedText` when it
     // pins one (a saturated selection color can sit where
     // contrastingText() picks black although the theme wants white),
-    // else contrastingText() of the resolved highlight.  Either way it is
+    // else the theme's `packets.selectionText` when the highlight is the
+    // theme's `packets.selection`, so a theme states its selection text
+    // once, else contrastingText() of the resolved highlight.  Either way it is
     // lifted to body-text contrast against that highlight: the highlight
     // may come from packets.selection or brand.primary, so a pin chosen
     // for one color must not turn unreadable on another.  Every Qt-drawn
@@ -249,16 +252,24 @@ QPalette ThemePaletteBuilder::build(const TokenMap                              
     // role, so this is the one place the selection text is checked.
     const QColor brandPrimary = ThemeTokenHandler::sideOf(tokens, ThemeManager::BrandPrimary, isDarkMode);
     if (brandPrimary.isValid()) {
-        QColor highlight = ThemeTokenHandler::sideOf(tokens, ThemeManager::PaletteHighlight, isDarkMode);
-        if (!highlight.isValid())
-            highlight = ThemeTokenHandler::sideOf(tokens, ThemeManager::PacketsSelection, isDarkMode);
-        if (!highlight.isValid())
-            highlight = brandPrimary;
+        const QColor pinnedHighlight =
+                ThemeTokenHandler::sideOf(tokens, ThemeManager::PaletteHighlight, isDarkMode);
+        const QColor selectionFill =
+                ThemeTokenHandler::sideOf(tokens, ThemeManager::PacketsSelection, isDarkMode);
+        QColor highlight = pinnedHighlight.isValid() ? pinnedHighlight
+                         : selectionFill.isValid()   ? selectionFill
+                                                     : brandPrimary;
+        if (sources)
+            sources->insert(ThemeManager::PaletteHighlight,
+                QT_TRANSLATE_NOOP("ThemeTokenHandler", "packets.selection when set, else brand.primary"));
 
-        const QColor pinnedHighlightedText =
+        QColor highlightedTextSource =
                 ThemeTokenHandler::sideOf(tokens, ThemeManager::PaletteHighlightedText, isDarkMode);
-        const QColor highlightedTextSource = pinnedHighlightedText.isValid()
-                ? pinnedHighlightedText : ColorMath::contrastingText(highlight);
+        if (!highlightedTextSource.isValid() && !pinnedHighlight.isValid() && selectionFill.isValid())
+            highlightedTextSource =
+                    ThemeTokenHandler::sideOf(tokens, ThemeManager::PacketsSelectionText, isDarkMode);
+        if (!highlightedTextSource.isValid())
+            highlightedTextSource = ColorMath::contrastingText(highlight);
         QColor highlightedText;
         if (ratios.level == ThemeContrast::High) {
             // High contrast: readability wins over the theme's pinned
@@ -273,37 +284,75 @@ QPalette ThemePaletteBuilder::build(const TokenMap                              
             highlightedText = ColorMath::readableText(highlightedTextSource, highlight, ratios);
         }
         setAllGroups(QPalette::HighlightedText, highlightedText);
+        if (sources)
+            sources->insert(ThemeManager::PaletteHighlightedText,
+                QT_TRANSLATE_NOOP("ThemeTokenHandler", "packets.selectionText when palette.highlight is packets.selection, else black or white on palette.highlight, kept readable on it"));
         setAllGroups(QPalette::Highlight, highlight);
         // Links follow the selection color.  Link text is drawn on Base,
         // so a dark selection color must be lifted until it stays
         // readable there in either scheme.
-        setAllGroups(QPalette::Link, ColorMath::readableText(highlight, baseColor, ratios));
+        setAllGroups(QPalette::Link, ColorMath::readableText(
+                pal.color(QPalette::Active, kLinkSourceRole), baseColor, ratios));
 #if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
         setAllGroups(QPalette::Accent, brandPrimary);
 #endif
     }
 
-    // High contrast: the roles a theme cannot pin are derived from the
-    // theme's own colors, so a platform baseline (such as a Windows
-    // high-contrast scheme) does not mix its colors into the theme.
-    // Buttons and tooltips take the window surface with readable window
-    // text, placeholder text is Text faded halfway into Base and lifted
-    // to the large-text ratio, and the bevel roles keep the non-text
-    // ratio from the window.
-    if (ratios.level == ThemeContrast::High) {
+    const bool highContrast = ratios.level == ThemeContrast::High;
+
+    // Buttons take the window surface with readable window text in high
+    // contrast, so a platform baseline (such as a Windows high-contrast
+    // scheme) does not mix its colors into the theme.
+#ifdef Q_OS_MACOS
+    // On macOS they also do so whenever the theme sets a window color for
+    // this mode.  QMacStyle fills item view header sections, the packet
+    // list column header among them, with Button and labels them in
+    // ButtonText, so without this a tinted window keeps the system grey
+    // header.  Themes without a window color keep the system roles, since
+    // every build starts from the baseline.
+    const bool buttonFollowsWindow = highContrast
+            || ThemeTokenHandler::sideOf(tokens, ThemeManager::PaletteWindow, isDarkMode).isValid();
+#else
+    const bool buttonFollowsWindow = highContrast;
+#endif
+
+    if (buttonFollowsWindow) {
         const QColor window     = pal.color(QPalette::Active, QPalette::Window);
         const QColor windowText = pal.color(QPalette::Active, QPalette::WindowText);
         const QColor windowTextReadable = ColorMath::readableText(windowText, window, ratios);
-        setAllGroups(QPalette::Button,      window);
-        setAllGroups(QPalette::ButtonText,  windowTextReadable);
-        setAllGroups(QPalette::ToolTipBase, window);
-        setAllGroups(QPalette::ToolTipText, windowTextReadable);
-        setAllGroups(QPalette::PlaceholderText, ColorMath::ensureContrast(
-                ColorMath::mix(baseColor, pal.color(QPalette::Active, QPalette::Text), 0.5),
-                baseColor, ratios.largeText));
-        for (QPalette::ColorRole role : { QPalette::Dark, QPalette::Shadow }) {
-            setAllGroups(role, ColorMath::ensureContrast(pal.color(QPalette::Active, role),
-                                                         window, ratios.nonText));
+        QColor buttonText = windowTextReadable;
+#ifdef Q_OS_MACOS
+        // Push buttons and combo boxes draw native bezels that ignore
+        // Button but label them in ButtonText, so the text is lifted
+        // against the baseline bezel as well.  The bezel lift moves toward
+        // the bezel's contrasting text, which can lose contrast on a window
+        // of the opposite lightness; the header is drawn on the window, so
+        // the lifted text is kept only while it still reads there.
+        if (!highContrast) {
+            const QColor bezel = pal.color(QPalette::Active, QPalette::Button);
+            const QColor onBezel = ColorMath::readableText(windowTextReadable, bezel, ratios);
+            if (ColorMath::isReadable(onBezel, window, ratios))
+                buttonText = onBezel;
+        }
+#endif
+        setAllGroups(QPalette::Button,     window);
+        setAllGroups(QPalette::ButtonText, buttonText);
+
+        // High contrast: the other roles a theme cannot pin are derived
+        // from the theme's own colors as well.  Tooltips take the window
+        // surface with readable window text, placeholder text is Text
+        // faded halfway into Base and lifted to the large-text ratio, and
+        // the bevel roles keep the non-text ratio from the window.
+        if (highContrast) {
+            setAllGroups(QPalette::ToolTipBase, window);
+            setAllGroups(QPalette::ToolTipText, windowTextReadable);
+            setAllGroups(QPalette::PlaceholderText, ColorMath::ensureContrast(
+                    ColorMath::mix(baseColor, pal.color(QPalette::Active, QPalette::Text), 0.5),
+                    baseColor, ratios.largeText));
+            for (QPalette::ColorRole role : { QPalette::Dark, QPalette::Shadow }) {
+                setAllGroups(role, ColorMath::ensureContrast(pal.color(QPalette::Active, role),
+                                                             window, ratios.nonText));
+            }
         }
     }
 

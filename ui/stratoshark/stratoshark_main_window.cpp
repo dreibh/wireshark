@@ -71,6 +71,7 @@ DIAG_ON(frame-larger-than=)
 
 #include <ui/qt/utils/color_utils.h>
 #include <ui/qt/utils/font_manager.h>
+#include <ui/qt/utils/zoom_scaling.h>
 #include <ui/qt/utils/profile_switcher.h>
 #include <ui/qt/utils/qt_ui_utils.h>
 #include <ui/qt/utils/themes/contrast_adapt_icon.h>
@@ -472,16 +473,27 @@ StratosharkMainWindow::StratosharkMainWindow(QWidget *parent) :
     main_ui_->actionViewFullScreen->setShortcut(QKeySequence(Qt::Key_F11));
 #endif
 
+    // Ctrl+= zooms in as well, so the user does not need Shift on
+    // keyboards where '+' shares a key with '='. Set once here: the
+    // palette change handler re-runs initMainToolbarIcons(), and
+    // appending there would duplicate the sequence and make it ambiguous.
+    QList<QKeySequence> zi_seq = main_ui_->actionViewZoomIn->shortcuts();
+    zi_seq << QKeySequence(Qt::CTRL | Qt::Key_Equal);
+    main_ui_->actionViewZoomIn->setShortcuts(zi_seq);
+
 #if defined(Q_OS_MACOS)
 
-    main_ui_->goToPacketLabel->setAttribute(Qt::WA_MacSmallSize, true);
-    main_ui_->goToLineEdit->setAttribute(Qt::WA_MacSmallSize, true);
-    main_ui_->goToGo->setAttribute(Qt::WA_MacSmallSize, true);
-    main_ui_->goToCancel->setAttribute(Qt::WA_MacSmallSize, true);
+    ZoomScaling::scaleMacControlSize(main_ui_->goToPacketLabel);
+    ZoomScaling::scaleMacControlSize(main_ui_->goToLineEdit);
+    ZoomScaling::scaleMacControlSize(main_ui_->goToGo);
+    ZoomScaling::scaleMacControlSize(main_ui_->goToCancel);
 
     main_ui_->actionEditPreferences->setMenuRole(QAction::PreferencesRole);
 
 #endif // Q_OS_MACOS
+
+    ZoomScaling::scaleSizeLimits(main_ui_->goToGo);
+    ZoomScaling::scaleSizeLimits(main_ui_->goToCancel);
 
     connect(main_ui_->goToGo, &QPushButton::pressed, this, &StratosharkMainWindow::goToGoClicked);
     connect(main_ui_->goToCancel, &QPushButton::pressed, this, &StratosharkMainWindow::goToCancelClicked);
@@ -1996,8 +2008,9 @@ void StratosharkMainWindow::captureStop() {
 }
 
 // Toolbar icons scale with the application zoom level (see the matching comment
-// in WiresharkMainWindow): the toolbar, as consumer, re-sizes on zoomChanged
-// rather than the icon scaling itself.
+// in WiresharkMainWindow): the main and display filter toolbars, as consumers,
+// re-size on zoomChanged rather than the icon scaling itself.  The display
+// filter toolbar shares its icon size with the status bar icons.
 void StratosharkMainWindow::updateMainToolbarIconSize()
 {
     // Normally 16 px. Reflects current GTK+ behavior and other Windows apps.
@@ -2008,8 +2021,10 @@ void StratosharkMainWindow::updateMainToolbarIconSize()
     // large IMHO.
     icon_size = icon_size * 3 / 2;
 #endif
-    icon_size = qRound(icon_size * FontManager::zoomFactor());
     main_ui_->mainToolBar->setIconSize(QSize(icon_size, icon_size));
+
+    const int filter_icon_size = ZoomScaling::barIconSize();
+    main_ui_->displayFilterToolBar->setIconSize(QSize(filter_icon_size, filter_icon_size));
 }
 
 void StratosharkMainWindow::initMainToolbarIcons()
@@ -2057,10 +2072,7 @@ void StratosharkMainWindow::initMainToolbarIcons()
 
     main_ui_->actionViewColorizePacketList->setIcon(ContrastAdaptIcon("view-colorize"));
 
-    QList<QKeySequence> zi_seq = main_ui_->actionViewZoomIn->shortcuts();
-    zi_seq << QKeySequence(Qt::CTRL | Qt::Key_Equal);
     main_ui_->actionViewZoomIn->setIcon(ThemedIcon("zoom-in"));
-    main_ui_->actionViewZoomIn->setShortcuts(zi_seq);
     main_ui_->actionViewZoomOut->setIcon(ThemedIcon("zoom-out"));
     main_ui_->actionViewNormalSize->setIcon(ThemedIcon("zoom-reset"));
     main_ui_->actionViewResizeColumns->setIcon(ThemedIcon("view-resize-columns"));

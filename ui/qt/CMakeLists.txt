@@ -70,7 +70,11 @@ set(WIRESHARK_WIDGET_HEADERS
 	widgets/splash_overlay.h
 	widgets/syntax_line_edit.h
 	widgets/tabnav_tree_view.h
+	widgets/theme_code_view.h
+	widgets/theme_color_editor.h
+	widgets/theme_preview_pick.h
 	widgets/theme_preview_widget.h
+	widgets/theme_welcome_preview.h
 	widgets/traffic_tab.h
 	widgets/traffic_tree.h
 	widgets/traffic_types_list.h
@@ -101,6 +105,7 @@ set(WIRESHARK_UTILS_HEADERS
 	utils/font_manager.h
 	utils/frame_information.h
 	utils/idata_printable.h
+	utils/jsonc_document.h
 	utils/plot_theme.h
 	utils/profile_switcher.h
 	utils/proto_node.h
@@ -112,19 +117,24 @@ set(WIRESHARK_UTILS_HEADERS
 	utils/software_update.h
 	utils/software_update_backend.h
 	utils/theme_manager.h
+	utils/zoom_scaling.h
 	utils/theme_styler.h
 	utils/themes/color_math.h
 	utils/themes/legacy_color_prefs_migration.h
+	utils/themes/native_title_bar.h
 	utils/themes/system_theme_detector.h
+	utils/themes/theme_format.h
 	utils/themes/theme_palette_builder.h
 	utils/themes/theme_parser.h
 	utils/themes/theme_stylesheet_loader.h
 	utils/themes/theme_token_handler.h
+	utils/themes/theme_writer.h
 	utils/themes/themed_icon.h
 	utils/themes/token_palette.h
 	utils/themes/contrast_adapt_icon.h
 	utils/themes/themed_shape_icon.h
 	utils/themes/icon_engine_utils.h
+	utils/unique_name.h
 	utils/variant_pointer.h
 	utils/wireshark_mime_data.h
 	utils/wireshark_zip_helper.h
@@ -330,6 +340,7 @@ set(WIRESHARK_QT_HEADERS
 	tcp_dedup_dialog.h
 	tcp_stream_dialog.h
 	theme_debug_dialog.h
+	theme_designer_dialog.h
 	time_shift_dialog.h
 	traffic_table_dialog.h
 	uat_dialog.h
@@ -419,7 +430,11 @@ set(WIRESHARK_WIDGET_SRCS
 	widgets/splash_overlay.cpp
 	widgets/syntax_line_edit.cpp
 	widgets/tabnav_tree_view.cpp
+	widgets/theme_code_view.cpp
+	widgets/theme_color_editor.cpp
+	widgets/theme_preview_pick.cpp
 	widgets/theme_preview_widget.cpp
+	widgets/theme_welcome_preview.cpp
 	widgets/traffic_tab.cpp
 	widgets/traffic_tree.cpp
 	widgets/traffic_types_list.cpp
@@ -442,13 +457,25 @@ set(WIRESHARK_MANAGER_SRCS
 )
 
 if(APPLE)
-	set(WIRESHARK_THEMES_PLATFORM_SRC utils/themes/system_theme_detector_mac.mm)
+	set(WIRESHARK_THEMES_PLATFORM_SRC
+		utils/themes/system_theme_detector_mac.mm
+		utils/themes/native_title_bar_mac.mm
+	)
 elseif(WIN32)
-	set(WIRESHARK_THEMES_PLATFORM_SRC utils/themes/system_theme_detector_win.cpp)
+	set(WIRESHARK_THEMES_PLATFORM_SRC
+		utils/themes/system_theme_detector_win.cpp
+		utils/themes/native_title_bar_win.cpp
+	)
 elseif(UNIX)
-	set(WIRESHARK_THEMES_PLATFORM_SRC utils/themes/system_theme_detector_unix.cpp)
+	set(WIRESHARK_THEMES_PLATFORM_SRC
+		utils/themes/system_theme_detector_unix.cpp
+		utils/themes/native_title_bar_stub.cpp
+	)
 else()
-	set(WIRESHARK_THEMES_PLATFORM_SRC utils/themes/system_theme_detector_stub.cpp)
+	set(WIRESHARK_THEMES_PLATFORM_SRC
+		utils/themes/system_theme_detector_stub.cpp
+		utils/themes/native_title_bar_stub.cpp
+	)
 endif()
 
 if(HAVE_SOFTWARE_UPDATE AND WIN32)
@@ -469,6 +496,7 @@ set(WIRESHARK_UTILS_SRCS
 	utils/field_information.cpp
 	utils/font_manager.cpp
 	utils/frame_information.cpp
+	utils/jsonc_document.cpp
 	utils/plot_theme.cpp
 	utils/profile_switcher.cpp
 	utils/proto_node.cpp
@@ -480,6 +508,8 @@ set(WIRESHARK_UTILS_SRCS
 	utils/software_update.cpp
 	${WIRESHARK_SOFTWARE_UPDATE_PLATFORM_SRC}
 	utils/theme_manager.cpp
+	utils/zoom_scaling.cpp
+	utils/zoom_scaling_widgets.cpp
 	utils/theme_styler.cpp
 	utils/themes/color_math.cpp
 	utils/themes/legacy_color_prefs_migration.cpp
@@ -487,10 +517,12 @@ set(WIRESHARK_UTILS_SRCS
 	utils/themes/theme_parser.cpp
 	utils/themes/theme_stylesheet_loader.cpp
 	utils/themes/theme_token_handler.cpp
+	utils/themes/theme_writer.cpp
 	utils/themes/themed_icon.cpp
 	utils/themes/contrast_adapt_icon.cpp
 	utils/themes/themed_shape_icon.cpp
 	utils/themes/system_theme_detector_common.cpp
+	utils/themes/native_title_bar_common.cpp
 	${WIRESHARK_THEMES_PLATFORM_SRC}
 	utils/wireshark_mime_data.cpp
 	utils/wireshark_zip_helper.cpp
@@ -688,6 +720,7 @@ set(WIRESHARK_QT_SRC
 	tcp_dedup_dialog.cpp
 	tcp_stream_dialog.cpp
 	theme_debug_dialog.cpp
+	theme_designer_dialog.cpp
 	time_shift_dialog.cpp
 	traffic_table_dialog.cpp
 	uat_dialog.cpp
@@ -842,6 +875,9 @@ set(WIRESHARK_QT_UI
 	supported_protocols_dialog.ui
 	tap_parameter_dialog.ui
 	tcp_stream_dialog.ui
+	theme_designer_dialog.ui
+	theme_import_error_dialog.ui
+	theme_name_dialog.ui
 	time_shift_dialog.ui
 	traffic_table_dialog.ui
 	uat_dialog.ui
@@ -857,6 +893,8 @@ set(WIRESHARK_QT_WIDGETS_UI
 	widgets/capture_card_widget.ui
 	widgets/font_selection_widget.ui
 	widgets/learn_card_widget.ui
+	widgets/theme_color_editor.ui
+	widgets/theme_welcome_preview.ui
 	widgets/welcome_header_widget.ui
 )
 
@@ -960,12 +998,7 @@ qrc_finalize(NAME json_resource OUTPUT_VAR JSON_QRC)
 
 # Theme resources
 qrc_register(NAME themes PREFIX "/themes")
-add_theme(NAME "wireshark")
-add_theme(NAME "stratoshark")
-add_theme(NAME "inverted")
-add_theme(NAME "protan-deutan")
-add_theme(NAME "tritan")
-add_theme(NAME "high-contrast")
+add_bundled_themes()
 qrc_finalize(NAME themes OUTPUT_VAR THEMES_QRC)
 
 # Drop the file modification time of source files from generated files
@@ -1085,6 +1118,30 @@ set_target_properties(qtui PROPERTIES
 	AUTOUIC ON
 	# AUTORCC not needed with qt_add_resources
 	#AUTORCC ON
+)
+
+# Regression test for the stylesheet length scaling; Qt Core and Widgets
+# headers only, no QApplication. Run by test/suite_unittests.py.
+add_executable(qt_zoom_scaling_test EXCLUDE_FROM_ALL
+	utils/zoom_scaling.cpp
+	utils/zoom_scaling_test.cpp
+)
+
+target_include_directories(qt_zoom_scaling_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}
+		${CMAKE_BINARY_DIR}
+)
+
+target_link_libraries(qt_zoom_scaling_test Qt${qtver}::Core Qt${qtver}::Widgets)
+
+set_target_properties(qt_zoom_scaling_test PROPERTIES
+	FOLDER "Tests"
+	EXCLUDE_FROM_DEFAULT_BUILD True
+	AUTOMOC OFF
+	AUTOUIC OFF
+	AUTORCC OFF
+	COMPILE_FLAGS "${WERROR_COMMON_FLAGS}"
 )
 
 # Qt also provides translation catalogs for strings used in Qt modules

@@ -15,12 +15,14 @@
 #include <ui/qt/utils/font_manager.h>
 #include <ui/qt/utils/themes/color_math.h>
 #include <ui/qt/utils/themes/legacy_color_prefs_migration.h>
+#include <ui/qt/utils/themes/native_title_bar.h>
 #include <ui/qt/utils/themes/system_theme_detector.h>
 #include <ui/qt/utils/themes/theme_palette_builder.h>
 #include <ui/qt/utils/themes/theme_parser.h>
 #include <ui/qt/utils/themes/theme_stylesheet_loader.h>
 #include <ui/qt/utils/themes/theme_token_handler.h>
 #include <ui/qt/utils/workspace_state.h>
+#include <ui/qt/utils/zoom_scaling.h>
 
 #include <epan/prefs.h>
 
@@ -31,12 +33,12 @@
 #include <QApplication>
 #include <QColor>
 #include <QDir>
+#include <QEvent>
 #include <QFile>
 #include <QFileInfo>
 #include <QFont>
 #include <QMetaEnum>
 #include <QPalette>
-#include <QRegularExpression>
 #include <QSet>
 #include <QStyle>
 #include <QStyleHints>
@@ -50,6 +52,12 @@ ThemeManager* ThemeManager::instance_{nullptr};
 QMutex ThemeManager::mutex_;
 
 namespace {
+
+/** Resource path of the bundled theme @p name. */
+QString builtInThemePath(const QString &name)
+{
+    return QStringLiteral(":/themes/") + name + QStringLiteral("/theme.jsonc");
+}
 
 /**
  * Resolves a theme's internal name to a JSONC path the parser can open.
@@ -70,18 +78,12 @@ namespace {
  */
 QString resolveThemePath(const QString &internalName)
 {
-    const QString builtin = QStringLiteral(":/themes/") + internalName
-                          + QStringLiteral("/theme.jsonc");
+    const QString builtin = builtInThemePath(internalName);
     if (QFile::exists(builtin))
         return builtin;
 
-    const QString personalDir = WorkspaceState::instance()->personalThemesPath();
-    if (personalDir.isEmpty())
-        return QString();
-
-    const QString personal = QDir(personalDir).filePath(
-        internalName + QStringLiteral(".jsonc"));
-    if (QFile::exists(personal))
+    const QString personal = ThemeManager::personalThemePath(internalName);
+    if (!personal.isEmpty() && QFile::exists(personal))
         return personal;
 
     return QString();
@@ -118,6 +120,12 @@ ThemeManager::ThemeManager(QObject *parent)
         reapplyForSchemeChange();
     });
 
+    // Paint native title bars in the theme's window color.  Created before
+    // any window exists so every window's first Show passes its filter;
+    // Qt parent-child ownership deletes it with the ThemeManager.
+    NativeTitleBar *titleBar = new NativeTitleBar(this);
+    connect(this, &ThemeManager::themeChanged, titleBar, &NativeTitleBar::applyToAll);
+
 #if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
     // Follow the OS increase-contrast setting live.  Only a change of the
     // effective level re-themes: with gui.contrast Standard or High, or a
@@ -140,7 +148,13 @@ ThemeManager::ThemeManager(QObject *parent)
      * Adding a new token only requires:
      *   - Append the new ThemeToken to the enum in the header.
      *   - If a new top-level section is introduced, list it in
-     *     sections_ below with its required/optional flag.
+     *     sections_ below with its required/optional flag.  The
+     *     required flag also makes every token of the section
+     *     required for the Theme Designer.
+     *   - Name the enumerator <section prefix><file key with its first
+     *     letter upper-cased>: the enumerator name after the section
+     *     prefix, first letter lowered, is the key written in theme
+     *     files (settableKeys()), so it must match the schema.
      *
      * Everything else (section-to-token grouping, palette-role
      * lookup) falls out of the Q_ENUM metaobject scanning in the
@@ -179,6 +193,14 @@ ThemeManager::ThemeManager(QObject *parent)
         foreach (QString sectionKey, sectionKeys) {
             if (key.startsWith(sectionKey)) {
                 sections_[sectionKey].tokens << key.mid(sectionKey.length());
+                QString file_key = QString::fromLatin1(me.key(i)).mid(sectionKey.length());
+                if (!file_key.isEmpty()) {
+                    file_key[0] = file_key[0].toLower();
+                    settableKeys_ << SettableKey { static_cast<ThemeToken>(me.value(i)),
+                                                   sectionKey, file_key };
+                }
+                if (sections_[sectionKey].required)
+                    requiredTokens_ << static_cast<ThemeToken>(me.value(i));
                 break;
             }
         }
@@ -204,7 +226,7 @@ ThemeManager::ThemeManager(QObject *parent)
         // wireshark fallback.  resolveThemeName() also maps the legacy
         // "default" sentinel (written by builds that pre-date the
         // wireshark/stratoshark split) to the right flavor default.
-        loadTheme(resolveThemeName(QString::fromUtf8(recent.gui_theme_name)));
+        loadTheme(selectedThemeName());
     });
 
     // Pick up the initial mode from recent_common.  recent_read() has
@@ -219,9 +241,12 @@ ThemeManager::ThemeManager(QObject *parent)
     // feeds it the configured font names during loadTheme().
     FontManager::instance();
 
-    // Zoom changes the stylesheet output (loadStyleSheet scales font sizes by
-    // the zoom factor), so a zoom is a "themed stylesheets changed" event for
-    // stylesheet consumers.  Re-emit it as themeChanged so they reload.
+    // Zoom changes the stylesheet output (loadStyleSheet scales font sizes and
+    // lengths by the zoom factor), so a zoom is a "themed stylesheets changed"
+    // event for stylesheet consumers.  Re-emit it as themeChanged so they
+    // reload.  FontManager has already re-polished the widgets for the new
+    // style metrics, and the application stylesheet does not depend on the
+    // zoom, so it is not re-applied.
     connect(FontManager::instance(), &FontManager::zoomChanged,
             this, &ThemeManager::themeChanged);
 }
@@ -350,6 +375,8 @@ QList<ThemeInfo> ThemeManager::availableThemes()
         ThemeParser::Result result;
         if (!parser.parse(name, resourcePath, result))
             continue;
+        result.info.builtIn  = true;
+        result.info.filePath = resourcePath;
         list.append(result.info);
         seen.insert(name);
     }
@@ -380,6 +407,8 @@ QList<ThemeInfo> ThemeManager::availableThemes()
                 ThemeParser::Result result;
                 if (!parser.parse(internalName, fullPath, result))
                     continue;
+                result.info.builtIn  = false;
+                result.info.filePath = fullPath;
                 list.append(result.info);
                 seen.insert(internalName);
             }
@@ -538,14 +567,26 @@ void ThemeManager::reapplyForSchemeChange()
 
     // Refresh the OS baseline AFTER applyToStyleHints() — on Qt ≥ 6.8 the
     // setColorScheme() pin propagates synchronously into the platform
-    // style, so qApp->style()->standardPalette() now reflects the new
-    // scheme.  standardPalette() is the style's own definition; unlike
-    // QApplication::palette() it is independent of any prior setPalette()
-    // calls, so it cannot carry overrides from a previous theme.  Only
+    // theme, so the platform palette now reflects the new scheme.  Only
     // refresh on platforms where the OS palette is trusted; on Linux and
-    // Qt < 6.8 Windows the baseline is the built-in light/dark palette
-    // and osBaseline_ is unused.
-#if defined(Q_OS_MACOS) || (defined(Q_OS_WIN) && QT_VERSION >= QT_VERSION_CHECK(6, 8, 0))
+    // Qt < 6.8 Windows the baseline is the built-in light/dark palette and
+    // osBaseline_ is unused.
+#if defined(Q_OS_MACOS)
+    // QStyle::standardPalette() cannot be used here: QMacStyle returns a
+    // default-constructed QPalette, which is a copy of the current
+    // application palette, i.e. the palette we applied last.  After a
+    // Light -> Dark switch the baseline would stay light and the Inactive
+    // text roles and derived tokens would be built from light colors.
+    // Instead drop the application palette so Qt resolves it entirely from
+    // the platform theme, and read that back, which is what the constructor
+    // captures at startup.  This costs one extra ApplicationPaletteChange
+    // round, so it stays here and out of applyTheme(): theme, font and
+    // contrast reloads do not change the platform palette.
+    QApplication::setPalette(QPalette());
+    osBaseline_ = QApplication::palette();
+#elif defined(Q_OS_WIN) && QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+    // The Windows styles provide their own standard palette for the
+    // scheme set through QStyleHints.
     if (QStyle *s = qApp->style())
         osBaseline_ = s->standardPalette();
 #endif
@@ -590,7 +631,11 @@ void ThemeManager::applyApplicationStyleSheet()
 {
     if (!qApp)
         return;
-    qApp->setStyleSheet(loadStyleSheet(QStringLiteral("application")));
+    // Unlike loadStyleSheet(), not scaled by the zoom factor: the sheet
+    // only holds hairlines and one small corner radius, and this way a
+    // zoom step never has to replace it.
+    qApp->setStyleSheet(ThemeStyleSheetLoader::load(QStringLiteral("application"),
+                                                    themeColors_, isDarkMode()));
 }
 
 ThemeManager::ThemeMode ThemeManager::modeFromPrefs(int gui_color_scheme)
@@ -636,63 +681,13 @@ QColor ThemeManager::color(ThemeToken role) const
     return QColor();
 }
 
-namespace {
-// Qt stylesheets express font size both as "font-size: Npx" and inside the
-// "font:" shorthand (e.g. "font: bold 14px ..."), and only support absolute
-// px/pt units (no relative em/%).  Scale the size component of either form by
-// the current zoom factor so themed text zooms with the rest of the UI.
-// No-op at zoom level 0 (factor 1.0).
-QString scaleStyleSheetFontSizes(const QString &qss, qreal factor)
-{
-    if (qFuzzyCompare(factor, qreal(1.0)))
-        return qss;
-
-    // "font:" or "font-size:" with the value up to ';' or '}'.  The optional
-    // "-size" is anchored to ':' so this never matches font-weight/-family/etc.
-    static const QRegularExpression propRe(
-        QStringLiteral("\\bfont(?:-size)?\\s*:\\s*([^;}]*)"));
-    // A size token (the only px/pt token inside a font value).
-    static const QRegularExpression sizeRe(
-        QStringLiteral("([0-9]+(?:\\.[0-9]+)?)(px|pt)"));
-
-    QString out;
-    out.reserve(qss.size());
-    qsizetype last = 0;
-    auto it = propRe.globalMatch(qss);
-    while (it.hasNext()) {
-        const QRegularExpressionMatch m = it.next();
-        out += qss.mid(last, m.capturedStart(1) - last);
-
-        const QString value = m.captured(1);
-        QString scaledValue;
-        scaledValue.reserve(value.size());
-        qsizetype vlast = 0;
-        auto vit = sizeRe.globalMatch(value);
-        while (vit.hasNext()) {
-            const QRegularExpressionMatch vm = vit.next();
-            scaledValue += value.mid(vlast, vm.capturedStart() - vlast);
-            const double scaled = vm.captured(1).toDouble() * factor;
-            scaledValue += QStringLiteral("%1%2")
-                               .arg(qMax(1, qRound(scaled)))
-                               .arg(vm.captured(2));
-            vlast = vm.capturedEnd();
-        }
-        scaledValue += value.mid(vlast);
-
-        out += scaledValue;
-        last = m.capturedEnd(1);
-    }
-    out += qss.mid(last);
-    return out;
-}
-} // namespace
-
 QString ThemeManager::loadStyleSheet(const QString &name) const
 {
     const QString qss = ThemeStyleSheetLoader::load(name, themeColors_, isDarkMode());
     // The FontManager owns text zoom; apply it to the resolved stylesheet here
-    // so callers just re-fetch the stylesheet to pick up a new zoom level.
-    return scaleStyleSheetFontSizes(qss, FontManager::zoomFactor());
+    // (font sizes and lengths) so callers just re-fetch the stylesheet to pick
+    // up a new zoom level.
+    return ZoomScaling::scaleStyleSheetLengths(qss, FontManager::zoomFactor());
 }
 
 QString ThemeManager::styleSheet(const QString &name)
@@ -700,24 +695,52 @@ QString ThemeManager::styleSheet(const QString &name)
     return instance()->loadStyleSheet(name);
 }
 
-void ThemeManager::setValidationState(QWidget *w, const QString &state)
+namespace {
+
+// Sets a dynamic property that application.qss selectors match on and
+// repolishes, so the matching rule takes effect immediately.
+void setStyleState(QWidget *w, const char *property, const QString &state)
 {
     if (!w)
         return;
-    w->setProperty("wsValidation", state.isEmpty() ? QVariant() : QVariant(state));
+    w->setProperty(property, state.isEmpty() ? QVariant() : QVariant(state));
     w->style()->unpolish(w);
     w->style()->polish(w);
     w->update();
 }
 
+} // namespace
+
+void ThemeManager::setValidationState(QWidget *w, const QString &state)
+{
+    setStyleState(w, "wsValidation", state);
+}
+
+void ThemeManager::setNoticeState(QWidget *w, const QString &state)
+{
+    setStyleState(w, "wsNotice", state);
+    if (!w)
+        return;
+    // The notice rule draws a border and padding around the text.  A QFrame
+    // (QLabel, QPlainTextEdit) takes its frame widths, and with them its
+    // contents margins, from the style only on a StyleChange event.  polish()
+    // alone paints the new background but leaves the text at the old
+    // margins, flush against the border.  Qt's own style sheet repolish sends
+    // the same event after polish().
+    QEvent style_change(QEvent::StyleChange);
+    QApplication::sendEvent(w, &style_change);
+}
+
 QHash<ThemeManager::ThemeToken, QColor>
-ThemeManager::previewTheme(const QString &internalName, PreviewScheme scheme, int gui_contrast) const
+ThemeManager::previewTheme(const QString &internalName, PreviewScheme scheme, int gui_contrast, bool *declaresWindow) const
 {
     // Mirrors the loadTheme() pipeline (parse → build palette → derive
     // tokens) but operates on stack-local data so the live theme state,
     // QApplication palette, and stylesheet are not touched.  See the
     // header for the public contract.
     QHash<ThemeToken, QColor> empty;
+    if (declaresWindow)
+        *declaresWindow = false;
 
     // Resolve the caller's PreviewScheme into a concrete light/dark
     // bool here so the rest of the pipeline stays a pure function of
@@ -742,70 +765,232 @@ ThemeManager::previewTheme(const QString &internalName, PreviewScheme scheme, in
         break;
     }
 
-    // resolveThemePath() applies the same built-in-then-personal lookup
-    // chain as loadTheme(), so a preview of a personal theme produces
-    // the same colors that an actual load would.
-    const QString resourcePath = resolveThemePath(internalName);
-    if (resourcePath.isEmpty())
+    // loadDraft() applies the same built-in-then-personal lookup chain
+    // as loadTheme(), so a preview of a personal theme produces the same
+    // colors that an actual load would.
+    ThemeDraft draft;
+    if (!loadDraft(internalName, draft))
         return empty;
+
+    if (declaresWindow)
+        *declaresWindow = draft.declaresWindow();
+    return flattenTokens(resolveDraftTokens(draft, wantDark, nullptr, nullptr, gui_contrast), wantDark);
+}
+
+bool ThemeManager::isBuiltInTheme(const QString &internalName)
+{
+    return QFile::exists(builtInThemePath(internalName));
+}
+
+QString ThemeManager::personalThemesDir()
+{
+    return WorkspaceState::instance()->personalThemesPath();
+}
+
+QString ThemeManager::personalThemePath(const QString &stem)
+{
+    const QString dir = personalThemesDir();
+    if (dir.isEmpty())
+        return QString();
+    return QDir(dir).filePath(stem + QStringLiteral(".jsonc"));
+}
+
+QString ThemeManager::selectedThemeName()
+{
+    return resolveThemeName(QString::fromUtf8(recent.gui_theme_name));
+}
+
+void ThemeManager::setSelectedThemeName(const QString &name)
+{
+    g_free(recent.gui_theme_name);
+    recent.gui_theme_name = name.isEmpty() ? nullptr : g_strdup(name.toUtf8().constData());
+}
+
+namespace {
+
+void fillDraft(const ThemeParser::Result &result, ThemeDraft &out)
+{
+    out.info           = result.info;
+    out.colors         = result.colors;
+    out.graphColors    = result.graphColors;
+    out.regularFont    = result.regularFont;
+    out.monospaceFont  = result.monospaceFont;
+}
+
+} // namespace
+
+bool ThemeManager::loadDraft(const QString &internalName, ThemeDraft &out,
+                             QString *errorString, ThemeParseReport *report) const
+{
+    const QString path = resolveThemePath(internalName);
+    if (path.isEmpty()) {
+        if (errorString)
+            *errorString = tr("Theme \"%1\" not found.").arg(internalName);
+        return false;
+    }
 
     ThemeParser parser(sections_, colorRoleCache_);
     ThemeParser::Result result;
-    if (!parser.parse(internalName, resourcePath, result))
-        return empty;
+    if (!parser.parse(internalName, path, result, errorString))
+        return false;
 
-    // Pick the built-in light/dark palette as the baseline for the
-    // requested mode instead of osBaseline_.  The captured OS baseline
-    // reflects the *current* effective scheme, so reusing it when
-    // previewing the opposite mode would feed a wrong-mode baseline
-    // into the derivation.  The built-in palettes are mode-correct
-    // by construction and are what the live builder falls back to on
-    // platforms whose OS palette cannot be trusted to flip.
-    const QPalette previewBaseline = wantDark
-        ? ThemePaletteBuilder::builtInDarkPalette()
-        : ThemePaletteBuilder::builtInLightPalette();
+    fillDraft(result, out);
+    out.info.builtIn  = isBuiltInTheme(internalName);
+    out.info.filePath = path;
+    if (report)
+        *report = result.report;
+    return true;
+}
+
+bool ThemeManager::parseDraft(const QByteArray &jsonc, const QString &internalName,
+                              ThemeDraft &out, QString *errorString,
+                              ThemeParseReport *report) const
+{
+    ThemeParser parser(sections_, colorRoleCache_);
+    ThemeParser::Result result;
+    if (!parser.parseData(internalName, jsonc, result, errorString))
+        return false;
+
+    fillDraft(result, out);
+    out.info.builtIn  = isBuiltInTheme(internalName);
+    out.info.filePath = QString();
+    if (report)
+        *report = result.report;
+    return true;
+}
+
+ThemeManager::ThemeToken ThemeManager::paletteRoleToken(QPalette::ColorRole role) const
+{
+    for (auto it = paletteRoleCache_.constBegin(); it != paletteRoleCache_.constEnd(); ++it) {
+        if (it.value() == role)
+            return colorRoleCache_.value(it.key(), NoRole);
+    }
+    return NoRole;
+}
+
+ThemeManager::ThemeToken ThemeManager::tokenForName(const QString &name) const
+{
+    QString key = name;
+    key.remove('.');
+    return colorRoleCache_.value(key.toLower(), NoRole);
+}
+
+QHash<ThemeManager::ThemeToken, ThemeColorPair>
+ThemeManager::resolveDraftTokens(const ThemeDraft &draft, bool dark, QPalette *palette,
+                                 QHash<ThemeToken, const char *> *sources, int gui_contrast) const
+{
+    QHash<ThemeToken, ThemeColorPair> tokens = draft.colors;
+
+    // The baseline loadTheme() builds on, so a draft of the active theme in
+    // the active mode resolves to the live colors.  For the other mode the
+    // OS palette is the wrong mode; the built-in palette of that mode stands
+    // in, as baselineForBuild() does when the OS and the app disagree.
+    const QPalette baseline = dark == isDarkMode()
+        ? baselineForBuild()
+        : (dark ? ThemePaletteBuilder::builtInDarkPalette()
+                : ThemePaletteBuilder::builtInLightPalette());
     // The ratio set is passed explicitly rather than switched globally, so
-    // the preview can show a contrast level that is not applied yet.
+    // a preview can show a contrast level that is not applied yet.
     const int level = gui_contrast == UseRecentContrast ? recent.gui_contrast : gui_contrast;
     const ColorMath::ContrastRatios ratios =
-        ColorMath::ratiosFor(effectiveContrast(level, result.info.contrast));
-    const QPalette previewPalette = ThemePaletteBuilder::build(
-        result.colors, wantDark, colorRoleCache_, paletteRoleCache_, previewBaseline, ratios);
-    ThemeTokenHandler::deriveAll(result.colors, wantDark, previewPalette, ratios);
+        ColorMath::ratiosFor(effectiveContrast(level, draft.info.contrast));
+    const QPalette built = ThemePaletteBuilder::build(
+        tokens, dark, colorRoleCache_, paletteRoleCache_, baseline, ratios, sources);
+    ThemeTokenHandler::deriveAll(tokens, dark, built, ratios, sources);
 
-    QHash<ThemeToken, QColor> out;
-    out.reserve(result.colors.size());
-    for (auto it = result.colors.constBegin(); it != result.colors.constEnd(); ++it) {
-        out.insert(it.key(), it.value().forMode(wantDark));
-    }
-
-    // deriveAll() only *reads* the palette tokens (to derive tints); it
-    // never writes them back, so a theme that leaves them to the baseline
-    // palette — like the bundled default — carries no PaletteBase/Window/…
-    // entry here.  A consumer that reads them directly (the preview mockup)
-    // would then fall back to the *live* QApplication palette, i.e. the
-    // mode the app is currently in, not the previewed one.  Pin them from
-    // the mode-correct previewPalette built above so the preview tracks the
-    // requested light/dark choice regardless of what the theme overrides.
-    const struct { ThemeToken token; QPalette::ColorRole role; } paletteTokens[] = {
-        { PaletteBase,          QPalette::Base          },
-        { PaletteWindow,        QPalette::Window        },
-        { PaletteText,          QPalette::Text          },
-        { PaletteWindowText,    QPalette::WindowText    },
-        { PaletteMid,           QPalette::Mid           },
-        { PaletteAlternateBase, QPalette::AlternateBase },
-        { PaletteMidLight,      QPalette::Midlight      },
-    };
-    for (const auto &pt : paletteTokens) {
-        if (!out.value(pt.token).isValid())
-            out.insert(pt.token, previewPalette.color(pt.role));
+    // deriveAll() reads the palette tokens but never writes them, so a theme
+    // that leaves them to the baseline has no entry, and a consumer would
+    // fall back to the live application palette, possibly the other mode.
+    // Pin every palette token from the palette built above; the token-to-role
+    // mapping is the one the builder uses.
+    for (auto it = colorRoleCache_.constBegin(); it != colorRoleCache_.constEnd(); ++it) {
+        const auto role = paletteRoleCache_.constFind(it.key());
+        if (role == paletteRoleCache_.constEnd())
+            continue;
+        ThemeColorPair pair = tokens.value(it.value());
+        if (!pair.forMode(dark).isValid()) {
+            pair.setForMode(dark, built.color(role.value()));
+            tokens.insert(it.value(), pair);
+        }
     }
     // Highlight and HighlightedText are resolved by the builder (fallback
     // order, readable text); a declared token is only its input, so the
-    // preview always takes the built values.
-    out.insert(PaletteHighlight,       previewPalette.color(QPalette::Highlight));
-    out.insert(PaletteHighlightedText, previewPalette.color(QPalette::HighlightedText));
+    // resolved set always takes the built values.
+    for (const auto &hl : { std::make_pair(PaletteHighlight, QPalette::Highlight),
+                            std::make_pair(PaletteHighlightedText, QPalette::HighlightedText) }) {
+        ThemeColorPair pair = tokens.value(hl.first);
+        pair.setForMode(dark, built.color(hl.second));
+        tokens.insert(hl.first, pair);
+    }
+
+    if (palette)
+        *palette = built;
+    return tokens;
+}
+
+QHash<ThemeManager::ThemeToken, QColor>
+ThemeManager::flattenTokens(const QHash<ThemeToken, ThemeColorPair> &tokens, bool dark)
+{
+    QHash<ThemeToken, QColor> out;
+    out.reserve(tokens.size());
+    for (auto it = tokens.constBegin(); it != tokens.constEnd(); ++it)
+        out.insert(it.key(), it.value().forMode(dark));
     return out;
+}
+
+const QList<ThemeManager::ThemeToken> &ThemeDraft::requiredTokens()
+{
+    return ThemeManager::instance()->requiredTokens();
+}
+
+ThemeManager::ThemeToken ThemeDraft::firstMissingRequired() const
+{
+    for (const auto token : requiredTokens()) {
+        const auto it = colors.constFind(token);
+        if (it == colors.constEnd() || !it->isValid())
+            return token;
+    }
+    return ThemeManager::NoRole;
+}
+
+bool ThemeDraft::hasRequiredColors() const
+{
+    return firstMissingRequired() == ThemeManager::NoRole;
+}
+
+bool ThemeDraft::declaresWindow() const
+{
+    // resolveDraftTokens() pins every palette token, so the test reads the
+    // inputs; deriveAll() never writes palette tokens, so this is the same
+    // answer colorIsAvailable(PaletteWindow) gives once the theme is applied.
+    return colors.contains(ThemeManager::PaletteWindow);
+}
+
+int ThemeDraft::removeInvalidEntries()
+{
+    // The hash predicate names the iterator type: Qt picks the
+    // iterator or the std::pair form by std::is_invocable, which a
+    // generic lambda cannot answer.
+    qsizetype removed = colors.removeIf([](decltype(colors)::iterator it) {
+        return !it.value().isValid();
+    });
+    removed += graphColors.removeIf([](const ThemeColorPair &pair) {
+        return !pair.isValid();
+    });
+    return static_cast<int>(removed);
+}
+
+bool ThemeDraft::sameColors(const ThemeDraft &other) const
+{
+    return colors == other.colors && graphColors == other.graphColors;
+}
+
+bool ThemeDraft::operator==(const ThemeDraft &other) const
+{
+    return info.name == other.info.name && info.author == other.info.author
+        && info.description == other.info.description
+        && regularFont == other.regularFont && monospaceFont == other.monospaceFont
+        && sameColors(other);
 }
 
 bool ThemeManager::validateThemeFile(const QString &filePath) const

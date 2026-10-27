@@ -14,18 +14,25 @@
 #include <QFont>
 #include <QFontMetricsF>
 #include <QHash>
+#include <QImage>
 #include <QPair>
 #include <QPainterPath>
 #include <QRect>
 #include <QRectF>
 #include <QWidget>
 
+#include <memory>
+
 class QPainter;
 class QPaintEvent;
 class QContextMenuEvent;
+class QMenu;
+class QMouseEvent;
 class QSize;
 
 #include <ui/qt/utils/theme_manager.h>
+#include <ui/qt/utils/themes/native_title_bar.h>
+#include <ui/qt/widgets/theme_preview_pick.h>
 
 /**
  * Static, hand-painted 3-pane mockup of a Wireshark capture window
@@ -51,14 +58,19 @@ public:
      *                from ThemeManager::previewTheme().  Passing an
      *                empty hash is valid — every lookup will fall back
      *                to the live ThemeManager.
+     * @param declaresWindow  whether the previewed theme declares
+     *                palette.window, as reported by
+     *                ThemeManager::previewTheme().  When true the faux
+     *                title bar is tinted with the previewed window color.
      */
-    void setPreviewColors(const QHash<ThemeManager::ThemeToken, QColor> &colors);
+    void setPreviewColors(const QHash<ThemeManager::ThemeToken, QColor> &colors,
+                          bool declaresWindow = false);
 
     /**
      * Toggles overlaying the live coloring rules on the sample packet rows.
      *
-     * Off by default: the preview shows theme colors only — alternating base
-     * shading plus the selection / marked / ignored state tokens.  When on,
+     * Off by default: the preview shows theme colors only — the base
+     * background plus the selection / marked / ignored state tokens.  When on,
      * each sample row is tinted with the matching rule from the user's current
      * color-filter set, looked up by rule name (e.g. "TCP", "HTTP", "Bad
      * TCP"); rows whose rule is disabled or absent keep their theme color, and
@@ -70,27 +82,81 @@ public:
      * preferences page) can stay in sync with the menu toggle.
      */
     void setShowColoringRules(bool show);
+
+    /**
+     * Paints the preview with @p regular and @p monospace instead of the
+     * application fonts from FontManager, so a font choice that is not applied
+     * yet can be shown.  Repaints only when the fonts change.
+     */
+    void setPreviewFonts(const QFont &regular, const QFont &monospace);
+
     bool showColoringRules() const { return show_coloring_rules_; }
+
+    /**
+     * Click-to-pick support, off by default.  While on, a pickable spot
+     * shows a hand cursor, a left click emits layerPicked() and the context
+     * menu offers the colors of the spot.
+     */
+    ThemePreviewPicker &picker() { return picker_; }
 
 signals:
     void showColoringRulesChanged(bool show);
 
+    /** The user clicked a spot; @p layer has NoRole when it has no theme color. */
+    void layerPicked(const ThemePreviewPick::Layer &layer);
+
+    /**
+     * Emitted synchronously before the context menu opens, only while
+     * picking is enabled.  Receivers insert color actions before @p before.
+     */
+    void pickMenuRequested(QMenu *menu, QAction *before,
+                           const QList<ThemePreviewPick::Layer> &layers);
+
+    /** A dialog opened from the context menu was closed. */
+    void childDialogClosed();
+
 protected:
     void paintEvent(QPaintEvent *evt) override;
     void contextMenuEvent(QContextMenuEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
     QSize minimumSizeHint() const override;
 
 private:
     QHash<ThemeManager::ThemeToken, QColor> colors_;
 
+    /// Whether the previewed theme declares palette.window (from
+    /// previewTheme()); decides if the faux title bar is tinted.
+    bool declaresWindow_ = false;
+
     /// Whether the sample rows overlay the live coloring rules (off = theme
     /// colors only).  Toggled via setShowColoringRules() or the context menu.
     bool show_coloring_rules_ = false;
+
+    /// Fonts pushed by setPreviewFonts(); used instead of FontManager's while set.
+    bool  has_preview_fonts_ = false;
+    QFont preview_regular_font_;
+    QFont preview_mono_font_;
 
     /// Snapshot of the live color-filter set: rule name → (background,
     /// foreground).  Rebuilt by rebuildRuleColors() whenever the overlay is
     /// enabled, so paints stay cheap and don't re-clone the filter list.
     QHash<QString, QPair<QColor, QColor>> ruleColors_;
+
+    /// Never shown copy that paints the key render.
+    std::unique_ptr<ThemePreviewWidget> pick_probe_;
+
+    /** Pick state; renders through renderPickImage(). */
+    ThemePreviewPicker picker_;
+
+    /** Sizes the never shown copy like this widget and renders its key image. */
+    QImage renderPickImage();
+
+    /** Label and monospace font of a paint pass, as buildLayout() uses them. */
+    QPair<QFont, QFont> resolvedFonts() const;
+
+    /** Tallest line height of the key fonts, for ThemePreviewPick. */
+    int pickTextHeight() const;
 
     /**
      * Resolves a token to a QColor.  Looks up @p token in the preview
@@ -157,17 +223,22 @@ private:
     /**
      * Paints the rounded frame, title bar and window controls, installs the
      * rounded clip path, and returns what strokeWindowFrame() needs plus the
-     * content rectangle.  @p window selects the light/dark chrome variant.
+     * content rectangle.  A valid @p titleBar background (see
+     * NativeTitleBar::previewStyle()) tints the title bar; otherwise
+     * @p window selects the light/dark grey chrome variant.
      */
     WindowChrome paintWindowChrome(QPainter &p, const QRect &outer,
-                                   const QColor &window);
+                                   const QColor &window,
+                                   const NativeTitleBar::Style &titleBar);
 
     /**
      * Draws the per-platform window buttons into @p titleRect: macOS traffic
      * lights on the left, Windows/Linux min/max/close glyphs on the right
-     * (tinted for @p darkChrome).
+     * (tinted for @p darkChrome, or drawn in @p glyphColor when that is
+     * valid).
      */
-    void drawWindowControls(QPainter &p, const QRectF &titleRect, bool darkChrome);
+    void drawWindowControls(QPainter &p, const QRectF &titleRect, bool darkChrome,
+                            const QColor &glyphColor);
 
     /** Strokes the rounded outer border on top of the finished content. */
     void strokeWindowFrame(QPainter &p, const WindowChrome &chrome);
@@ -200,8 +271,9 @@ private:
 
     /**
      * Band 4: sample packet rows.  By default paints theme colors only —
-     * alternating-row shading plus the packet-state tokens (selection / marked
-     * / ignored) — and a native scrollbar.  When the coloring-rules overlay is
+     * the packet-state tokens (selection / marked / ignored; the ignored row
+     * uses its own background and text colors, with no strike-out) — and a
+     * native scrollbar.  When the coloring-rules overlay is
      * enabled (see setShowColoringRules()), each row is first tinted from the
      * snapshotted live rule of its name (user/default colors, not tokens),
      * which the state tokens then override.

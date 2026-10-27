@@ -1578,8 +1578,7 @@ class TestDissectMoqLiteDatagram:
         text_file = result_file("moql.txt")
         capture = result_file("moql.pcapng")
         with open(text_file, "w") as output:
-            for offset in range(0, len(payload), 16):
-                output.write(f"{offset:06x}  {payload[offset:offset + 16].hex(' ')}\n")
+            output.writelines(f"{offset:06x}  {payload[offset:offset + 16].hex(' ')}\n" for offset in range(0, len(payload), 16))
         subprocess.check_call((cmd_text2pcap, "-q", "-P", "moq-lite.datagram",
                                text_file, capture), env=test_env)
         command = [cmd_tshark, "-r", capture, "-T", "fields"]
@@ -3914,8 +3913,7 @@ class TestDissectUsbPtp:
         text_file = result_file('usb-ptp.txt')
         capture = result_file('usb-ptp.pcapng')
         with open(text_file, 'w') as f:
-            for packet in packets:
-                f.write(f'000000  {packet.hex(" ")}\n')
+            f.writelines(f'000000  {packet.hex(" ")}\n' for packet in packets)
         subprocess.check_call((cmd_text2pcap, '-q', '-l', '220', text_file, capture), env=test_env)
 
         stdout = subprocess.check_output((cmd_tshark,
@@ -4952,3 +4950,619 @@ class TestDissectAin:
                     '-O', 'ain', '-V',
                 ), encoding='utf-8', env=test_env))
         assert outputs[0] == outputs[1]
+
+
+# AMP is reached by default from BPv6 bundles on UDP port 4556; frames
+# 54-56 are AMP directly on UDP, which is only offered in Decode As.
+AMP_OPTS = ('-d', 'udp.port==40001,amp')
+
+
+class TestDissectAmp:
+    def amp_fields(self, cmd_tshark, capture_file, test_env, *fields, opts=AMP_OPTS):
+        args = []
+        for field in fields:
+            args += ['-e', field]
+        stdout = subprocess.check_output((cmd_tshark, *opts,
+                '-r', capture_file('amp_coverage.pcap.gz'),
+                '-Tfields', '-E', 'aggregator=|', '-e', 'frame.number', *args,
+            ), encoding='utf-8', env=test_env)
+        return {int(line.split('\t')[0]): line.split('\t')[1:] for line in stdout.splitlines()}
+
+    def test_amp_protocols(self, cmd_tshark, capture_file, test_env):
+        '''Every message type, CBOR head form and TNVC data item kind
+        decodes without malformed packets or error expert infos, in one
+        and two passes, with and without the UDP Decode As.'''
+        for opts, bundle, amp, udp in (((), 53, 0, 3), (AMP_OPTS, 53, 3, 0)):
+            stdout = subprocess.check_output((cmd_tshark, *opts,
+                    '-r', capture_file('amp_coverage.pcap.gz'),
+                    '-Tfields', '-e_ws.col.protocol',
+                ), encoding='utf-8', env=test_env)
+            protocols = stdout.split()
+            assert protocols.count('Bundle') == bundle
+            assert protocols.count('AMP') == amp
+            assert protocols.count('UDP') == udp
+            for passes in ((), ('-2',)):
+                stdout = subprocess.check_output((cmd_tshark, *opts, *passes,
+                        '-r', capture_file('amp_coverage.pcap.gz'),
+                        '-Y', '_ws.malformed || _ws.expert.severity >= warning',
+                        '-Tfields', '-eframe.number',
+                    ), encoding='utf-8', env=test_env)
+                assert count_output(stdout) == 0
+
+    def test_amp_in_bundles(self, cmd_tshark, capture_file, test_env):
+        '''Bundles with service numbers 5 and 6 carry AMP by default: all
+        but frame 39 (only a timestamp) have an AMP message.'''
+        frames = self.amp_fields(cmd_tshark, capture_file, test_env, 'amp.opcode', opts=())
+        with_messages = [n for n, (opcodes,) in frames.items() if opcodes]
+        assert with_messages == [n for n in range(1, 54) if n != 39]
+
+    def test_amp_messages(self, cmd_tshark, capture_file, test_env):
+        '''Several messages in one PDU, with Perform Control, Table Set and
+        undefined opcodes between Register Agent messages.'''
+        frames = self.amp_fields(cmd_tshark, capture_file, test_env,
+                                 'amp.opcode', 'amp.agent_name')
+        assert frames[40] == ['0|2|0|3|4|5|6|7|0', 'agent-7|agent-8|agent-9']
+        assert frames[2] == ['0', 'agent-2.example']
+        assert frames[54] == ['0', 'udp-agent']
+
+    def test_amp_tnvc_items(self, cmd_tshark, capture_file, test_env):
+        '''TNVC data items of valid sizes are all dissected, and the
+        dissector steps over each one correctly. A larger-than-packet
+        item stops the loop with an expert info ("AMP: Stop at a TNVC item
+        larger than the packet"); these must not be affected.'''
+        frames = self.amp_fields(cmd_tshark, capture_file, test_env,
+                                 'amp.rx_name', 'amp.string', 'amp.report.integer8_small',
+                                 'amp.report.integer', 'amp.report.data')
+        # Every item kind: strings, uvast of every size, a non-integer
+        # uvast, a byte string of an unhandled type, a text string and
+        # an integer item
+        assert frames[46] == ['mgr-1', 'ifInOctets|' + 'x' * 30, '23',
+                              '200|4660|305419896|1311768467463790320', '726177|41']
+        # Two reports with timestamps
+        assert frames[44] == ['mgr-1|mgr-2.example', 'ok', '5', '', '']
+        # The PDU goes on after the TNVC items: a Register Agent follows
+        stdout = subprocess.check_output((cmd_tshark, *AMP_OPTS,
+                '-r', capture_file('amp_coverage.pcap.gz'),
+                '-Y', 'frame.number == 53',
+                '-Tfields', '-eamp.opcode', '-eamp.report.integer', '-eamp.agent_name',
+                '-E', 'aggregator=|',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.strip() == '1|0\t42\tagent-10'
+        # The same over UDP
+        assert frames[55] == ['udp-mgr', 'udp', '', '77', '']
+
+
+# amr_coverage.pcapng.gz is synthetic: every packet was generated, to
+# cover as much of the AMR dissector as possible. SIP/SDP sets up RTP
+# with AMR and AMR-WB in every fmtp variant; one RTP flow has no SDP and
+# needs Decode As; the rest are Exported PDUs (named AMR dissectors and
+# an H.245 TerminalCapabilitySet with the AMR capabilities).
+AMR_OPTS = ('-d', 'udp.port==50000,rtp',
+            '-d', 'rtp.pt==97,amr',
+            '-d', 'rtp.pt==98,amr_wb')
+
+
+class TestDissectAmr:
+    def test_amr_protocols(self, cmd_tshark, capture_file, test_env):
+        '''Every part of the capture decodes, with no malformed packets or
+        errors, in one and two passes.'''
+        stdout = subprocess.check_output((cmd_tshark, *AMR_OPTS,
+                '-r', capture_file('amr_coverage.pcapng.gz'),
+                '-Tfields', '-e_ws.col.protocol',
+            ), encoding='utf-8', env=test_env)
+        protocols = stdout.splitlines()
+        assert len(protocols) == 113
+        # 9 AMR and 8 AMR-WB frames are IF1/IF2
+        assert protocols.count('AMR') == 61
+        assert protocols.count('AMR-WB') == 45
+        assert protocols.count('SIP/SDP') == 4
+        assert protocols.count('SIP') == 2
+        assert protocols.count('H.245') == 1
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *AMR_OPTS, *passes,
+                    '-r', capture_file('amr_coverage.pcapng.gz'),
+                    '-Y', '_ws.malformed || _ws.expert.severity == error',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_amr_exported_pdu_tcp_info(self, cmd_tshark, capture_file, test_env):
+        '''An exported PDU for "amr" or "amr-wb" with a TCP information tag
+        decodes as AMR with the preferences (octet-aligned). The struct
+        tcpinfo used to be handed to AMR, which read it as RTP
+        information and crashed.'''
+        stdout = subprocess.check_output((cmd_tshark, *AMR_OPTS,
+                '-r', capture_file('amr_coverage.pcapng.gz'),
+                '-Y', 'exported_pdu.tcp_dissector_data.version == 1',
+                '-Tfields', '-eframe.number', '-e_ws.col.protocol',
+                '-eamr.payload_decoded_as', '-eamr.nb.toc.ft', '-eamr.wb.toc.ft',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.splitlines() == [
+            '90\tAMR\t0\t7\t',
+            '91\tAMR-WB\t0\t\t8',
+        ]
+
+    def test_amr_sdp_fmtp(self, cmd_tshark, capture_file, test_env):
+        '''The SDP fmtp parameters of each RTP payload type choose the
+        format: octet-aligned for octet-align=1, crc=1, interleaving or
+        robust-sorting, bandwidth-efficient otherwise.'''
+        stdout = subprocess.check_output((cmd_tshark, *AMR_OPTS,
+                '-r', capture_file('amr_coverage.pcapng.gz'),
+                '-Y', 'rtp && udp.port != 50000 && !amr.reserved.not_zero',
+                '-Tfields', '-ertp.p_type', '-eamr.payload_decoded_as',
+            ), encoding='utf-8', env=test_env)
+        formats = {}
+        for line in stdout.splitlines():
+            pt, fmt = line.split('\t')
+            formats.setdefault(int(pt), set()).add(fmt)
+        assert formats == {
+            96: {'1'}, 97: {'0'}, 98: {'0'}, 99: {'0'}, 100: {'0'}, 101: {'1'}, 102: {'0'},
+            104: {'1'}, 105: {'0'}, 106: {'0'}, 107: {'0'}, 108: {'0'}, 109: {'1'},
+        }
+        # CRCs and interleaving headers from the SDP
+        stdout = subprocess.check_output((cmd_tshark, *AMR_OPTS,
+                '-r', capture_file('amr_coverage.pcapng.gz'),
+                '-Y', 'amr.crc || amr.ill',
+                '-Tfields', '-eframe.number', '-eamr.crc', '-eamr.ill', '-eamr.ilp',
+                '-E', 'aggregator=,',
+            ), encoding='utf-8', env=test_env)
+        lines = stdout.splitlines()
+        assert '39\t0xa0,0xa1,0xa2\t\t' in lines
+        assert '43\t\t3\t3' in lines
+        assert '80\t0xa0,0xa1\t\t' in lines
+        assert len(lines) == 14
+
+    def test_amr_preferences(self, cmd_tshark, capture_file, test_env):
+        '''The encoding preference applies to RTP set up by Decode As and
+        to exported PDUs, not to RTP set up by SDP.'''
+        stdout = subprocess.check_output((cmd_tshark, *AMR_OPTS,
+                '-o', 'amr.encoding.version:bw_efficient',
+                '-r', capture_file('amr_coverage.pcapng.gz'),
+                '-Y', 'frame.number in {23, 85, 88, 90, 92}',
+                '-Tfields', '-eframe.number', '-eamr.payload_decoded_as',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.splitlines() == ['23\t0', '85\t1', '88\t1', '90\t1', '92\t1']
+
+    def test_amr_h245_capability(self, cmd_tshark, capture_file, test_env):
+        '''The AMR names the H.245 generic audio capability parameters.'''
+        stdout = subprocess.check_output((cmd_tshark, *AMR_OPTS,
+                '-r', capture_file('amr_coverage.pcapng.gz'),
+                '-Y', 'h245', '-O', 'h245', '-V',
+            ), encoding='utf-8', env=test_env)
+        assert 'genericAudioCapability (20): H.245 - GSM AMR Capability Identifier' in stdout
+        for name in ('maxAl-sduAudioFrames', 'gsmAmrComfortNoise', 'gsmEfrComfortNoise',
+                     'is-641ComfortNoise', 'pdcEFRComfortNoise', 'maxAl-sduFrames',
+                     'octetAlign', 'modeSet', 'modeChangePeriod', 'modeChangeNeighbour',
+                     'robustSorting', 'interleaving'):
+            assert f': {name}\n' in stdout
+
+    def test_amr_if1_if2(self, cmd_tshark, capture_file, test_env):
+        '''The IF1 and IF2 dissectors, called by name.'''
+        stdout = subprocess.check_output((cmd_tshark, *AMR_OPTS,
+                '-r', capture_file('amr_coverage.pcapng.gz'),
+                '-Y', 'exported_pdu.prot_name matches "^amr_if"',
+                '-Tfields', '-eexported_pdu.prot_name',
+                '-eamr.nb.if1.ft', '-eamr.wb.if1.ft', '-eamr.nb.if2.ft', '-eamr.wb.if2.ft',
+                '-eamr.if1.sti', '-eamr.if2.sti',
+            ), encoding='utf-8', env=test_env)
+        lines = [line.split('\t') for line in stdout.splitlines()]
+        assert [line[0] for line in lines] == \
+            ['amr_if1_nb'] * 5 + ['amr_if1_wb'] * 4 + ['amr_if2_nb'] * 4 + ['amr_if2_wb'] * 4
+        assert [line[1] for line in lines[:5]] == ['7', '0', '8', '8', '5']
+        assert [line[2] for line in lines[5:9]] == ['8', '0', '9', '2']
+        assert [line[3] for line in lines[9:13]] == ['7', '2', '8', '15']
+        assert [line[4] for line in lines[13:]] == ['8', '1', '9', '15']
+        # SID frames: SID_UPDATE in IF1, SID_UPDATE in IF2
+        assert lines[2][5] == 'True' and lines[7][5] == 'True'
+        assert lines[11][6] == 'True' and lines[15][6] == 'True'
+
+
+
+class TestDissectExportedPdu:
+    def run_fields(self, cmd_tshark, capture_file, test_env, *args):
+        return subprocess.check_output((cmd_tshark,
+                '-r', capture_file('exported_pdu_coverage.pcap.gz'), *args,
+            ), encoding='utf-8', env=test_env)
+
+    def test_exported_pdu_protocols(self, cmd_tshark, capture_file, test_env):
+        '''Every tag and the three ways to name the next dissector decode
+        without malformed packets, in one and two passes.'''
+        stdout = self.run_fields(cmd_tshark, capture_file, test_env,
+                '-Tfields', '-e_ws.col.protocol')
+        protocols = stdout.splitlines()
+        assert len(protocols) == 104
+        assert protocols.count('HTTP') == 10
+        assert protocols.count('DNS') == 10
+        assert protocols.count('Rlogin') == 6
+        assert protocols.count('NBSS') == 6
+        assert protocols.count('RTMP') == 3
+        assert protocols.count('TLSv1.3') == 3
+        assert protocols.count('FINGER') == 3
+        assert protocols.count('SIP') == 3
+        assert protocols.count('MPA') == 2
+        assert protocols.count('WHOIS') == 2
+        assert protocols.count('AMR') == 1
+        assert protocols.count('AMR-WB') == 1
+        assert protocols.count('SS7') == 4
+        assert protocols.count('CI+ SAC message') == 2
+        assert protocols.count('Exported PDU') == 6
+        for passes in ((), ('-2',)):
+            stdout = self.run_fields(cmd_tshark, capture_file, test_env, *passes,
+                    '-Y', '_ws.malformed || _ws.expert.severity >= error',
+                    '-Tfields', '-eframe.number')
+            assert count_output(stdout) == 0
+
+    def test_exported_pdu_tcpinfo_not_for_amr(self, cmd_tshark, capture_file, test_env):
+        '''AMR named with a TCP information tag decodes. The struct tcpinfo
+        used to be passed to it, read as a struct _rtp_info, and crashed.'''
+        stdout = self.run_fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'amr', '-Tfields', '-eframe.number', '-eexported_pdu.prot_name',
+                '-eexported_pdu.tcp_dissector_data.version', '-eamr.nb.toc.ft', '-eamr.wb.toc.ft')
+        assert stdout.splitlines() == ['35\tamr\t1\t7\t', '36\tamr-wb\t1\t\t8']
+
+    def test_exported_pdu_tcpinfo_for_tcp(self, cmd_tshark, capture_file, test_env):
+        '''The TCP information still reaches dissectors that TCP calls:
+        by name, through a "tcp" heuristic and through the tcp.port table.'''
+        # rlogin sees the urgent pointer: tcp.port table (14, 33), by name (25)
+        stdout = self.run_fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'rlogin.control_message', '-Tfields', '-eframe.number',
+                '-erlogin.control_message')
+        assert stdout.splitlines() == ['14\t0x80', '25\t0x02', '33\t0x10']
+        # NBSS rejects a PDU without TCP information: with it by table (15,
+        # 16, 34) and by name (26); with no tag (40) or an unsupported
+        # version (41) it is given empty TCP information
+        stdout = self.run_fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'nbss', '-Tfields', '-eframe.number')
+        assert stdout.split() == ['15', '16', '26', '34', '40', '41']
+        # RTMP names the handshake from the sequence numbers; MPA is found by
+        # the iwarp_mpa_tcp heuristic (19) and by name (28)
+        stdout = self.run_fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'rtmpt || iwarp_mpa', '-Tfields', '-eframe.number', '-e_ws.col.info')
+        assert stdout.splitlines() == [
+            '17\tHandshake C0+C1', '18\tHandshake S0+S1+S2', '19\t40009 > 40100 MPA Request Frame',
+            '27\tHandshake C0+C1', '28\t40022 > 40101 MPA Request Frame']
+        # The rtmpt_tcp heuristic matches the server handshake at sequence
+        # number 1 and acknowledgment 1538 only
+        stdout = self.run_fields(cmd_tshark, capture_file, test_env,
+                '--enable-heuristic', 'rtmpt_tcp', '-Y', 'frame.number == 32',
+                '-Tfields', '-e_ws.col.protocol', '-e_ws.col.info')
+        assert stdout.strip() == 'RTMP\tHandshake S0+S1+S2'
+
+    def test_exported_pdu_tags(self, cmd_tshark, capture_file, test_env):
+        '''Decoded values of the address, 3GPP and column tags, and the
+        warnings for unknown tags, short 3GPP identities and unsupported
+        TCP information versions.'''
+        stdout = self.run_fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'exported_pdu.3gpp.id_type || exported_pdu.3gpp_ue_id_type',
+                '-Tfields', '-eframe.number', '-eexported_pdu.3gpp.ci',
+                '-eexported_pdu.3gpp.eci', '-eexported_pdu.3gpp.nci',
+                '-ee212.assoc.imsi', '-E', 'occurrence=f')
+        lines = stdout.splitlines()
+        assert lines[:3] == ['88\t0x5678\t\t\t', '89\t\t0x0abcdef1\t\t', '90\t\t\t0x0000000123456789\t']
+        assert lines[7:9] == ['96\t\t\t\t001010123456789', '97\t\t\t\t310410987654321']
+        stdout = self.run_fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number in {20, 65, 67, 77, 80}', '-Tfields', '-eframe.number',
+                '-e_ws.col.def_src', '-e_ws.col.def_dst', '-e_ws.col.info')
+        assert stdout.splitlines() == [
+            '20\t2001:db8::1\t2001:db8::2\tGET /index.html HTTP/1.1 ',
+            '65\t2001:db8::1\t2001:db8::2\tStandard query 0x1234 A example.com',
+            '67\t4661\t1384\tSS7 standard 1',
+            '77\t10.1.0.1\t10.1.0.2\tStandard query 0x1234 A example.com',
+            '80\t\t\tno dissector tag']
+        # frames with each warning
+        for expert, count in (('exported_pdu.tag.unknown', 3),
+                              ('exported_pdu.tag_len.unexpected', 4),
+                              ('exported_pdu.tcp_dissector_data.version.invalid', 3)):
+            stdout = self.run_fields(cmd_tshark, capture_file, test_env,
+                    '-Y', expert, '-Tfields', '-eframe.number')
+            assert count_output(stdout) == count
+
+    def test_exported_pdu_user_data_pdu(self, cmd_tshark, capture_file, test_env):
+        '''The User Data PDU tag uses the dissector in the preference.'''
+        stdout = self.run_fields(cmd_tshark, capture_file, test_env,
+                '-o', 'exported_pdu.user_data_pdu:http', '-Y', 'frame.number == 87',
+                '-Tfields', '-ehttp.request.uri')
+        assert stdout.strip() == '/index.html'
+
+
+# amqp_coverage.pcap.gz is synthetic: an AMQP 0-8, 0-9 and 0-10 part
+# (hosts in 10.0.0.0/24) and an AMQP 1.0 part (hosts in 10.1.0.0/24).
+AMQP0_HOSTS = 'ip.addr==10.0.0.0/24'
+
+
+def amqp0_fields(cmd_tshark, capture_file, test_env, dfilter, *fields, passes=()):
+    '''Run tshark on the AMQP 0-x frames and return one list of field
+    values per frame.'''
+    args = []
+    for f in fields:
+        args += ['-e', f]
+    stdout = subprocess.check_output((cmd_tshark, *passes,
+            '-r', capture_file('amqp_coverage.pcap.gz'),
+            '-Y', f'{AMQP0_HOSTS} && ({dfilter})',
+            '-Tfields', *args,
+        ), encoding='utf-8', env=test_env)
+    return [line.split('\t') for line in stdout.splitlines()]
+
+
+def amqp0_base(cmd_tshark, capture_file, test_env):
+    '''Frame number before the first AMQP 0-x frame (the SYN of the first
+    0-9 connection is frame base + 1).'''
+    frames = amqp0_fields(cmd_tshark, capture_file, test_env,
+                          'ip.src==10.0.0.1 && tcp.flags.syn==1', 'frame.number')
+    return int(frames[0][0]) - 1
+
+
+AMQP10_HOSTS = 'ip.addr==10.1.0.0/24'
+
+
+class TestDissectAmqp:
+    def test_amqp0_protocols(self, cmd_tshark, capture_file, test_env):
+        '''Every AMQP 0-8, 0-9, 0-9-1 and 0-10 class, method, control,
+        command and struct decodes without malformed packets or error
+        expert infos, in one and two passes.'''
+        frames = amqp0_fields(cmd_tshark, capture_file, test_env, 'frame', '_ws.col.protocol')
+        protocols = [f[0] for f in frames]
+        assert protocols.count('AMQP') == 261
+        assert protocols.count('AMQP/JSON') == 13
+        assert protocols.count('TCP') == 31
+        for passes in ((), ('-2',)):
+            frames = amqp0_fields(cmd_tshark, capture_file, test_env,
+                                  '_ws.malformed || _ws.expert.severity == error',
+                                  'frame.number', passes=passes)
+            assert frames == []
+
+    def test_amqp0_classes(self, cmd_tshark, capture_file, test_env):
+        '''All twelve 0-9 method classes, all ten 0-10 classes, every
+        field table type and every 0-10 struct.'''
+        frames = amqp0_fields(cmd_tshark, capture_file, test_env, 'amqp.method.class',
+                              'amqp.method.class')
+        classes = {int(c) for f in frames for c in f[0].split(',')}
+        assert classes == {10, 20, 30, 40, 50, 60, 70, 80, 85, 90, 100, 110}
+        frames = amqp0_fields(cmd_tshark, capture_file, test_env, 'amqp.class', 'amqp.class')
+        assert {int(c) for f in frames for c in f[0].split(',')} == set(range(1, 11))
+        frames = amqp0_fields(cmd_tshark, capture_file, test_env, 'amqp.field.type', 'amqp.field.type')
+        types = {t for f in frames for t in f[0].split(',')}
+        assert types == {f"'{t}'" for t in 'AbBdDfFiIlsStTuVx'}
+        frames = amqp0_fields(cmd_tshark, capture_file, test_env, 'amqp.struct32.class',
+                              'amqp.struct32.class', 'amqp.struct32.struct')
+        structs = {(int(c), int(s)) for f in frames
+                   for c, s in zip(f[0].split(','), f[1].split(','))}
+        assert structs == {(4, 1), (4, 2), (4, 3), (4, 4), (4, 5), (6, 1), (6, 3),
+                           (7, 1), (7, 2), (8, 1), (9, 1), (10, 1)}
+
+    def test_amqp0_version_detection(self, cmd_tshark, capture_file, test_env):
+        '''The 0-9, 0-9-1, 0-8 and 0-10 protocol headers set the version.
+        The 0-11 header is not recognised, so it is shown as an unknown
+        version and the frames that follow are recognised as 0-9 by their
+        frame end octet; connections captured mid-way are recognised too.'''
+        frames = amqp0_fields(cmd_tshark, capture_file, test_env, 'amqp.init.version_minor',
+                              'amqp.init.version_major', 'amqp.init.version_minor')
+        assert frames == [['0', '9'], ['9', '1'], ['8', '0'], ['0', '9'], ['0', '10'], ['0', '10']]
+        frames = amqp0_fields(cmd_tshark, capture_file, test_env,
+                              '_ws.col.info == "AMQP (unknown version)"', 'tcp.srcport')
+        assert frames == [['40004']]
+        # The mid-way 0-9 and 0-10 connections
+        frames = amqp0_fields(cmd_tshark, capture_file, test_env,
+                              'ip.addr==10.0.0.6 || ip.addr==10.0.0.9', '_ws.col.info')
+        assert [f[0].split()[0] for f in frames] == [
+            'Basic.Deliver', 'Basic.Ack', 'Heartbeat', 'message.transfer', 'message.accept']
+
+    def test_amqp0_delivery_tracking(self, cmd_tshark, capture_file, test_env):
+        '''Basic.Publish is numbered per channel, and Basic.Ack, Nack and
+        Reject point at the messages they acknowledge (multiple too, and a
+        multiple ack of tag 0 acknowledges all), in each direction. A second
+        pass keeps them and adds the frame that acknowledges each message.'''
+        base = amqp0_base(cmd_tshark, capture_file, test_env)
+        frames = amqp0_fields(cmd_tshark, capture_file, test_env,
+                              'amqp.method.arguments.publish_number',
+                              'frame.number', 'amqp.method.arguments.publish_number')
+        assert [(int(n) - base, int(p)) for n, p in frames] == [
+            (47, 1), (106, 2), (128, 1), (129, 2), (130, 3), (131, 4), (132, 5)]
+        frames = amqp0_fields(cmd_tshark, capture_file, test_env, 'amqp.message_in',
+                              'frame.number', 'amqp.message_in')
+        acks = {int(n) - base: [int(m) - base for m in msgs.split(',')] for n, msgs in frames}
+        assert acks == {
+            50: [49], 53: [52],                         # deliver, get-ok
+            133: [128, 129], 134: [130], 135: [131, 132],  # publisher confirms
+            145: [141], 146: [142, 143], 147: [144],      # consumer ack, nack, reject
+            149: [148], 152: [151], 154: [153], 184: [183],
+        }
+        frames = amqp0_fields(cmd_tshark, capture_file, test_env, 'amqp.message_in',
+                              'frame.number', 'amqp.message_in', passes=('-2',))
+        assert {int(n) - base: [int(m) - base for m in msgs.split(',')] for n, msgs in frames} == acks
+        frames = amqp0_fields(cmd_tshark, capture_file, test_env, 'amqp.ack_in',
+                              'frame.number', 'amqp.ack_in', passes=('-2',))
+        assert {int(n) - base: int(a) - base for n, a in frames} == {
+            msg: ack for ack, msgs in acks.items() for msg in msgs}
+
+    def test_amqp0_content(self, cmd_tshark, capture_file, test_env):
+        '''Content bodies are handed to the dissector for the content-type
+        of the basic content header on the same channel, a body is
+        reassembled from three TCP segments, and a 0-10 message.transfer
+        split over TCP segments is joined.'''
+        frames = amqp0_fields(cmd_tshark, capture_file, test_env, 'json', 'amqp.method.class')
+        assert len(frames) == 13
+        frames = amqp0_fields(cmd_tshark, capture_file, test_env, 'data-text-lines',
+                              'amqp.method.properties.content_type')
+        assert frames == [['text/plain'], ['text/plain']]
+        frames = amqp0_fields(cmd_tshark, capture_file, test_env,
+                              'amqp.payload && len(amqp.payload) == 3000', 'tcp.reassembled.length')
+        assert frames == [['3008']]
+        frames = amqp0_fields(cmd_tshark, capture_file, test_env,
+                              'amqp.message.message-properties.content-type',
+                              'amqp.message.message-properties.content-type',
+                              'amqp.message.delivery-properties.routing-key')
+        assert frames == [['application/json', 'rk.orders'], ['text/plain', 'rk.orders']]
+
+    def test_amqp10_protocols(self, cmd_tshark, capture_file, test_env):
+        '''Every AMQP 1.0 performative, SASL frame, message section, type
+        encoding and delivery state decodes without malformed packets or
+        error expert infos, in one and two passes.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('amqp_coverage.pcap.gz'),
+                '-Y', AMQP10_HOSTS,
+                '-Tfields', '-e_ws.col.protocol',
+            ), encoding='utf-8', env=test_env)
+        protocols = stdout.split()
+        assert protocols.count('AMQP') == 136
+        assert protocols.count('TCP') == 75
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('amqp_coverage.pcap.gz'),
+                    '-Y', f'{AMQP10_HOSTS} && (_ws.malformed || _ws.expert.severity == error)',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_amqp10_frames(self, cmd_tshark, capture_file, test_env):
+        '''Protocol headers (AMQP, TLS, SASL), all nine performatives and
+        all five SASL frames.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('amqp_coverage.pcap.gz'),
+                '-Y', f'{AMQP10_HOSTS} && amqp',
+                '-Tfields', '-eamqp.init.id', '-eamqp.performative', '-eamqp.sasl.method',
+                '-E', 'occurrence=a', '-E', 'aggregator=,',
+            ), encoding='utf-8', env=test_env)
+        ids, performatives, sasl = [], [], []
+        for line in stdout.splitlines():
+            i, p, s = line.split('\t')
+            ids += [int(v) for v in i.split(',') if v]
+            performatives += [int(v) for v in p.split(',') if v]
+            sasl += [int(v) for v in s.split(',') if v]
+        assert (ids.count(0), ids.count(2), ids.count(3)) == (10, 2, 12)
+        assert [performatives.count(p) for p in range(0x10, 0x19)] == [8, 8, 11, 5, 31, 10, 4, 4, 8]
+        assert [sasl.count(s) for s in range(0x40, 0x45)] == [6, 6, 1, 1, 6]
+
+    def test_amqp10_sections_and_states(self, cmd_tshark, capture_file, test_env):
+        '''Every message section, delivery state, outcome, lifetime policy
+        and transaction type is found.'''
+        fields = ('amqp.header', 'amqp.deliveryAnnotations', 'amqp.messageAnnotations',
+                  'amqp.properties', 'amqp.applicationProperties', 'amqp.data',
+                  'amqp.sequence', 'amqp.value', 'amqp.footer',
+                  'amqp.delivery-state.received', 'amqp.delivery-state.accepted',
+                  'amqp.delivery-state.rejected', 'amqp.delivery-state.released',
+                  'amqp.delivery-state.modified', 'amqp.performative.arguments.error',
+                  'amqp.lifetime-policy.deleteOnClose', 'amqp.lifetime-policy.deleteOnNoLinks',
+                  'amqp.lifetime-policy.deleteOnNoMessages',
+                  'amqp.lifetime-policy.deleteOnNoLinksOrMessages',
+                  'amqp.tx.coordinator', 'amqp.tx.declare', 'amqp.tx.declared',
+                  'amqp.tx.discharge', 'amqp.tx.transactionalState')
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('amqp_coverage.pcap.gz'),
+                '-Y', f'{AMQP10_HOSTS} && amqp', '-T', 'json',
+            ), encoding='utf-8', env=test_env)
+        missing = [f for f in fields if f'"{f}"' not in stdout]
+        assert missing == []
+
+    def test_amqp10_values(self, cmd_tshark, capture_file, test_env):
+        '''Values decoded with the native field types: integers, strings,
+        symbols, binaries, timestamps and UUIDs, including the
+        type-specific message-id fields.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('amqp_coverage.pcap.gz'),
+                '-Y', f'{AMQP10_HOSTS} && amqp.performative.arguments.containerId == "client-container-1"',
+                '-Tfields', '-eamqp.performative.arguments.maxFrameSize',
+                '-eamqp.performative.arguments.channelMax',
+                '-eamqp.performative.arguments.idleTimeout',
+                '-eamqp.performative.arguments.outgoingLocales_sym',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.strip() == '65536\t255\t30000\ten-US'
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('amqp_coverage.pcap.gz'),
+                '-Y', f'{AMQP10_HOSTS} && amqp.message.messageId.guid',
+                '-Tfields', '-eamqp.message.messageId.guid',
+                '-eamqp.message.correlationId.bytes',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.strip() == '01234567-89ab-cdef-0123-456789abcdef\t010203'
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('amqp_coverage.pcap.gz'),
+                '-Y', f'{AMQP10_HOSTS} && amqp.message.creationTime',
+                '-Tfields', '-eamqp.message.messageId.uint', '-eamqp.message.to.string',
+                '-eamqp.message.creationTime', '-eamqp.message.expiryTime',
+                '-eamqp.message.groupSequence',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.strip().split('\t') == ['7', 'queue://orders',
+                                               '2025-10-09T08:53:20.123000000Z',
+                                               '2025-10-09T09:53:20.123000000Z', '3']
+
+    def test_amqp10_primitive_types(self, cmd_tshark, capture_file, test_env):
+        '''Every primitive type encoding in a custom list is shown with its
+        type name and value.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('amqp_coverage.pcap.gz'),
+                '-Y', f'{AMQP10_HOSTS} && amqp.performative.arguments.deliveryTag == "types-1"',
+                '-O', 'amqp', '-V',
+            ), encoding='utf-8', env=test_env)
+        assert 'AMQP-Sequence (list of 46 elements)' in stdout
+        for text in ('list-item: (null)', 'list-item (bool): true', 'list-item (ubyte): 200',
+                     'list-item (ushort): 60000', 'list-item (uint): 4000000000',
+                     'list-item (uint0): 0', 'list-item (ulong): 1234605616436508552',
+                     'list-item (smallulong): 99', 'list-item (ulong0): 0',
+                     'list-item (byte): -100', 'list-item (short): -30000',
+                     'list-item (int): -2000000000', 'list-item (smallint): -17',
+                     'list-item (long): -77162851027281784', 'list-item (smalllong): -99',
+                     'list-item (float): 1.500000', 'list-item (double): -2.250000',
+                     'list-item (decimal32): (not supported)',
+                     'list-item (decimal128): (not supported)', 'list-item (char): €',
+                     'list-item (timestamp): Oct  9, 2025 08:53:20.123000000',
+                     'list-item (uuid): 01234567-89ab-cdef-0123-456789abcdef',
+                     'list-item (vbin32): ffffff', 'list-item (str32-utf8): long-form string',
+                     'list-item (sym32): long-form-symbol', 'k32 (uint): 32',
+                     'list-item (array of 2 elements)'):
+            assert text in stdout, text
+
+    def test_amqp10_reassembly(self, cmd_tshark, capture_file, test_env):
+        '''A transfer over three TCP segments (the first split inside the
+        frame header) and frames that share a segment are reassembled;
+        a connection captured in the middle is still found to be 1.0.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('amqp_coverage.pcap.gz'),
+                '-Y', 'ip.addr==10.1.0.5 && amqp.data',
+                '-Tfields', '-eamqp.data', '-e_ws.col.info',
+            ), encoding='utf-8', env=test_env)
+        data = [line.split('\t') for line in stdout.splitlines()]
+        assert data[0][0] == bytes(range(256)).hex() * 3
+        assert data[1][0] == b'tail of the message'.hex()
+        # the next transfer starts in the same segment and ends in the
+        # segment that also carries the one after it
+        assert data[2] == [b'partial'.hex(), 'transfer transfer ']
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('amqp_coverage.pcap.gz'),
+                '-Y', 'ip.addr==10.1.0.6 && amqp',
+                '-Tfields', '-eamqp.performative',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.split() == ['19', '20']
+
+    def test_amqp10_message_decoding(self, cmd_tshark, capture_file, test_env):
+        '''The "Message Decoding" table hands the data section to another
+        dissector for messages whose "to" address matches, for each match
+        criterion.'''
+        uat = ('"Equal to","sensors/equal"', '"Contains","contains-me"',
+               '"Starts with","prefix/"', '"Ends with",".suffix"',
+               '"Regular Expression","^regex-[0-9]+$"')
+        opts = []
+        for entry in uat:
+            # The payload dissector is "data", which ignores the dissector
+            # data (the "Additional Data" string).
+            opts += ['-o', f'uat:amqp_message_decoding:{entry},"data",""']
+        stdout = subprocess.check_output((cmd_tshark, *opts,
+                '-r', capture_file('amqp_coverage.pcap.gz'),
+                '-Y', 'ip.addr==10.1.0.9 && amqp.performative == 20',
+                '-V', '-Tfields', '-eamqp.message.to.string', '-edata.data', '-eamqp.data',
+            ), encoding='utf-8', env=test_env)
+        rows = [line.split('\t') for line in stdout.splitlines()]
+        decoded = [to for to, data, amqp_data in rows if data and not amqp_data]
+        assert decoded == ['sensors/equal', 'x/contains-me/y', 'prefix/abc', 'abc.suffix', 'regex-42']
+        assert len(rows) == 8
+
+    def test_amqp10_message_decoding_additional_data(self, cmd_tshark, capture_file, test_env):
+        '''The "Additional Data" string of a Message Decoding entry is not
+        given to a dissector that reads its data as a structure of its own
+        (data-text-lines reads it as a media_content_info_t, and crashed).'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-o', 'uat:amqp_message_decoding:"Equal to","sensors/equal","data-text-lines","message,example.Reading"',
+                '-r', capture_file('amqp_coverage.pcap.gz'),
+                '-Y', f'{AMQP10_HOSTS} && data-text-lines',
+                '-Tfields', '-eamqp.message.to.string',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.split() == ['sensors/equal']

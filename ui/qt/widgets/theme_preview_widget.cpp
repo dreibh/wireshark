@@ -12,19 +12,19 @@
 #include <ui/qt/utils/font_manager.h>
 #include <ui/qt/utils/themes/themed_icon.h>
 #include <ui/qt/utils/themes/contrast_adapt_icon.h>
-#include <ui/qt/utils/themes/color_math.h>
+#include <ui/qt/utils/themes/native_title_bar.h>
 
 #include <epan/color_filters.h>
 
 #include <QAction>
 #include <QApplication>
 #include <QContextMenuEvent>
-#include <QFileDialog>
+#include <QFontMetrics>
 #include <QFontMetricsF>
 #include <QIcon>
 #include <QList>
 #include <QMenu>
-#include <QMessageBox>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPalette>
@@ -103,14 +103,33 @@ void drawGripDots(QPainter &p, const QPointF &center, bool vertical, const QColo
 
 ThemePreviewWidget::ThemePreviewWidget(QWidget *parent)
     : QWidget(parent)
+    , picker_(this, [this]() { return renderPickImage(); }, [this]() { return pickTextHeight(); })
 {
     setAutoFillBackground(true);
     setContentsMargins(0, 0, 0, 0);
 }
 
-void ThemePreviewWidget::setPreviewColors(const QHash<ThemeManager::ThemeToken, QColor> &colors)
+void ThemePreviewWidget::setPreviewColors(const QHash<ThemeManager::ThemeToken, QColor> &colors,
+                                          bool declaresWindow)
 {
     colors_ = colors;
+    if (declaresWindow != declaresWindow_) {
+        // The title bar is a pick target only while it shows the window color.
+        declaresWindow_ = declaresWindow;
+        picker_.invalidate();
+    }
+    update();
+}
+
+void ThemePreviewWidget::setPreviewFonts(const QFont &regular, const QFont &monospace)
+{
+    if (has_preview_fonts_ && preview_regular_font_ == regular && preview_mono_font_ == monospace)
+        return;
+    preview_regular_font_ = regular;
+    preview_mono_font_ = monospace;
+    has_preview_fonts_ = true;
+    picker_.invalidate();
+    updateGeometry();
     update();
 }
 
@@ -119,6 +138,7 @@ void ThemePreviewWidget::setShowColoringRules(bool show)
     if (show_coloring_rules_ == show)
         return;
     show_coloring_rules_ = show;
+    picker_.invalidate();
     if (show)
         rebuildRuleColors();    // snapshot once, on enable
     update();
@@ -138,6 +158,11 @@ QColor ThemePreviewWidget::c(ThemeManager::ThemeToken token, const QColor &fallb
     auto it = colors_.constFind(token);
     if (it != colors_.constEnd() && it.value().isValid())
         return it.value();
+    // A preview map is complete for what the theme defines; a token it
+    // lacks (PacketsIgnored, for example) means "not set", not "as the
+    // live theme".  Without a map the live theme is shown.
+    if (!colors_.isEmpty())
+        return fallback;
     QColor live = ThemeManager::instance()->color(token);
     return live.isValid() ? live : fallback;
 }
@@ -156,7 +181,7 @@ QPalette ThemePreviewWidget::previewPalette() const
     set(QPalette::AlternateBase,   ThemeManager::PaletteAlternateBase);
     set(QPalette::Text,            ThemeManager::PaletteText);
     set(QPalette::Mid,             ThemeManager::PaletteMid);
-    set(QPalette::Midlight,        ThemeManager::PaletteMidLight);
+    set(QPalette::Midlight,        ThemeManager::PaletteMidlight);
     set(QPalette::HighlightedText, ThemeManager::PaletteHighlightedText);
     set(QPalette::Highlight,       ThemeManager::PaletteHighlight);
     return pal;
@@ -167,6 +192,15 @@ QSize ThemePreviewWidget::minimumSizeHint() const
     return QSize(180, 120);
 }
 
+QPair<QFont, QFont> ThemePreviewWidget::resolvedFonts() const
+{
+    QFont labelFont = has_preview_fonts_ ? preview_regular_font_ : FontManager::font();
+    QFont monoFont  = has_preview_fonts_ ? preview_mono_font_ : FontManager::monospaceFont();
+    if (labelFont.family().isEmpty()) labelFont = font();
+    if (monoFont.family().isEmpty())  monoFont  = font();
+    return qMakePair(labelFont, monoFont);
+}
+
 ThemePreviewWidget::Layout ThemePreviewWidget::buildLayout(const QRect &content) const
 {
     // Proportional font for chrome (toolbar/filter/header/status); the
@@ -174,10 +208,9 @@ ThemePreviewWidget::Layout ThemePreviewWidget::buildLayout(const QRect &content)
     // true size — this is a font preview, so the data font must show the user's
     // actual size, not a scaled-down approximation.  Fall back to the widget
     // font if a family is unset.
-    QFont labelFont = FontManager::font();
-    QFont monoFont  = FontManager::monospaceFont();
-    if (labelFont.family().isEmpty()) labelFont = font();
-    if (monoFont.family().isEmpty())  monoFont  = font();
+    const QPair<QFont, QFont> fonts = resolvedFonts();
+    const QFont labelFont = fonts.first;
+    const QFont monoFont = fonts.second;
 
     const QFontMetricsF labelFm(labelFont);
     const QFontMetricsF monoFm(monoFont);
@@ -219,14 +252,21 @@ ThemePreviewWidget::Layout ThemePreviewWidget::buildLayout(const QRect &content)
 }
 
 ThemePreviewWidget::WindowChrome
-ThemePreviewWidget::paintWindowChrome(QPainter &p, const QRect &outer, const QColor &window)
+ThemePreviewWidget::paintWindowChrome(QPainter &p, const QRect &outer, const QColor &window,
+                                      const NativeTitleBar::Style &titleBar)
 {
     // Hard-coded grey shades imitating the host window manager, chosen light
     // or dark to match the previewed appearance.  None of these are
     // ThemeManager tokens — they are OS furniture; only the light/dark variant
     // tracks the mode.  The traffic-light dots keep their fixed OS colours.
-    const bool   darkChrome   = window.lightness() < 128;
-    const QColor chromeBg      = darkChrome ? QColor("#2c2d30") : QColor("#e4e4e6");
+    // When the theme declares palette.window the title bar fill is instead the
+    // previewed window colour, on every platform (NativeTitleBar::previewStyle);
+    // the light/dark flag then comes from that style.
+    const bool   tinted        = titleBar.background.isValid();
+    const bool   darkChrome    = tinted ? titleBar.darkBackground
+                                        : window.lightness() < 128;
+    const QColor chromeBg      = tinted ? titleBar.background
+                                        : (darkChrome ? QColor("#2c2d30") : QColor("#e4e4e6"));
     const QColor chromeBorder  = darkChrome ? QColor("#1f2023") : QColor("#c4c4c8");
 
     // Inset by half the 1px pen so the stroked border stays inside the widget
@@ -244,7 +284,7 @@ ThemePreviewWidget::paintWindowChrome(QPainter &p, const QRect &outer, const QCo
     const QRectF titleRect(frameRect.left(), frameRect.top(),
                            frameRect.width(), kTitleBarH);
     p.fillRect(titleRect, chromeBg);
-    drawWindowControls(p, titleRect, darkChrome);
+    drawWindowControls(p, titleRect, darkChrome, tinted ? titleBar.text : QColor());
 
     // Reset brush so the content's drawRect() outlines below aren't filled with
     // a leftover chrome colour, and drop AA for crisp packet rows.
@@ -258,12 +298,14 @@ ThemePreviewWidget::paintWindowChrome(QPainter &p, const QRect &outer, const QCo
     return WindowChrome{ framePath, chromeBorder, content };
 }
 
-void ThemePreviewWidget::drawWindowControls(QPainter &p, const QRectF &titleRect, bool darkChrome)
+void ThemePreviewWidget::drawWindowControls(QPainter &p, const QRectF &titleRect, bool darkChrome,
+                                            const QColor &glyphColorOverride)
 {
     // Window controls, hard-coded per platform: macOS draws traffic
     // lights on the left, Windows/Linux draw min/max/close on the right.
 #if defined(Q_OS_MACOS)
     Q_UNUSED(darkChrome);
+    Q_UNUSED(glyphColorOverride);
 
     const qreal dotD   = 12.0;
     const qreal dotGap = 8.0;
@@ -281,7 +323,9 @@ void ThemePreviewWidget::drawWindowControls(QPainter &p, const QRectF &titleRect
     const qreal glyph      = 10.0;
     const qreal glyphPitch = 18.0;   // 10px glyph box + 8px gap
     const qreal cy         = titleRect.center().y();
-    const QColor glyphColor = darkChrome ? QColor("#c8c9cd") : QColor("#4a4a4a");
+    const QColor glyphColor = glyphColorOverride.isValid()
+                                  ? glyphColorOverride
+                                  : (darkChrome ? QColor("#c8c9cd") : QColor("#4a4a4a"));
     p.setBrush(Qt::NoBrush);
     p.setPen(QPen(glyphColor, 1.2));
     // Close (rightmost): an X.
@@ -427,9 +471,8 @@ void ThemePreviewWidget::drawFilterBar(QPainter &p, const Layout &layout)
     paintGlyph("filter-history", history);
 
     // Central green text box, between the two affordance zones — the only part
-    // carrying the FilterValid tint.  Text uses the contrasting colour of the
-    // green (white for the default theme's saturated #296700), the same choice
-    // ColorMath::contrastingText drives in the live filter edit.
+    // carrying the FilterValid tint.  Text takes TextOnFilterValid, as the live
+    // filter edit does from the application stylesheet.
     const int greenLeft  = bookmark.right() + pad;
     const int greenRight = clear.left() - pad;
     if (greenRight > greenLeft) {
@@ -437,7 +480,7 @@ void ThemePreviewWidget::drawFilterBar(QPainter &p, const Layout &layout)
         p.setRenderHint(QPainter::Antialiasing, false);
         p.fillRect(green, validBg);
         p.setFont(layout.labelFont);
-        p.setPen(ColorMath::contrastingText(validBg));
+        p.setPen(c(ThemeManager::TextOnFilterValid, pal.color(QPalette::Text)));
         p.drawText(green.adjusted(pad, 0, -pad, 0),
                    Qt::AlignVCenter | Qt::AlignLeft, QStringLiteral("tcp.port == 443"));
     }
@@ -487,16 +530,16 @@ void ThemePreviewWidget::drawPacketList(QPainter &p, const Layout &layout)
 {
     const QPalette pal = QApplication::palette();
     const QColor base    = c(ThemeManager::PaletteBase,          pal.color(QPalette::Base));
-    const QColor altBase = c(ThemeManager::PaletteAlternateBase, pal.color(QPalette::AlternateBase));
     const QColor text    = c(ThemeManager::PaletteText,          pal.color(QPalette::Text));
     const QColor mid     = c(ThemeManager::PaletteMid,           pal.color(QPalette::Mid));
-    const QColor midLight= c(ThemeManager::PaletteMidLight,      pal.color(QPalette::Midlight));
+    const QColor midLight= c(ThemeManager::PaletteMidlight,      pal.color(QPalette::Midlight));
 
     // Theme packet-state tokens (these ARE theme-controlled).
     const QColor selBg = c(ThemeManager::PacketsSelection,     pal.color(QPalette::Highlight));
     const QColor selFg = c(ThemeManager::PacketsSelectionText, pal.color(QPalette::HighlightedText));
     const QColor mkBg  = c(ThemeManager::PacketsMarked,        QColor("#ec2a93"));
     const QColor mkFg  = c(ThemeManager::PacketsMarkedText,    QColor("#ffffff"));
+    const QColor igBg  = c(ThemeManager::PacketsIgnored,       base);
     const QColor igFg  = c(ThemeManager::PacketsIgnoredText,   mid);
 
     // Each row is tagged with the NAME of the default coloring rule it would
@@ -529,9 +572,6 @@ void ThemePreviewWidget::drawPacketList(QPainter &p, const Layout &layout)
                             layout.content.width(), rowH);
 
         QColor bg, fg = text;
-        bool strike = false;
-        // Base layer: alternating-row shading (theme token).
-        if (i % 2 == 1) bg = altBase;
         // Optional coloring-rule layer: only when the overlay is on, using the
         // colours from the user's current filter set (not theme tokens).  Rows
         // whose rule is disabled or absent keep their theme colour.
@@ -546,16 +586,14 @@ void ThemePreviewWidget::drawPacketList(QPainter &p, const Layout &layout)
         switch (row.state) {
         case StateSel:  bg = selBg; fg = selFg; break;
         case StateMark: bg = mkBg;  fg = mkFg;  break;
-        case StateIgn:  bg = base;  fg = igFg;  strike = true; break;
+        case StateIgn:  bg = igBg;  fg = igFg;  break;
         default: break;
         }
 
         if (bg.isValid())
             p.fillRect(rowRect, bg);
 
-        QFont rowFont = layout.monoFont;
-        rowFont.setStrikeOut(strike);
-        p.setFont(rowFont);
+        p.setFont(layout.monoFont);
         p.setPen(fg);
         for (int ci = 0; ci < kColumnCount; ++ci) {
             p.drawText(cellRect(colContent, ci, rowRect.top(), rowRect.height()),
@@ -600,20 +638,27 @@ void ThemePreviewWidget::drawDetailsPane(QPainter &p, const Layout &layout)
     // first line is its expert "Chat" item, tinted with the ExpertChat token and
     // kept at the top so it stays visible even when the pane is short — the
     // protocol tree is the one place the preview can surface the Expert* family.
-    // bg == NoRole means an ordinary (untinted) row.
+    // bg == NoRole means an ordinary (untinted) row.  The kind says how the row
+    // text is colored: plain rows use the base text color, expert rows
+    // ExpertForeground, and the inactive-selection row (the field whose bytes
+    // are highlighted in the byte view) PacketsInactiveText on PacketsInactive.
     enum { TriNone = 0, TriCollapsed = 1, TriExpanded = 2 };
-    static const struct { int depth; int tri; ThemeManager::ThemeToken bg; const char *text; } treeLines[] = {
-        { 0, TriNone,      ThemeManager::ExpertChat, "[Connection establish acknowledge (SYN+ACK)]" },
-        { 0, TriCollapsed, ThemeManager::NoRole,     "Frame 2: 74 bytes on wire (592 bits)"         },
-        { 0, TriCollapsed, ThemeManager::NoRole,     "Ethernet II, Src: aa:bb:cc:dd:ee:ff"          },
-        { 0, TriCollapsed, ThemeManager::NoRole,     "Internet Protocol Version 4, Src: 1.1.1.1"    },
-        { 0, TriExpanded,  ThemeManager::NoRole,     "Transmission Control Protocol, Src Port: 443" },
-        { 1, TriNone,      ThemeManager::NoRole,     "Source Port: 443"                             },
-        { 1, TriNone,      ThemeManager::NoRole,     "Destination Port: 52123"                      },
-        { 1, TriExpanded,  ThemeManager::NoRole,     "Flags: 0x012 (SYN, ACK)"                      },
-        { 2, TriNone,      ThemeManager::NoRole,     "Acknowledgment: Set"                          },
-        { 2, TriNone,      ThemeManager::NoRole,     "Syn: Set"                                     },
+    enum RowKind { KindPlain, KindExpert, KindInactive };
+    static const struct { int depth; int tri; ThemeManager::ThemeToken bg; RowKind kind; const char *text; } treeLines[] = {
+        { 0, TriNone,      ThemeManager::ExpertChat,          KindExpert,   "[Connection establish acknowledge (SYN+ACK)]" },
+        { 0, TriCollapsed, ThemeManager::NoRole,              KindPlain,    "Frame 2: 74 bytes on wire (592 bits)"         },
+        { 0, TriCollapsed, ThemeManager::NoRole,              KindPlain,    "Ethernet II, Src: aa:bb:cc:dd:ee:ff"          },
+        { 0, TriCollapsed, ThemeManager::NoRole,              KindPlain,    "Internet Protocol Version 4, Src: 1.1.1.1"    },
+        { 0, TriExpanded,  ThemeManager::NoRole,              KindPlain,    "Transmission Control Protocol, Src Port: 443" },
+        { 1, TriNone,      ThemeManager::NoRole,              KindPlain,    "Source Port: 443"                             },
+        { 1, TriNone,      ThemeManager::NoRole,              KindPlain,    "Destination Port: 52123"                      },
+        { 1, TriExpanded,  ThemeManager::PacketsInactive,     KindInactive, "Flags: 0x012 (SYN, ACK)"                      },
+        { 2, TriNone,      ThemeManager::NoRole,              KindPlain,    "Acknowledgment: Set"                          },
+        { 2, TriNone,      ThemeManager::NoRole,              KindPlain,    "Syn: Set"                                     },
+        { 1, TriNone,      ThemeManager::ExpertWarn,          KindExpert,   "[Expert Info (Warning/Sequence): Previous segment not captured]" },
     };
+    const QColor expertFg   = c(ThemeManager::ExpertForeground, text);
+    const QColor inactiveFg = c(ThemeManager::PacketsInactiveText, text);
     const int    rowH       = layout.rowH;
     const double indentStep = layout.monoFm.height();
     const double triSize    = layout.monoFm.height() * 0.28;
@@ -627,6 +672,9 @@ void ThemePreviewWidget::drawDetailsPane(QPainter &p, const Layout &layout)
                 p.fillRect(QRectF(layout.detailsRect.left() + 1, dy,
                                   layout.detailsRect.width() - 2, rowH), ebg);
         }
+        const QColor rowFg = tl.kind == KindExpert   ? expertFg
+                           : tl.kind == KindInactive ? inactiveFg : text;
+        p.setPen(rowFg);
         const double indent = layout.detailsRect.left() + 6 + tl.depth * indentStep;
         const double cy     = dy + rowH / 2.0;
         if (tl.tri != TriNone) {
@@ -642,7 +690,7 @@ void ThemePreviewWidget::drawDetailsPane(QPainter &p, const Layout &layout)
             p.save();
             p.setRenderHint(QPainter::Antialiasing, true);
             p.setPen(Qt::NoPen);
-            p.setBrush(text);
+            p.setBrush(rowFg);
             p.drawPolygon(tri);
             p.restore();
         }
@@ -771,9 +819,8 @@ void ThemePreviewWidget::drawStatusBar(QPainter &p, const Layout &layout)
 
     // Reserve the bottom-right corner for the resize grip.
     const int gripW = 16;
-    const QString stats = tr("Profile: Default") + QStringLiteral("    ")
-        + tr("Packets: %1").arg(kPreviewPacketCount) + QStringLiteral(" · ")
-        + tr("Displayed: %1 (100.0%)").arg(kPreviewPacketCount);
+    const QString stats = tr("Packets: %1").arg(kPreviewPacketCount)
+        + QStringLiteral("      ") + tr("Profile: Default");
     p.drawText(statusRect.adjusted(8, 0, -8 - gripW, 0),
                Qt::AlignVCenter | Qt::AlignRight, stats);
 
@@ -800,11 +847,15 @@ void ThemePreviewWidget::paintEvent(QPaintEvent *)
     // colour, so resolve that one token up front and hand it to the chrome.
     const QColor window = c(ThemeManager::PaletteWindow,
                             QApplication::palette().color(QPalette::Window));
+    const QColor windowText = c(ThemeManager::PaletteWindowText,
+                                QApplication::palette().color(QPalette::WindowText));
+    const NativeTitleBar::Style titleBar =
+        NativeTitleBar::previewStyle(declaresWindow_, window, windowText);
 
     // Faux OS window chrome: rounded frame, title bar and window controls.
     // Installs the rounded clip; returns the content rect plus what the final
     // border stroke needs.
-    const WindowChrome chrome = paintWindowChrome(p, outer, window);
+    const WindowChrome chrome = paintWindowChrome(p, outer, window, titleBar);
 
     // Geometry + fonts for every content band, derived once.
     const Layout layout = buildLayout(chrome.content);
@@ -820,6 +871,52 @@ void ThemePreviewWidget::paintEvent(QPaintEvent *)
 
     // Outer rounded border, stroked on top of the finished content.
     strokeWindowFrame(p, chrome);
+}
+
+QImage ThemePreviewWidget::renderPickImage()
+{
+    // The probe is the same widget class, so its paint code decides which
+    // token paints each pixel; it only differs by the unique key colors and
+    // the unantialiased fonts.
+    if (!pick_probe_) {
+        pick_probe_ = std::make_unique<ThemePreviewWidget>();
+        pick_probe_->setAttribute(Qt::WA_DontShowOnScreen);
+        pick_probe_->show();
+    }
+    pick_probe_->setPreviewColors(ThemeManager::flattenTokens(ThemePreviewPick::keyTokens(), false),
+                                  declaresWindow_);
+    const QPair<QFont, QFont> fonts = resolvedFonts();
+    pick_probe_->setPreviewFonts(ThemePreviewPick::keyFont(fonts.first),
+                                 ThemePreviewPick::keyFont(fonts.second));
+    pick_probe_->setShowColoringRules(show_coloring_rules_);
+    pick_probe_->resize(size());
+
+    QImage image = ThemePreviewPick::keyCanvas(size());
+    pick_probe_->render(&image);
+    return image;
+}
+
+int ThemePreviewWidget::pickTextHeight() const
+{
+    const QPair<QFont, QFont> fonts = resolvedFonts();
+    return qMax(QFontMetrics(ThemePreviewPick::keyFont(fonts.first)).height(),
+                QFontMetrics(ThemePreviewPick::keyFont(fonts.second)).height());
+}
+
+void ThemePreviewWidget::mouseMoveEvent(QMouseEvent *event)
+{
+    if (!picker_.hover(event->position().toPoint()))
+        QWidget::mouseMoveEvent(event);
+}
+
+void ThemePreviewWidget::mousePressEvent(QMouseEvent *event)
+{
+    if (picker_.isPickClick(event)) {
+        emit layerPicked(picker_.layerAt(event->position().toPoint()));
+        event->accept();
+        return;
+    }
+    QWidget::mousePressEvent(event);
 }
 
 void ThemePreviewWidget::contextMenuEvent(QContextMenuEvent *event)
@@ -838,28 +935,18 @@ void ThemePreviewWidget::contextMenuEvent(QContextMenuEvent *event)
 
     QAction *saveAction = menu->addAction(tr("Save Image As…"));
     connect(saveAction, &QAction::triggered, this, &ThemePreviewWidget::saveAsImage);
+
+    // With picking on, the receiver inserts the colors of the spot above
+    // the coloring-rules toggle, set off by a separator of their own.
+    if (picker_.isEnabled()) {
+        QAction *sep = menu->insertSeparator(rulesAction);
+        emit pickMenuRequested(menu, sep, picker_.layersAt(event->pos()));
+    }
     menu->popup(event->globalPos());
 }
 
 void ThemePreviewWidget::saveAsImage()
 {
-    QString fileName = QFileDialog::getSaveFileName(
-        this, tr("Save Theme Preview"),
-        QStringLiteral("theme-preview.png"),
-        tr("PNG Image (*.png)"));
-    if (fileName.isEmpty())
-        return;
-    // The dialog may return a name without the extension (e.g. the user typed
-    // a bare name or "All files" was selected); ensure a .png suffix so the
-    // format written below matches the file name.
-    if (!fileName.endsWith(QStringLiteral(".png"), Qt::CaseInsensitive))
-        fileName += QStringLiteral(".png");
-
-    // grab() repaints into an off-screen pixmap carrying the widget's device
-    // pixel ratio, so the saved image is crisp on HiDPI displays.
-    const QPixmap pixmap = grab();
-    if (!pixmap.save(fileName, "PNG")) {
-        QMessageBox::warning(this, tr("Save Theme Preview"),
-                             tr("Could not write the image to \"%1\".").arg(fileName));
-    }
+    ThemePreviewPick::saveImage(this, QStringLiteral("theme-preview.png"),
+                                [this] { emit childDialogClosed(); });
 }

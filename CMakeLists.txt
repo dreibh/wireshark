@@ -3376,6 +3376,7 @@ if(BUILD_wireshark AND QT_FOUND)
 		${WIN_VERSION_LIBRARY}
 		${WINSPARKLE_LIBRARIES}
 		$<$<BOOL:${WIN32}>:uxtheme.lib>
+		$<$<BOOL:${WIN32}>:dwmapi.lib>
 		${SPEEXDSP_LIBRARIES}
 		${ZLIB_LIBRARIES}
 		${ZLIBNG_LIBRARIES}
@@ -3496,6 +3497,7 @@ if(BUILD_stratoshark AND QT_FOUND)
 		${WIN_VERSION_LIBRARY}
 		${WINSPARKLE_LIBRARIES}
 		$<$<BOOL:${WIN32}>:uxtheme.lib>
+		$<$<BOOL:${WIN32}>:dwmapi.lib>
 		${SPEEXDSP_LIBRARIES}
 		${ZLIB_LIBRARIES}
 		${ZLIBNG_LIBRARIES}
@@ -4911,6 +4913,11 @@ set_target_properties(test-programs PROPERTIES
 	FOLDER "Tests"
 	EXCLUDE_FROM_DEFAULT_BUILD True
 )
+
+# Built only when the Qt UI is (ui/qt is added above).
+if(TARGET qt_zoom_scaling_test)
+	add_dependencies(test-programs qt_zoom_scaling_test)
+endif()
 
 # Add target to enable capturing from the build directory. Requires Linux capabilities
 # and running with sudo.
