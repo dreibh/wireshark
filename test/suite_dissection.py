@@ -5501,7 +5501,6 @@ class TestDissectAmqp:
                      'list-item (byte): -100', 'list-item (short): -30000',
                      'list-item (int): -2000000000', 'list-item (smallint): -17',
                      'list-item (long): -77162851027281784', 'list-item (smalllong): -99',
-                     'list-item (float): 1.500000', 'list-item (double): -2.250000',
                      'list-item (decimal32): (not supported)',
                      'list-item (decimal128): (not supported)', 'list-item (char): €',
                      'list-item (timestamp): Oct  9, 2025 08:53:20.123000000',
@@ -5510,6 +5509,9 @@ class TestDissectAmqp:
                      'list-item (sym32): long-form-symbol', 'k32 (uint): 32',
                      'list-item (array of 2 elements)'):
             assert text in stdout, text
+        # Floats are shown with the decimal separator of the locale
+        for text in ('list-item (float): 1.500000', 'list-item (double): -2.250000'):
+            assert text in stdout or text.replace('.', ',') in stdout, text
 
     def test_amqp10_reassembly(self, cmd_tshark, capture_file, test_env):
         '''A transfer over three TCP segments (the first split inside the
@@ -5566,3 +5568,749 @@ class TestDissectAmqp:
                 '-Tfields', '-eamqp.message.to.string',
             ), encoding='utf-8', env=test_env)
         assert stdout.split() == ['sensors/equal']
+
+
+class TestDissectAnsi637:
+    @staticmethod
+    def fields(cmd_tshark, capture_file, test_env, frames, *fields, passes=()):
+        '''Return {frame number: [field values]} for the given frames.'''
+        args = [cmd_tshark, *passes, '-r', capture_file('ansi_637_coverage.pcap.gz'),
+                '-Y', ' || '.join(f'frame.number == {n}' for n in frames),
+                '-Tfields', '-E', 'aggregator=|', '-e', 'frame.number']
+        for f in fields:
+            args += ['-e', f]
+        stdout = subprocess.check_output(args, encoding='utf-8', env=test_env)
+        out = {}
+        for line in stdout.splitlines():
+            values = line.split('\t')
+            out[int(values[0])] = values[1:]
+        return out
+
+    def test_ansi_637_protocols(self, cmd_tshark, capture_file, test_env):
+        '''The transport layer over SIP and the IOS A interface, the
+        teleservice layer over ANSI-41 MAP and both by name decode without
+        malformed packets or errors, in one and two passes.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ansi_637_coverage.pcap.gz'),
+                '-Tfields', '-e', 'frame.protocols',
+            ), encoding='utf-8', env=test_env)
+        protocols = stdout.split()
+        assert len(protocols) == 133
+        assert protocols.count('exported_pdu:ip:udp:sip:ansi_637_trans:ansi_637_tele') == 35
+        assert protocols.count('exported_pdu:ip:udp:sip:ansi_637_trans') == 26
+        assert protocols.count('exported_pdu:ansi_tcap:ansi_map:ansi_637_tele') == 60
+        assert protocols.count('exported_pdu:ansi_a_bsmap:ansi_637_trans:ansi_637_tele') == 1
+        assert protocols.count('exported_pdu:ansi_a_dtap:ansi_637_trans:ansi_637_tele') == 1
+        assert protocols.count('exported_pdu:ansi_a_dtap:ansi_637_trans') == 1
+        assert protocols.count('exported_pdu:ansi_637_trans:ansi_637_tele') == 6
+        assert protocols.count('exported_pdu:ansi_637_trans') == 1
+        assert protocols.count('exported_pdu:ansi_637_tele') == 2
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('ansi_637_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert.severity >= error',
+                    '-Tfields', '-e', 'frame.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_ansi_637_user_data_length(self, cmd_tshark, capture_file, test_env):
+        '''User Data longer than its text is Extraneous Data instead of an
+        assertion (GSM 7-bit) or a dissector bug (Latin); text longer than
+        its User Data is Short Data and the subparameters after it are
+        still dissected.'''
+        out = self.fields(cmd_tshark, capture_file, test_env, (115, 116, 117),
+                          'ansi_637_tele.user_data.text', 'ansi_637_tele.subparam_id',
+                          'ansi_637.extraneous_data', 'ansi_637.short_data')
+        assert out[115][0] == '$' and out[115][2] != ''
+        assert out[116][0] == 'A' and out[116][2] != ''
+        text, subparams, extraneous, short = out[117]
+        assert text == ''
+        assert subparams == '0|1|' + '|'.join(['13'] * 8)
+        assert short != ''
+
+    def test_ansi_637_aligned_text(self, cmd_tshark, capture_file, test_env):
+        '''Multiple Encoding User Data and Service Category Program Data text
+        that starts on an octet boundary is read from the right octet.'''
+        out = self.fields(cmd_tshark, capture_file, test_env, (73, 80, 118),
+                          'ansi_637_tele.mult_enc_user_data.text',
+                          'ansi_637_tele.srvc_cat_prog_data.text')
+        assert out[73][0] == 'AB|XYZ'
+        assert out[118][0] == 'AB|XYZ'
+        assert out[80][1] == 'Alert|Weather'
+
+    def test_ansi_637_long_messages(self, cmd_tshark, capture_file, test_env):
+        '''Transport (SIP) and teleservice (ANSI-41 MAP) messages over 255
+        octets are dissected to the end.'''
+        out = self.fields(cmd_tshark, capture_file, test_env, (111, 112),
+                          'ansi_637_trans.param_id', 'ansi_637_trans.bearer_reply.seq_num',
+                          'ansi_637_tele.subparam_id', 'ansi_637_tele.msg_display_mode')
+        assert out[111][0] == '0|4|5|2|8|6'
+        assert out[111][1] == '33'
+        assert out[111][2] == '0|1|13|8'
+        assert out[112][2] == '0|1|1|3|15'
+        assert out[112][3] == '2'
+
+    def test_ansi_637_stale_broadcast(self, cmd_tshark, capture_file, test_env):
+        '''A teleservice message after a Broadcast transport message is not
+        decoded as CMAS, in one and two passes.'''
+        for passes in ((), ('-2',)):
+            out = self.fields(cmd_tshark, capture_file, test_env, (113, 114, 121, 122, 123),
+                              'ansi_637_tele.user_data.text', 'ansi_637_tele.cmas.num_fields',
+                              'ansi_637_tele.cmas.text', passes=passes)
+            assert out[113][1:] == ['19', 'Test alert']
+            assert out[114] == ['Not an alert', '', '']
+            assert out[121] == out[123] == ['\\b(H', '', '']
+            assert out[122] == ['', '', '']
+
+    def test_ansi_637_cmas(self, cmd_tshark, capture_file, test_env):
+        '''CMAS alert text in several encodings, and type 0 records of
+        length 0 reported as Short Data.'''
+        out = self.fields(cmd_tshark, capture_file, test_env, (89, 90, 91, 96, 98, 120),
+                          'ansi_637_tele.cmas.text', 'ansi_637_tele.cmas.record_len',
+                          'ansi_637_tele.cmas.category', 'ansi_637.short_data')
+        assert out[89][0] == 'Presidential Alert: test'
+        assert out[89][1] == '22|4|10'
+        assert out[90][0] == 'Évacuez la zone'
+        assert out[91][0] == 'Ω Severe'
+        assert out[96][0] == 'Flash flood now!'
+        assert out[98][0] == 'Torn'
+        assert out[120][1] == '0|0|0'
+        assert out[120][3].count('|') == 2
+
+    def test_ansi_637_cmas_reserved_bits(self, cmd_tshark, capture_file, test_env):
+        '''CMAS in a User Data that is the last subparameter, with no type 0
+        record, type 0 after type 1 and type 0 first: no exception, and the
+        3 reserved bits after the CMAS message are in the last octet of the
+        User Data subparameter.'''
+        import xml.etree.ElementTree as ET
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ansi_637_coverage.pcap.gz'),
+                '-Y', 'frame.number >= 105 && frame.number <= 107', '-T', 'pdml',
+            ), encoding='utf-8', env=test_env)
+        packets = ET.fromstring(stdout).findall('packet')
+        assert len(packets) == 3
+        for packet in packets:
+            assert packet.find(".//field[@name='_ws.malformed']") is None
+            user_data = [f for f in packet.iter('field') if f.get('show') == 'User Data']
+            assert len(user_data) == 1
+            ud = user_data[0]
+            reserved = [f for f in ud if f.get('name') == 'ansi_637_tele.reserved']
+            assert len(reserved) == 1
+            assert int(reserved[0].get('pos')) == int(ud.get('pos')) + int(ud.get('size')) - 1
+
+    def test_ansi_637_encodings(self, cmd_tshark, capture_file, test_env):
+        '''User Data in each encoding, with and without a User Data Header.'''
+        out = self.fields(cmd_tshark, capture_file, test_env, (2, 18, 38, 39, 42, 44, 47, 49, 51, 55, 57),
+                          'ansi_637_tele.user_data.text', '_ws.col.info')
+        assert out[2][0] == 'Café crème à 8 h'
+        assert out[18][0] == 'Enhanced part one'
+        assert out[18][1].endswith('(Short Message fragment 1 of 2)')
+        assert out[38][0] == 'IA5 text @ 10:30'
+        assert out[39][0] == 'Unicode Ω ☺'
+        assert out[42][0] == 'שלום'
+        assert out[44][0] == 'GSM default alphabet'
+        assert out[47][0] == '한국어'
+        assert out[49][0] == 'first part'
+        assert out[51][0] == 'second part'
+        assert out[55][0] == 'GSM part two'
+        assert out[57][0] == 'Unicode Ω part'
+
+
+class TestDissectAnsi801:
+    def test_ansi_801_frames(self, cmd_tshark, capture_file, test_env):
+        '''Every forward and reverse request and response type, both
+        PD_MSG_TYPE header forms, IS-801 in ANSI MAP and ANSI A, without
+        malformed packets in one and two passes.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ansi_801_coverage.pcap.gz'),
+                '-Tfields', '-eframe.protocols', '-eansi_801.for_sess_tag',
+            ), encoding='utf-8', env=test_env)
+        frames = [line.split('\t') for line in stdout.splitlines()]
+        assert len(frames) == 109
+        assert all(p.endswith(':ansi_801') for p, _ in frames)
+        assert sum(':ansi_map:' in p for p, _ in frames) == 4
+        assert sum(':ansi_a_dtap:' in p for p, _ in frames) == 2
+        # Forward link frames have the forward session tag
+        assert sum(t != '' for _, t in frames) == 59
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('ansi_801_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert.severity >= error',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_ansi_801_forward_requests(self, cmd_tshark, capture_file, test_env):
+        '''Each forward request type is decoded with its own fields. The
+        function table used to be one entry out of step: Request Location
+        Response was shown as data, and Pseudorange, Pilot Phase and Time
+        Offset Measurement used the function of the next type.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ansi_801_coverage.pcap.gz'),
+                '-Y', 'frame.number <= 19 && ansi_801.for_req_type',
+                '-Tfields', '-eframe.number', '-eansi_801.for_req_type',
+                '-eansi_801.pref_resp_qual', '-eansi_801.offset_req',
+                '-eansi_801.desired_pilot_phase_resolution', '-eansi_801.height_incl',
+                '-eansi_801.use_action_time_indicator', '-eansi_801.action_time',
+                '-eansi_801.cancellation_type', '-eansi_801.data',
+            ), encoding='utf-8', env=test_env)
+        assert [line.split('\t') for line in stdout.splitlines()] == [
+            # The review reproducer
+            ['1', '4', '5', 'False', '', '', '', '', '', ''],
+            ['2', '1', '5', '', '', 'False', '', '', '', ''],
+            ['3', '5', '5', 'False', 'True', '', '', '', '', ''],
+            # One frame for each type
+            ['9', '0', '', '', '', '', '', '', '', '5a'],
+            ['10', '1', '4', '', '', 'True', '', '', '', ''],
+            ['11', '2', '', '', '', '', '', '', '', ''],
+            ['12', '2', '', '', '', '', '', '', '', '0102'],
+            ['13', '3', '', '', '', '', '', '', '', ''],
+            ['14', '4', '2', 'False', '', '', '', '', '', ''],
+            ['15', '5', '1', 'False', 'True', '', '', '', '', ''],
+            ['16', '6', '', '', '', '', 'True', '21', '', ''],
+            ['17', '6', '', '', '', '', 'False', '', '', ''],
+            ['18', '7', '', '', '', '', '', '', '4', ''],
+            ['19', '7', '', '', '', '', '', '', '14', ''],
+        ]
+
+    def test_ansi_801_response_count(self, cmd_tshark, capture_file, test_env):
+        '''Messages with PD_MSG_TYPE 1: the forward response used to start
+        one octet late, and in both directions the response count was not
+        shifted down (16 times too large), so Short Data was reported after
+        the last response.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ansi_801_coverage.pcap.gz'),
+                '-Y', 'ansi_801.pd_message_type == 1',
+                '-Tfields', '-eframe.number',
+                '-eansi_801.for_message_number_responses', '-eansi_801.rev_message_number_responses',
+                '-eansi_801.for_rsp_type', '-eansi_801.rev_rsp_type',
+                '-eansi_801.reject_request_type', '-e_ws.expert',
+            ), encoding='utf-8', env=test_env)
+        assert [line.split('\t') for line in stdout.splitlines()] == [
+            # The review reproducer: one Reject of type 2 in each direction
+            ['4', '1', '', '0', '', '2', ''],
+            ['5', '', '1', '', '0', '2', ''],
+            ['43', '3', '', '2,1,12', '', '', ''],
+            ['44', '2', '', '0,8', '', '8', ''],
+            # A request count, requests not decoded
+            ['45', '1', '', '0', '', '8', ''],
+            ['82', '', '3', '', '2,1,6', '', ''],
+            ['83', '', '1', '', '0', '4', ''],
+            # In ANSI MAP
+            ['107', '', '1', '', '7', '', ''],
+        ]
+        # Short Data only where requests or responses are missing
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ansi_801_coverage.pcap.gz'),
+                '-Y', 'ansi_801.short_data',
+                '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.split() == ['88', '90', '92', '94', '96', '97', '100', '101']
+
+    def test_ansi_801_location_response(self, cmd_tshark, capture_file, test_env):
+        '''The Provide Location Response bit fields, with and without the
+        optional velocity, clock and height parts.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ansi_801_coverage.pcap.gz'),
+                '-Y', 'frame.number in {37..41,77}',
+                '-Tfields', '-eframe.number', '-eansi_801.lat', '-eansi_801.long',
+                '-eansi_801.velocity_hor', '-eansi_801.velocity_ver',
+                '-eansi_801.clock_bias', '-eansi_801.height', '-eansi_801.reserved_bits',
+            ), encoding='utf-8', env=test_env)
+        assert [line.split('\t') for line in stdout.splitlines()] == [
+            ['37', '33.75', '67.5', '50', '8', '250', '112', '0'],
+            ['38', '-67.5', '-135', '127.75', '', '', '-500', '0'],
+            ['39', '33.75', '67.5', '', '', '', '', '0'],
+            ['40', '33.75', '67.5', '0.25', '-62.5', '-13000', '', ''],
+            ['41', '33.75', '67.5', '', '', '', '15883', '0'],
+            ['77', '-84.375', '90', '', '', '249143', '780', ''],
+        ]
+
+    def test_ansi_801_carriage(self, cmd_tshark, capture_file, test_env):
+        '''IS-801 in ANSI MAP SMSDeliveryPointToPoint (Invoke forward,
+        ReturnResult reverse, through the saved ServiceIndicator) and in an
+        ANSI A ADDS Deliver (direction from the packet direction).'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ansi_801_coverage.pcap.gz'),
+                '-Y', 'ansi_map || ansi_a_dtap',
+                '-Tfields', '-eframe.number', '-eansi_801.for_sess_tag',
+                '-eansi_801.rev_sess_tag', '-eansi_801.for_rsp_type', '-eansi_801.rev_rsp_type',
+            ), encoding='utf-8', env=test_env)
+        assert [line.split('\t') for line in stdout.splitlines()] == [
+            ['104', '11', '', '2', ''],
+            ['105', '', '11', '', '2,1'],
+            ['106', '11', '', '4', ''],
+            ['107', '', '11', '', '7'],
+            ['108', '12', '', '5,2', ''],
+            ['109', '', '12', '', '1'],
+        ]
+
+    def test_ansi_801_sensitivity_assistance(self, cmd_tshark, capture_file, test_env):
+        '''Provide GPS Sensitivity Assistance is decoded from the octets the
+        field masks are for, within its 4 octets, also when it is the last
+        element. It used to be read one octet late, past the element.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ansi_801_coverage.pcap.gz'),
+                '-Y', 'frame.number in {28,29,108}',
+                '-Tfields', '-eframe.number', '-eansi_801.ref_bit_num',
+                '-eansi_801.num_dr_p', '-eansi_801.dr_size', '-eansi_801.part_num',
+                '-eansi_801.total_parts', '-eansi_801.data_records', '-e_ws.expert',
+            ), encoding='utf-8', env=test_env)
+        # 12 34 56 78 in each: then a Reject, last in the message, in ANSI A
+        assert [line.split('\t') for line in stdout.splitlines()] == [
+            [n, '145', '10', '43', '1', '7', '0', ''] for n in ('28', '29', '108')
+        ]
+
+    def test_ansi_801_reserved_message_type(self, cmd_tshark, capture_file, test_env):
+        '''Reserved and manufacturer specific message types, with and
+        without data after the type. Without data it used to be Malformed.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ansi_801_coverage.pcap.gz'),
+                '-Y', 'ansi_801.pd_message_type >= 2',
+                '-Tfields', '-eframe.number', '-eansi_801.pd_message_type',
+                '-eansi_801.proprietary_data', '-e_ws.expert',
+            ), encoding='utf-8', env=test_env)
+        assert [line.split('\t') for line in stdout.splitlines()] == [
+            ['46', '2', '010203', ''],
+            ['47', '200', 'deadbeef', ''],
+            ['48', '255', '00', ''],
+            ['49', '255', '', ''],
+            ['84', '48', '00', ''],
+            ['85', '254', '70726f7072696574617279', ''],
+            ['86', '255', 'ff', ''],
+            ['87', '192', '', ''],
+        ]
+
+
+class TestDissectAnsi683:
+    def test_ansi_683_protocols(self, cmd_tshark, capture_file, test_env):
+        '''Every forward and reverse message and parameter block, over the
+        ansi_a.ota table, ANSI A DTAP ADDS Deliver and ANSI MAP SMDPP,
+        decodes without malformed packets or errors in one and two passes.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ansi_683_coverage.pcap.gz'),
+                '-Tfields', '-eframe.protocols',
+                '-eansi_683.for_msg_type', '-eansi_683.rev_msg_type',
+            ), encoding='utf-8', env=test_env)
+        frames = [line.split('\t') for line in stdout.splitlines()]
+        assert len(frames) == 240
+        protocols = [f[0] for f in frames]
+        assert protocols.count('exported_pdu:ansi_683') == 216
+        assert protocols.count('exported_pdu:ansi_a_dtap:ansi_683') == 12
+        assert protocols.count('exported_pdu:ansi_tcap:ansi_map:ansi_683') == 12
+        # Every message type 0-23 in both directions
+        assert {int(f[1]) for f in frames if f[1]} >= set(range(24))
+        assert {int(f[2]) for f in frames if f[2]} >= set(range(24))
+        # ANSI A and ANSI MAP alternate forward (base station) and reverse
+        # (mobile station) messages
+        for carriage in ('ansi_a_dtap', 'ansi_map'):
+            dirs = ['F' if f[1] else 'R' for f in frames if carriage in f[0]]
+            assert dirs == ['F', 'R'] * 6
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('ansi_683_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert.severity == error',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_ansi_683_reserved_bits(self, cmd_tshark, capture_file, test_env):
+        '''Reserved fields are shown after the fields before them, not over
+        them: Secure Mode Request (STOP, reserved 010), CDMA NAM block of a
+        Configuration Response (reserved 11, SLOTTED_MODE, reserved 00101),
+        OTAPA Request and Response (reserved before NAM_LOCK_IND), the
+        IMSI_T block (reserved after IMSI_T_S) and the FRESH_INCL octet.'''
+        for frame, lines in (
+                (53, ('0... .... = Secure Mode: Stop',
+                      '.... .010 = Reserved: True')),
+                (50, ('.000 0... = Security: SMCK generation using SSD_A and SSD_B',
+                      '.... .101 = Reserved: True')),
+                (75, ('11.. .... = Reserved: True',
+                      '..1. .... = Slotted Mode: 1',
+                      '...0 0101 = Reserved: True')),
+                (38, ('0... .... = OTAPA session: Stop',
+                      '.111 1111 = Reserved: True')),
+                (9, ('0... .... = FRESH_INCL: False',
+                     '.111 1111 = Reserved: True')),
+                (105, ('0000 000. = Reserved: False',
+                       '.... ...1 = NAM_LOCK indicator: 1')),
+                (5, ('The least significant 10 digits of the IMSI_T (IMSI_T_S) (34 bits): 4344454647',
+                     '.... ...1 = Reserved: True')),
+                ):
+            stdout = subprocess.check_output((cmd_tshark,
+                    '-r', capture_file('ansi_683_coverage.pcap.gz'),
+                    '-Y', f'frame.number == {frame}',
+                    '-O', 'ansi_683', '-V',
+                ), encoding='utf-8', env=test_env)
+            text = [line.strip() for line in stdout.splitlines()]
+            for line in lines:
+                assert line in text, (frame, line)
+
+    def test_ansi_683_puzl_config_req(self, cmd_tshark, capture_file, test_env):
+        '''The PUZL Configuration Request block data starts after the block
+        type (it used to repeat the block type).'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ansi_683_coverage.pcap.gz'),
+                '-Y', 'ansi_683.for_msg_type == 11',
+                '-Tfields', '-eframe.number', '-eansi_683.param_block_puzl',
+                '-eansi_683.block_data',
+            ), encoding='utf-8', env=test_env)
+        frames = [line.split('\t') for line in stdout.splitlines()]
+        assert frames[:3] == [
+            ['40', '3', ''],
+            ['41', '128', '01020304'],
+            ['149', '1', 'aabb'],
+        ]
+
+    def test_ansi_683_mdn_and_values(self, cmd_tshark, capture_file, test_env):
+        '''Mobile directory numbers (odd, even, 15 digits) and the Secure
+        Mode random number decode.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ansi_683_coverage.pcap.gz'),
+                '-Y', 'frame.number in {4, 8, 51, 219}',
+                '-Tfields', '-eansi_683.mobile_directory_number',
+                '-eansi_683.random_number_smck_generation',
+            ), encoding='utf-8', env=test_env)
+        assert stdout == (
+            '6135550123,5550199\t\n'
+            '180055501234567\t\n'
+            '\t0xc8c9cacbcccdcecf\n'
+            '\t0xc8c9cacbcccdcecf\n')
+
+    def test_ansi_683_short_data(self, cmd_text2pcap, cmd_tshark, result_file, test_env):
+        '''A Secure Mode Request, System Tag Configuration Request and
+        System Tag Download Response one or two octets too short give the
+        Short Data expert info instead of an exception.'''
+        def ota(direction, payload):
+            # Exported PDU: dissector table "ansi_a.ota", direction as value
+            return (struct.pack('>HH', 14, 12) + b'ansi_a.ota\0\0'
+                    + struct.pack('>HHI', 32, 4, direction)
+                    + struct.pack('>HH', 0, 0) + payload)
+        packets = [
+            ota(0, bytes([15, 0x80]) + b'\x11' * 7),   # 7 of 8 random octets
+            ota(0, bytes([19, 0x01, 0x00, 0x10])),     # 2 of 3 segment octets
+            ota(1, bytes([20, 0x01, 0x00, 0x10])),     # 2 of 3 segment octets
+        ]
+        text_file = result_file('ansi_683_short.txt')
+        capture = result_file('ansi_683_short.pcapng')
+        with open(text_file, 'w') as f:
+            f.writelines(f'000000  {packet.hex(" ")}\n' for packet in packets)
+        subprocess.check_call((cmd_text2pcap, '-q', '-l', '252', text_file, capture), env=test_env)
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture,
+                '-Y', 'ansi_683.short_data',
+                '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=test_env)
+        assert stdout == '1\n2\n3\n'
+        # Short Data is in the Malformed group, but no exception follows it
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture,
+                '-Y', '_ws.malformed.expert',
+                '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=test_env)
+        assert count_output(stdout) == 0
+
+
+ANSI_A_OPTS = ('-d', 'sccp.ssn==252,bsap')  # BSAP has no fixed SCCP SSN
+ANSI_A_IOS5 = ('-o', 'ansi_a_bsmap.global_variant:ios-5.0.1')
+
+
+class TestDissectAnsiA:
+    def ansi_a(self, cmd_tshark, capture_file, test_env, ios5, *args):
+        capture = 'ansi_a_ios5_coverage.pcap.gz' if ios5 else 'ansi_a_coverage.pcap.gz'
+        return subprocess.check_output((cmd_tshark, *ANSI_A_OPTS, *(ANSI_A_IOS5 if ios5 else ()),
+                '-r', capture_file(capture), *args,
+            ), encoding='utf-8', env=test_env)
+
+    def test_ansi_a_protocols(self, cmd_tshark, capture_file, test_env):
+        '''Every BSMAP and DTAP message of both variants, over M3UA/SCCP, in
+        a femtocell SIP MESSAGE and in ANSI-41 MAP, decodes without malformed
+        packets or errors, in one and two passes.'''
+        for ios5, counts in ((False, {'BSAP': 268, 'SCCP (Int. ITU)': 20, 'SIP': 12, 'ANSI MAP': 3,
+                                      'IS-637-A': 4, 'IS-683': 2, 'IS-801': 2}),
+                             (True, {'BSAP': 283, 'SCCP (Int. ITU)': 22, 'SIP': 12, 'ANSI MAP': 3,
+                                     'IS-637-A': 4, 'IS-683': 2, 'IS-801': 2,
+                                     'EVRC': 4, 'RTP': 1, 'RTP EVENT': 1})):
+            stdout = self.ansi_a(cmd_tshark, capture_file, test_env, ios5,
+                    '-Tfields', '-e_ws.col.protocol')
+            protocols = stdout.splitlines()
+            assert {p: protocols.count(p) for p in set(protocols)} == counts
+            for passes in ((), ('-2',)):
+                stdout = self.ansi_a(cmd_tshark, capture_file, test_env, ios5, *passes,
+                        '-Y', '_ws.malformed || _ws.expert.severity == error',
+                        '-Tfields', '-eframe.number')
+                assert count_output(stdout) == 0
+
+    def test_ansi_a_statistics(self, cmd_tshark, capture_file, test_env):
+        '''The BSMAP and DTAP statistics count every message of the variant
+        (56 BSMAP and 37 DTAP messages in IOS 4.0.1, 62 and 37 in IOS 5.0.1).'''
+        for ios5, rows in ((False, 93), (True, 99)):
+            stdout = self.ansi_a(cmd_tshark, capture_file, test_env, ios5,
+                    '-q', '-z', 'ansi_a,bsmap', '-z', 'ansi_a,dtap')
+            counts = [int(line.split('|')[2]) for line in stdout.splitlines() if line.startswith('0x')]
+            assert len(counts) == rows
+            assert 0 not in counts
+
+    def test_ansi_a_ios4_tag_after_status_request(self, cmd_tshark, capture_file, test_env):
+        '''In IOS 4.0.1 mode the IOS 5 only elements of Status Request are
+        skipped, and the Tag after them is shown. They used to take the
+        rest of the message.'''
+        stdout = self.ansi_a(cmd_tshark, capture_file, test_env, False,
+                '-Y', 'ansi_a_bsmap.msgtype == 0x6a',
+                '-Tfields', '-eframe.number', '-eansi_a_bsmap.tag.value')
+        assert stdout.splitlines() == ['38\t16909060', '244\t16909060', '297\t42']
+
+    def test_ansi_a_access_network_identifiers(self, cmd_tshark, capture_file, test_env):
+        '''Access Network Identifiers (a TV element in Handoff Required) shows
+        SID, NID and PZID at their own offsets, and the Service Option List
+        after it is dissected. NID and PZID used to be read at the SID offset
+        and the rest of the message taken as extraneous data.'''
+        stdout = self.ansi_a(cmd_tshark, capture_file, test_env, False,
+                '-Y', 'ansi_a_bsmap.nid',
+                '-Tfields', '-eframe.number', '-eansi_a_bsmap.sid', '-eansi_a_bsmap.nid',
+                '-eansi_a_bsmap.pzid', '-eansi_a_bsmap.so_list.num')
+        assert stdout.splitlines() == ['129\t257\t514\t3\t3', '296\t1\t2\t3\t1', '305\t257,291\t514\t3\t3']
+
+    def test_ansi_a_cell_list(self, cmd_tshark, capture_file, test_env):
+        '''A Cell Identifier List whose only cell runs past the element has
+        one cell. The unsigned length used to wrap and the rest of the
+        message was read as cells.'''
+        stdout = self.ansi_a(cmd_tshark, capture_file, test_env, False,
+                '-Y', 'frame.number == 298',
+                '-Tfields', '-eansi_a_bsmap.cell_ci')
+        assert stdout.strip() == '0x0022'
+
+    def test_ansi_a_ios5_rtp_setup(self, cmd_tshark, capture_file, test_env):
+        '''The A2p Bearer Format-Specific Parameters set up the RTP streams
+        (IPv4 and IPv6, session or format address) with their dynamic payload
+        types, including telephone-event for an in-band signaling format.'''
+        stdout = self.ansi_a(cmd_tshark, capture_file, test_env, True,
+                '-Y', 'rtp',
+                '-Tfields', '-eframe.number', '-e_ws.col.protocol', '-ertp.p_type',
+                '-ertp.setup-frame', '-ertp.setup-method')
+        assert stdout.splitlines() == [
+            '79\tEVRC\t97\t45\tIOS5',
+            '80\tRTP EVENT\t101\t45\tIOS5',
+            '153\tEVRC\t97\t152\tIOS5',
+            '154\tEVRC\t102\t148\tIOS5',
+            '214\tEVRC\t98\t211\tIOS5',
+            '327\tRTP\t98\t321\tIOS5',
+        ]
+
+    def test_ansi_a_femto(self, cmd_tshark, capture_file, test_env):
+        '''BSMAP and DTAP messages in a femtointerfacemsg SIP body.'''
+        stdout = self.ansi_a(cmd_tshark, capture_file, test_env, False,
+                '-Y', 'sip',
+                '-Tfields', '-eansi_a_bsmap.msgtype', '-eansi_a_bsmap.dtap_msgtype')
+        assert stdout.splitlines() == [
+            '0x57\t', '\t0x24', '\t0x04', '0x45\t', '\t0x27', '\t0x33', '\t0x2c',
+            '\t', '0x09\t', '\t', '\t0x4a', '0x00\t',
+        ]
+
+    def test_ansi_a_fill_bits(self, cmd_tshark, capture_file, test_env):
+        '''The fill bits of bit-exact contents are the low bits of the last
+        octet, as many as the fill bit count (1 to 7). One fill bit used to
+        add a zero-width field, a dissector bug.'''
+        stdout = self.ansi_a(cmd_tshark, capture_file, test_env, False,
+                '-Y', 'frame.number >= 307 && frame.number <= 310', '-V', '-O', 'ansi_a_bsmap')
+        fill = [line.strip() for line in stdout.splitlines() if '= Fill Bits:' in line]
+        assert fill == [
+            # Mobile Capabilities FCH, DCCH, FOR_PDCH, REV_PDCH (1, 3, 7, 4 fill bits)
+            '.... ...1 = Fill Bits: 1', '.... .101 = Fill Bits: 5',
+            '.101 0101 = Fill Bits: 85', '.... 1100 = Fill Bits: 12',
+            # (2, 5, 6, none)
+            '.... ..01 = Fill Bits: 1', '...1 1110 = Fill Bits: 30', '..00 0011 = Fill Bits: 3',
+            # Non-Negotiable Service Configuration Record (1, 6)
+            '.... ...1 = Fill Bits: 1', '..10 1001 = Fill Bits: 41',
+        ]
+        stdout = self.ansi_a(cmd_tshark, capture_file, test_env, False,
+                '-Y', '_ws.expert.group == "Dissector bug"', '-Tfields', '-eframe.number')
+        assert count_output(stdout) == 0
+
+    def test_ansi_a_a1_element_type_0(self, cmd_tshark, capture_file, test_env):
+        '''A CDMA2000 A1 element of type 0x00 in ANSI-41 MAP is stepped over
+        and the element after it is decoded. It used to match the end of the
+        element table and loop forever.'''
+        for ios5, frame in ((False, '311'), (True, '334')):
+            stdout = self.ansi_a(cmd_tshark, capture_file, test_env, ios5,
+                    '-Y', 'frame.number == ' + frame,
+                    '-Tfields', '-eansi_a_bsmap.cause_1', '-eansi_a_bsmap.esn')
+            assert stdout.strip() == '9\t0x8a123456'
+
+
+# The capture is SS7 over M3UA with ANSI point codes and SCCP addresses.
+ANSI_MAP_OPTS = ('-o', 'mtp3.standard:ANSI')
+
+
+class TestDissectAnsiMap:
+    def test_ansi_map_needs_ansi_mtp3(self, cmd_tshark, capture_file, test_env):
+        '''With the default (ITU) MTP3 standard the ANSI SCCP addresses do
+        not route to TCAP, so nothing is dissected as ANSI MAP.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ansi_map_coverage.pcap.gz'),
+                '-Y', 'ansi_map',
+                '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=test_env)
+        assert count_output(stdout) == 0
+
+    def test_ansi_map_protocols(self, cmd_tshark, capture_file, test_env):
+        '''Every operation, as Invoke and ReturnResult with all of its
+        parameters, decodes without malformed packets or error expert infos,
+        in one and two passes.'''
+        stdout = subprocess.check_output((cmd_tshark, *ANSI_MAP_OPTS,
+                '-r', capture_file('ansi_map_coverage.pcap.gz'),
+                '-Tfields', '-e_ws.col.protocol',
+            ), encoding='utf-8', env=test_env)
+        protocols = stdout.splitlines()
+        assert len(protocols) == 336
+        assert protocols.count('ANSI MAP') == 297
+        # The Reject and the ReturnError without parameters are not passed
+        # to ANSI MAP
+        assert protocols.count('ANSI TCAP') == 2
+        # SMS bearer data handed to IS-637, IS-683 and IS-801
+        assert protocols.count('IS-637-A') == 26
+        assert protocols.count('IS-683') == 4
+        assert protocols.count('IS-801') == 7
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *ANSI_MAP_OPTS, *passes,
+                    '-r', capture_file('ansi_map_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert.severity == error',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_ansi_map_bearer_data_once(self, cmd_tshark, capture_file, test_env):
+        '''The SMS bearer data is handed to IS-637/IS-801 once, however
+        many TeleserviceIdentifier or ServiceIndicator parameters follow.
+        Each one used to dissect it again, until 600 of them failed the
+        layer limit assertion.'''
+        stdout = subprocess.check_output((cmd_tshark, *ANSI_MAP_OPTS,
+                '-r', capture_file('ansi_map_coverage.pcap.gz'),
+                '-Y', 'frame.number in {290, 291, 325, 327, 328, 329}',
+                '-Tfields', '-eframe.number', '-eframe.protocols',
+            ), encoding='utf-8', env=test_env)
+        frames = dict(line.split('\t') for line in stdout.splitlines())
+        # 5 and 600 ServiceIndicator: IS-801 once
+        for number in ('290', '328', '329'):
+            assert frames[number].split(':').count('ansi_801') == 1
+        # 5, 600 and 4000 TeleserviceIdentifier: IS-637 once
+        for number in ('291', '325', '327'):
+            assert frames[number].split(':').count('ansi_637_tele') == 1
+
+    def test_ansi_map_result_operation(self, cmd_tshark, capture_file, test_env):
+        '''A ReturnResult whose Invoke ANSI MAP did not save (frame 300
+        goes to another node than the Invoke came from) is dissected with
+        the operation TCAP matched, not that of the previous packet (an SMS
+        Delivery Point to Point Invoke). ReturnError names the matched
+        operation, and a unidirectional package (no transaction ID) with
+        an Invoke and a ReturnResult decodes.'''
+        stdout = subprocess.check_output((cmd_tshark, *ANSI_MAP_OPTS,
+                '-r', capture_file('ansi_map_coverage.pcap.gz'),
+                '-Y', 'frame.number in {299, 300, 303, 306, 309, 312, 330}',
+                '-Tfields', '-eframe.number', '-e_ws.col.info',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.splitlines() == [
+            '299\tSMS Delivery Point to Point Invoke ',
+            '300\tRegistration Notification ReturnResult ',
+            '303\tRegistration Notification ReturnError ',
+            '306\tLocation Request ReturnError ',
+            '309\tSMS Delivery Point to Point ReturnError ',
+            '312\tAuthentication Directive ReturnError ',
+            '330\tSMS Delivery Point to Point ReturnResult ',
+        ]
+        stdout = subprocess.check_output((cmd_tshark, *ANSI_MAP_OPTS,
+                '-r', capture_file('ansi_map_coverage.pcap.gz'),
+                '-Y', 'ansi_map.registrationNotificationRes_element || ansi_map.sms_CauseCode',
+                '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=test_env)
+        frames = stdout.split()
+        assert '300' in frames and '330' in frames
+
+    def test_ansi_map_response_matching(self, cmd_tshark, capture_file, test_env):
+        '''ansi_map.transaction.matchtype: frame 295 answers a
+        RegistrationNotification VLR->HLR whose transaction ID a later
+        LocationRequest MSC-B->MC reused. Matching on the transaction ID
+        only takes the LocationRequest.'''
+        for matchtype, info in (
+                ('tid', 'Location Request ReturnResult '),
+                ('tid_source', 'Registration Notification ReturnResult '),
+                ('tid_source_dest', 'Registration Notification ReturnResult '),
+                ):
+            stdout = subprocess.check_output((cmd_tshark, *ANSI_MAP_OPTS,
+                    '-o', f'ansi_map.transaction.matchtype:{matchtype}',
+                    '-r', capture_file('ansi_map_coverage.pcap.gz'),
+                    '-Y', 'frame.number == 295',
+                    '-Tfields', '-e_ws.col.info',
+                ), encoding='utf-8', env=test_env)
+            assert stdout.strip('\n') == info
+
+    def test_ansi_map_parameters(self, cmd_tshark, capture_file, test_env):
+        '''The hand-written parameter decoders give the expected values, and
+        the bearer data of a ReturnResult goes to the IS-683/IS-801 reverse
+        link with the ServiceIndicator saved from its Invoke.'''
+        for dfilter, frames in (
+                ('ansi_683.for_msg_type', '280 282'),
+                ('ansi_683.rev_msg_type', '281 283'),
+                ('ansi_801', '284 285 286 287 290 328 329'),
+                ('ansi_801.rev_sess_tag', '285 287'),
+                ):
+            stdout = subprocess.check_output((cmd_tshark, *ANSI_MAP_OPTS,
+                    '-r', capture_file('ansi_map_coverage.pcap.gz'),
+                    '-Y', dfilter,
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert ' '.join(stdout.split()) == frames, dfilter
+        for dfilter, count in (
+                ('ansi_map.bcd_digits == "2015550123"', 95),
+                ('ansi_map.ia5_digits == "5551212"', 38),
+                ('ansi_map.SSN == 6', 53),
+                ('ansi_map.win_trigger_list', 21),
+                ):
+            stdout = subprocess.check_output((cmd_tshark, *ANSI_MAP_OPTS,
+                    '-r', capture_file('ansi_map_coverage.pcap.gz'),
+                    '-Y', dfilter,
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == count, dfilter
+
+    def test_ansi_map_mslocation_teleservice(self, cmd_tshark, capture_file, test_env):
+        '''MSLocation with a 1 and a 2 octet resolution decodes (the
+        resolution used to be added with length -1, which always threw),
+        and a 1-octet TeleserviceIdentifier is shown with its length
+        instead of throwing.'''
+        stdout = subprocess.check_output((cmd_tshark, *ANSI_MAP_OPTS,
+                '-r', capture_file('ansi_map_coverage.pcap.gz'),
+                '-Y', 'frame.number in {334, 335}',
+                '-Tfields', '-eframe.number', '-eansi_map.mslocation.lat',
+                '-eansi_map.mslocation.long', '-eansi_map.mslocation.res',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.splitlines() == [
+            '334\t4198964\t8410744\t5',
+            '335\t4198964\t8410744\t1281',
+        ]
+        stdout = subprocess.check_output((cmd_tshark, *ANSI_MAP_OPTS,
+                '-r', capture_file('ansi_map_coverage.pcap.gz'),
+                '-Y', 'frame.number == 336',
+                '-V', '-O', 'ansi_map',
+            ), encoding='utf-8', env=test_env)
+        assert 'sms-TeleserviceIdentifier: 10 length 1' in stdout
+        assert 'Malformed' not in stdout
+        assert 'IS-637' not in stdout
+
+    def test_ansi_map_statistics(self, cmd_tshark, capture_file, test_env):
+        '''-z ansi_map counts every known operation, also after the
+        unknown ones (a static flag used to stop the counting at the first
+        unknown operation code).'''
+        stdout = subprocess.check_output((cmd_tshark, *ANSI_MAP_OPTS,
+                '-r', capture_file('ansi_map_coverage.pcap.gz'),
+                '-q', '-z', 'ansi_map',
+            ), encoding='utf-8', env=test_env)
+        counts = {}
+        for line in stdout.splitlines():
+            fields = [f.strip() for f in line.split('|')]
+            if len(fields) >= 3 and fields[0].startswith('0x'):
+                counts[fields[0]] = int(fields[2])
+        assert counts['0x0d'] == 7     # Registration Notification
+        assert counts['0x35'] == 39    # SMS Delivery Point to Point
+        assert counts['0x70'] == 2     # QualificationRequest2 (the last)
+        assert counts['0x67'] == 0     # not an ANSI MAP operation
