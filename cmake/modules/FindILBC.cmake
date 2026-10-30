@@ -34,6 +34,7 @@ find_library(ILBC_LIBRARY
 
 # Check if ilbc library is WebRTC from https://github.com/TimothyGu/libilbc
 if(ILBC_INCLUDE_DIR AND ILBC_LIBRARY)
+  ws_reset_checks_on_change(ILBC "${ILBC_INCLUDE_DIR};${ILBC_LIBRARY}" HAVE_ILBC_LIB_WEBRTC)
   include(CheckSymbolExists)
   cmake_push_check_state()
   set(CMAKE_REQUIRED_INCLUDES ${ILBC_INCLUDE_DIR})
@@ -56,19 +57,7 @@ find_package_handle_standard_args(ILBC DEFAULT_MSG ILBC_LIBRARY ILBC_INCLUDE_DIR
 if( ILBC_FOUND )
   set( ILBC_INCLUDE_DIRS ${ILBC_INCLUDE_DIR} )
   set( ILBC_LIBRARIES ${ILBC_LIBRARY} )
-  if (WIN32)
-    set ( ILBC_DLL_DIR "${ILBC_HINTS}/bin"
-      CACHE PATH "Path to ilbc DLL"
-    )
-    file( GLOB _ilbc_dll RELATIVE "${ILBC_DLL_DIR}"
-      "${ILBC_DLL_DIR}/libilbc-*.dll"
-    )
-    set ( ILBC_DLL ${_ilbc_dll}
-      # We're storing filenames only. Should we use STRING instead?
-      CACHE FILEPATH "ilbc DLL file name"
-    )
-    mark_as_advanced( ILBC_DLL_DIR ILBC_DLL )
-  endif()
+  AddWSWinDLL(ILBC ILBC_HINTS "libilbc-*")
 else()
   set( ILBC_INCLUDE_DIRS )
   set( ILBC_LIBRARIES )

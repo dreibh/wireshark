@@ -466,6 +466,7 @@ citic
 citrix
 cjt1sp
 cksum
+ckn
 clasportinfo
 classifiers
 classmark
@@ -1594,6 +1595,7 @@ koi8r
 koi8u
 kolkata
 korean
+krackan
 krb5kdc
 krb5krb
 ksumtype
@@ -1695,6 +1697,7 @@ logout
 logray
 lombardo
 london
+longstr
 lookup
 lookups
 loopback
@@ -1838,6 +1841,8 @@ misconfigured
 mitel
 mitsubishi
 mkdir
+mka
+mkpdu
 mmdbresolve
 mmentry
 mmpdu
@@ -2017,6 +2022,7 @@ nforge
 nfs2err
 nfs3err
 nfs4err
+nfsv3attr
 nftables
 nfula
 nghttp
@@ -2836,6 +2842,7 @@ schema
 schemas
 schematl
 schweiz
+sci
 scoped
 scpsflags
 scrollbar
@@ -3111,6 +3118,7 @@ subm
 submode
 subnet
 subnets
+subns
 subobj
 subobject
 subopt

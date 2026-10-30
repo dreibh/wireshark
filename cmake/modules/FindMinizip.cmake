@@ -8,6 +8,7 @@
 #  MINIZIP_DLL_DIR      - (Windows) Path to the minizip DLL.
 #  MINIZIP_DLL          - (Windows) Name of the minizip DLL.
 
+include(FindWSWinLibs)
 FindWSWinLibs("minizip-[0-9]" "MINIZIP_HINTS")
 
 if(NOT USE_REPOSITORY)
@@ -53,26 +54,10 @@ if(MINIZIP_FOUND)
   # minizip-ng compatibility layer has some issues. We need to check
   # for renamed struct members to avoid an endless game of whack-a-mole.
   include(CheckStructHasMember)
+  ws_reset_checks_on_change(HAVE_MZCOMPAT_DOS_DATE "${MINIZIP_INCLUDE_DIR}" HAVE_MZCOMPAT_DOS_DATE)
   check_struct_has_member("zip_fileinfo" "dos_date" "minizip/zip.h" HAVE_MZCOMPAT_DOS_DATE)
 
-  if(WIN32)
-    set(MINIZIP_DLL_DIR "${MINIZIP_HINTS}/bin"
-      CACHE PATH "Path to Minizip DLL"
-    )
-    file(GLOB _minizip_dll RELATIVE "${MINIZIP_DLL_DIR}"
-      "${MINIZIP_DLL_DIR}/minizip.dll"
-    )
-    set(MINIZIP_DLL ${_minizip_dll}
-      CACHE FILEPATH "Minizip DLL file name"
-    )
-    file(GLOB _minizip_pdb RELATIVE "${MINIZIP_DLL_DIR}"
-      "${MINIZIP_DLL_DIR}/minizip.pdb"
-    )
-    set(MINIZIP_PDB ${_minizip_pdb}
-      CACHE FILEPATH "Minizip PDB file name"
-    )
-    mark_as_advanced(MINIZIP_DLL_DIR MINIZIP_DLL MINIZIP_PDB)
-  endif()
+  AddWSWinDLL(MINIZIP MINIZIP_HINTS "minizip")
 else()
   set(MINIZIP_LIBRARIES)
   set(MINIZIP_INCLUDE_DIRS)

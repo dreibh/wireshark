@@ -30,6 +30,14 @@ The following changes have been made since version 4.7.4:
 * macOS disk images and applications are now signed using certificates issued by Apple's Developer ID Certification Authority (G2).
   The previous certificate was issued by Apple's Developer ID Certification Authority, which expires in early 2027.
 
+* EAPOL-MKA (MACsec Key Agreement) gained a Connectivity Associations
+  analysis view, available from menu:Statistics[EAPOL-MKA > Connectivity
+  Associations] and from TShark with *-z mka,ca*. It groups traffic by
+  Connectivity Association (CKN), lists the detected peers and key servers,
+  and reconstructs each peer group formation (startup, rekey, new peer, and
+  key server change) with per-peer installation, formation, and retirement
+  times.
+
 The following changes have been made since version 4.7.3:
 
 * You can now https://www.wireshark.org/docs/wsug_html/#ChCustTaggingSection[tag packets] with emojis, text, or URLs similar to coloring rules.
@@ -280,6 +288,14 @@ The following features are either new or have been significantly updated since v
   The inline page also fixes the font selection on macOS, where the native font panel
   ignored the monospaced filter and offered no usable size control.
   wsbuglink:21688[]
+
+* A new Distribution dialog (menu:Statistics[Distribution], or the "Distribution" entry in the packet details context menu) counts how often the values of up to four fields occur.
+  The fields are entered in a separate _Fields_ line (comma separated, with completion and validation),
+  and the _Display filter_ line limits the packets that are counted.
+  Values sort by their type (numbers, addresses), the new _Resolve values_ option shows value strings,
+  a _Show chart_ option draws a bar chart of the most frequent values, and the table updates in place during a live capture.
+  Rows can be used as filters from their context menu (including _Copy as Filter_) or sent to the I/O Graph with _Show in I/O Graph_.
+  The copied and saved text includes the Count column, `-z distribution,<fields>` opens the dialog, and the dialog has a Help button.
 
 === Removed Features and Support
 

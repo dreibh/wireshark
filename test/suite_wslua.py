@@ -240,6 +240,10 @@ class TestWslua:
         '''wslua listener'''
         check_lua_script('listener.lua', dhcp_pcap, True)
 
+    def test_wslua_listener_expiry(self, check_lua_script):
+        '''wslua per-packet objects kept by a listener expire'''
+        check_lua_script('listener_expiry.lua', dhcp_pcap, True)
+
     def test_wslua_nstime(self, check_lua_script):
         '''wslua nstime'''
         check_lua_script('nstime.lua', dhcp_pcap, True, '-q')
@@ -354,6 +358,12 @@ class TestWslua:
         if features.have_lua_gc_generational:
             args += ['-X', 'lua_script1:generational']
         check_lua_script('gc_pacing.lua', empty_pcap, True, *args)
+
+    def test_wslua_pseudoheader(self, check_lua_script, result_file):
+        '''wslua PseudoHeader and Dumper'''
+        check_lua_script('pseudoheader.lua', empty_pcap, True,
+            '-X', 'lua_script1:' + result_file('pseudoheader.pcap'),
+        )
 
     def test_wslua_gcrypt(self, check_lua_script):
         '''wslua gcrypt'''

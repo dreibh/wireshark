@@ -811,7 +811,14 @@ dissect_bthci_vendor_broadcom_cmd(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
             break;
         case 0x02: /* Write Advertising Data */
         case 0x03: /* Write Scan Response Data */
-            call_dissector_with_data(btcommon_ad_handle, tvb_new_subset_length(tvb, offset, 31), pinfo, proto_tree_get_parent_tree(main_tree), bluetooth_data);
+            {
+            bluetooth_eir_ad_data_t *ad_data;
+
+            ad_data = wmem_new0(pinfo->pool, bluetooth_eir_ad_data_t);
+            ad_data->interface_id = interface_id;
+            ad_data->adapter_id = adapter_id;
+            call_dissector_with_data(btcommon_ad_handle, tvb_new_subset_length(tvb, offset, 31), pinfo, proto_tree_get_parent_tree(main_tree), ad_data);
+            }
             save_local_device_name_from_eir_ad(tvb, offset, pinfo, 31, bluetooth_data);
             offset += 31;
 
@@ -1043,7 +1050,7 @@ dissect_bthci_vendor_broadcom_cmd(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
                     }
                     offset += 1;
 
-                    proto_tree_add_bitmask(main_tree, tvb, offset, hf_broadcom_a2dp_hardware_offload_start_legacy_codec_information_ldac_channel_mode_mask,
+                    proto_tree_add_bitmask(codec_information_tree, tvb, offset, hf_broadcom_a2dp_hardware_offload_start_legacy_codec_information_ldac_channel_mode_mask,
                                            ett_broadcom_a2dp_hardware_offload_start_legacy_codec_information_ldac_channel_mode_mask, hfx_broadcom_a2dp_hardware_offload_start_legacy_codec_information_ldac_channel_mode, ENC_NA);
                     offset += 1;
 
@@ -1086,7 +1093,7 @@ dissect_bthci_vendor_broadcom_cmd(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
             if (cp_enable_scmst) {
                 proto_tree_add_item(main_tree, hf_broadcom_a2dp_hardware_offload_start_cp_header_scmst, tvb, offset, 1, ENC_NA);
             } else {
-                proto_tree_add_item(main_tree, hf_broadcom_a2dp_hardware_offload_start_cp_header_scmst_reserved, tvb, offset, 1, ENC_BIG_ENDIAN);
+                proto_tree_add_item(main_tree, hf_broadcom_a2dp_hardware_offload_start_cp_header_scmst_reserved, tvb, offset, 1, ENC_NA);
             }
             offset += 1;
 
@@ -1346,17 +1353,17 @@ dissect_bthci_vendor_broadcom_evt(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
             break;
         case 0x0159: /* LE Energy Info */
             if (status == STATUS_SUCCESS) {
-                proto_tree_add_item(main_tree, hf_broadcom_le_energy_total_rx_time, tvb, offset, 1, ENC_BIG_ENDIAN);
-                offset += 1;
+                proto_tree_add_item(main_tree, hf_broadcom_le_energy_total_tx_time, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+                offset += 4;
 
-                proto_tree_add_item(main_tree, hf_broadcom_le_energy_total_tx_time, tvb, offset, 1, ENC_BIG_ENDIAN);
-                offset += 1;
+                proto_tree_add_item(main_tree, hf_broadcom_le_energy_total_rx_time, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+                offset += 4;
 
-                proto_tree_add_item(main_tree, hf_broadcom_le_energy_total_idle_time, tvb, offset, 1, ENC_BIG_ENDIAN);
-                offset += 1;
+                proto_tree_add_item(main_tree, hf_broadcom_le_energy_total_idle_time, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+                offset += 4;
 
-                proto_tree_add_item(main_tree, hf_broadcom_le_energy_total_energy_used, tvb, offset, 1, ENC_BIG_ENDIAN);
-                offset += 1;
+                proto_tree_add_item(main_tree, hf_broadcom_le_energy_total_energy_used, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+                offset += 4;
             }
 
             break;
@@ -2359,7 +2366,7 @@ proto_register_bthci_vendor_broadcom(void)
         },
         { &hf_broadcom_a2dp_hardware_offload_start_cp_header_scmst_reserved,
           { "Reserved",                                    "bthci_vendor.broadcom.a2dp_hardware_offload.start.cp_header_scmst_reserved",
-            FT_UINT16, BASE_HEX, NULL, 0x0,
+            FT_UINT8, BASE_HEX, NULL, 0x0,
             NULL, HFILL }
         },
         { &hf_broadcom_a2dp_hardware_offload_start_vendor_specific_parameters_length,

@@ -664,6 +664,9 @@ static int ett_oran_se10_port;
 static int ett_oran_fragment;
 static int ett_oran_fragments;
 
+/* Dissector table for Section Extensions not in the standard, keyed by exttype. */
+static dissector_table_t oran_sectionextension_table;
+
 /* Reassembly table. */
 static reassembly_table oran_reassembly_table;
 
@@ -5618,12 +5621,37 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
             case 35: /* TODO: Codebook-based beamforming parameters */
 
             default:
+            {
+                /* Not handled above.  Offer the SE to an external dissector. */
+                /* If one handles it, use the number of bytes it dissected; */
+                /* otherwise fall back to flagging it as unsupported. */
+                int dissected = 0;
+                unsigned se_end = extension_start_offset + (extlen*4);
+                oran_se_info se_info;
+                se_info.exttype   = exttype;
+                se_info.extlen    = extlen;
+                se_info.startPrbc = startPrbc;
+                se_info.numPrbc   = numPrbc;
+                se_info.extension_ti = extension_ti;
+                se_info.exttype_ti   = exttype_ti;
+
+                /* Subset tvb covering just the SE payload */
+                tvbuff_t *se_tvb = tvb_new_subset_length(tvb, offset, se_end-offset);
+                dissected = dissector_try_uint_with_data(oran_sectionextension_table, exttype,
+                                                         se_tvb, pinfo, extension_tree, true, &se_info);
+
+                if (dissected > 0) {
+                    offset += dissected;
+                    break;
+                }
+
                 /* Other/unexpected extension types */
                 expert_add_info_format(pinfo, exttype_ti, &ei_oran_unhandled_se,
                                        "SE %u (%s) not supported by dissector",
                                        exttype, val_to_str_ext_const(exttype, &exttype_vals_ext, "Reserved"));
                 ext_unhandled = true;
                 break;
+            }
         }
 
         /* Check offset compared with extlen.  There should be 0-3 bytes of padding */
@@ -6096,17 +6124,22 @@ static int dissect_udcomphdr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
                                                          "udCompHdr");
     proto_tree *udcomphdr_tree = proto_item_add_subtree(udcomphdr_ti, ett_oran_udcomphdr);
 
-    /* udIqWidth */
-    uint32_t hdr_iq_width;
-    proto_item *iq_width_item = proto_tree_add_item_ret_uint(udcomphdr_tree, hf_oran_udCompHdrIqWidth , tvb, offset, 1, ENC_NA, &hdr_iq_width);
-    *bit_width = (hdr_iq_width) ? hdr_iq_width : 16;
-    proto_item_append_text(iq_width_item, " (%u bits)", *bit_width);
+	uint8_t byte = tvb_get_uint8(tvb, offset);
+    uint32_t hdr_iq_width = 0, ud_comp_meth = 0;
 
-    /* udCompMeth */
-    uint32_t ud_comp_meth;
-    *comp_meth_ti = proto_tree_add_item_ret_uint(udcomphdr_tree, hf_oran_udCompHdrMeth, tvb, offset, 1, ENC_NA, &ud_comp_meth);
-    if (comp_meth) {
-        *comp_meth = ud_comp_meth;
+    /* Don't dissect fields if ignored and correctly set to 0 */
+    if (!(ignore && byte == 0)) {
+        /* udIqWidth */
+
+        proto_item *iq_width_item = proto_tree_add_item_ret_uint(udcomphdr_tree, hf_oran_udCompHdrIqWidth , tvb, offset, 1, ENC_NA, &hdr_iq_width);
+        *bit_width = (hdr_iq_width) ? hdr_iq_width : 16;
+        proto_item_append_text(iq_width_item, " (%u bits)", *bit_width);
+
+        /* udCompMeth */
+        *comp_meth_ti = proto_tree_add_item_ret_uint(udcomphdr_tree, hf_oran_udCompHdrMeth, tvb, offset, 1, ENC_NA, &ud_comp_meth);
+        if (comp_meth) {
+            *comp_meth = ud_comp_meth;
+        }
     }
 
     /* Populate tap header with compression settings */
@@ -11915,6 +11948,11 @@ proto_register_oran(void)
 
     /* Allow dissector to find be found by name. */
     register_dissector("oran_fh_cus", dissect_oran, proto_oran);
+
+    /* Dissector table so dissectors for non-standard Section Extension can register by exttype  */
+    oran_sectionextension_table = register_dissector_table("oran.sectionextension",
+                                                        "O-RAN non-standard Section Extension (by exttype)",
+                                                        proto_oran, FT_UINT8, BASE_DEC);
 
     /* Register the tap name. */
     oran_tap = register_tap("oran-fh-cus");

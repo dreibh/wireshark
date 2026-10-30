@@ -516,6 +516,11 @@ static int hf_dns_opt_ul_lease;
 static int hf_dns_opt_ul_key_lease;
 static int hf_dns_opt_nsid;
 static int hf_dns_opt_edns_expire;
+static int hf_dns_opt_llq_version;
+static int hf_dns_opt_llq_opcode;
+static int hf_dns_opt_llq_error;
+static int hf_dns_opt_llq_id;
+static int hf_dns_opt_llq_lease;
 static int hf_dns_nsec3_algo;
 static int hf_dns_nsec3_flags;
 static int hf_dns_nsec3_flag_optout;
@@ -770,7 +775,7 @@ typedef struct _dns_conv_info_t {
 #define F_RCODE         (0xF<<0)        /* reply code */
 
 /* Optcode values for EDNS0 options (RFC 2671) */
-#define O_LLQ            1              /* Long-lived query (on-hold, draft-sekar-dns-llq) */
+#define O_LLQ            1              /* Long-Lived Queries (RFC8764) */
 #define O_UL             2              /* Update Lease (RFC9664) */
 #define O_NSID           3              /* Name Server Identifier (RFC 5001) */
 #define O_OWNER          4              /* Owner, reserved (draft-cheshire-edns0-owner-option) */
@@ -1207,7 +1212,7 @@ static value_string_ext dns_types_description_vals_ext = VALUE_STRING_EXT_INIT(d
 
 static const value_string edns0_opt_code_vals[] = {
   { 0,                       "Reserved" },
-  { O_LLQ,               "LLQ - Long-lived query" },
+  { O_LLQ,               "Long-Lived Query" },
   { O_UL,                "Update Lease" },
   { O_NSID,              "Name Server Identifier" },
   { O_OWNER,             "Owner (reserved)" },
@@ -1866,7 +1871,7 @@ dissect_dns_query(tvbuff_t *tvb, int offset, int dns_data_offset,
 static void
 add_rr_to_tree(proto_tree  *rr_tree, tvbuff_t *tvb, int offset,
   const char *name, int namelen, int type,
-  packet_info *pinfo, bool is_mdns)
+  packet_info *pinfo, bool is_mdns, bool is_dso_reconfirm)
 {
   uint32_t    ttl_value;
   proto_item *ttl_item;
@@ -1925,6 +1930,12 @@ add_rr_to_tree(proto_tree  *rr_tree, tvbuff_t *tvb, int offset,
     proto_tree_add_item(rr_tree, hf_dns_rr_class, tvb, offset, 2, ENC_BIG_ENDIAN);
   }
   offset += 2;
+
+  // RFC8765 RECONFIRM has no TTL or RDLEN
+  if (is_dso_reconfirm) {
+    return;
+  }
+
   ttl_item = proto_tree_add_item_ret_uint(rr_tree, hf_dns_rr_ttl, tvb, offset, 4, ENC_BIG_ENDIAN, &ttl_value);
   // storing ttl in the context-specific array and then increments its array's
   // index for storing ttl of the next record
@@ -2497,7 +2508,7 @@ dissect_dnscrypt(proto_tree *tree, tvbuff_t *tvb, int offset, unsigned length)
 static int
 dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
   proto_tree *dns_tree, packet_info *pinfo,
-  bool is_mdns, wmem_list_t *dns_type_list)
+  bool is_mdns, bool is_dso_reconfirm, wmem_list_t *dns_type_list)
 {
   const char   *name;
   char         *name_out;
@@ -2534,13 +2545,25 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
   type_name = val_to_str_ext(pinfo->pool, dns_type, &dns_types_vals_ext, "Unknown (%d)");
   class_name = val_to_str_const(dns_class, dns_classes, "Unknown");
 
-  data_offset += 4;
-  cur_offset += 4;
+  if (is_dso_reconfirm) {
+    unsigned remaining = tvb_reported_length_remaining(tvb, cur_offset);
+    if (remaining > UINT16_MAX) {
+      // Defensive check: should not be reachable as dissect_dso_data caps length.
+      ws_warning("uncapped tvb when parsing Reconfirm DSO TLV");
+      proto_tree_add_expert(dns_tree, pinfo, &ei_dns_extraneous_data, tvb,
+                            cur_offset + UINT16_MAX, remaining - UINT16_MAX);
+      remaining = UINT16_MAX;
+    }
+    data_len = (uint16_t)remaining;
+  } else {
+    data_offset += 4;
+    cur_offset += 4;
 
-  data_len = tvb_get_ntohs(tvb, data_offset);
+    data_len = tvb_get_ntohs(tvb, data_offset);
 
-  data_offset += 2;
-  cur_offset  += 2;
+    data_offset += 2;
+    cur_offset  += 2;
+  }
 
   col_append_fstr(pinfo->cinfo, COL_INFO, " %s", type_name);
   if (is_mdns && flush) {
@@ -2554,13 +2577,13 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
    * format it for display.
    */
   name_out = format_text(pinfo->pool, name, name_len);
-  if (dns_type != DNS_T_OPT) {
+  if (dns_type != DNS_T_OPT || is_dso_reconfirm) {
     rr_tree = proto_tree_add_subtree_format(dns_tree, tvb, offsetx,
                               (data_offset - data_start) + data_len,
                               ett_dns_rr, &trr, "%s: type %s, class %s",
                               name_out, type_name, class_name);
     add_rr_to_tree(rr_tree, tvb, offsetx, name_out, used_bytes - 4,
-                             dns_type, pinfo, is_mdns);
+                             dns_type, pinfo, is_mdns, is_dso_reconfirm);
   } else  {
     rr_tree = proto_tree_add_subtree_format(dns_tree, tvb, offsetx,
                               (data_offset - data_start) + data_len,
@@ -3483,6 +3506,30 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
 
         proto_tree_add_item(rropt_tree, hf_dns_opt_data, tvb, cur_offset, optlen, ENC_NA);
         switch(optcode) {
+
+          case O_LLQ: /* Long-Lived Queries (RFC8764) */
+          {
+              if (optlen != 18) {
+                  expert_add_info(pinfo, rroptlen, &ei_dns_opt_bad_length);
+                  break;
+              }
+              proto_tree_add_item(rropt_tree, hf_dns_opt_llq_version, tvb, cur_offset, 2, ENC_BIG_ENDIAN);
+              cur_offset += 2;
+              rropt_len  -= 2;
+              proto_tree_add_item(rropt_tree, hf_dns_opt_llq_opcode, tvb, cur_offset, 2, ENC_BIG_ENDIAN);
+              cur_offset += 2;
+              rropt_len  -= 2;
+              proto_tree_add_item(rropt_tree, hf_dns_opt_llq_error, tvb, cur_offset, 2, ENC_BIG_ENDIAN);
+              cur_offset += 2;
+              rropt_len  -= 2;
+              proto_tree_add_item(rropt_tree, hf_dns_opt_llq_id, tvb, cur_offset, 8, ENC_BIG_ENDIAN);
+              cur_offset += 8;
+              rropt_len  -= 8;
+              proto_tree_add_item(rropt_tree, hf_dns_opt_llq_lease, tvb, cur_offset, 4, ENC_BIG_ENDIAN);
+              cur_offset += 4;
+              rropt_len  -= 4;
+          }
+          break;
 
           case O_UL: /* Update Lease (RFC9664) */
           {
@@ -4699,7 +4746,7 @@ dissect_answer_records(tvbuff_t *tvb, int cur_off, int dns_data_offset,
   qatree = proto_tree_add_subtree(dns_tree, tvb, start_off, -1, ett_dns_ans, &ti, name);
   while (count-- > 0) {
     add_off = dissect_dns_answer(
-      tvb, cur_off, dns_data_offset, qatree, pinfo, is_mdns, answers);
+      tvb, cur_off, dns_data_offset, qatree, pinfo, is_mdns, false, answers);
     cur_off += add_off;
   }
   proto_item_set_len(ti, cur_off - start_off);
@@ -4771,8 +4818,12 @@ dissect_dso_data(tvbuff_t *tvb, int offset, int dns_data_offset, packet_info *pi
       case DSO_TYPE_PUSH:
         rr_types = wmem_list_new(pinfo->pool);
         while (offset < tlv_end) {
-          offset += dissect_dns_answer(tlv_tvb, offset, dns_data_offset, dso_tlv_tree, pinfo, false, rr_types);
+          offset += dissect_dns_answer(tlv_tvb, offset, dns_data_offset, dso_tlv_tree, pinfo, false, false, rr_types);
         }
+        break;
+      case DSO_TYPE_RECONFIRM:
+        rr_types = wmem_list_new(pinfo->pool);
+        offset += dissect_dns_answer(tlv_tvb, offset, dns_data_offset, dso_tlv_tree, pinfo, false, true, rr_types);
         break;
       default:
         if (dso_tlv_length > 0) {
@@ -5122,6 +5173,8 @@ dissect_dns_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
   if (opcode == DNS_OPCODE_DSO && quest == 0 && ans == 0 && auth == 0 && add == 0) {
     /* DSO messages differs somewhat from the traditional DNS message format.
        the four count fields (QDCOUNT, ANCOUNT, NSCOUNT, ARCOUNT) are set to zero */
+      p_dns_qr_r_rx_ttls = NULL;
+      p_dns_qr_r_rx_ttl_index = NULL;
       cur_off += dissect_dso_data(tvb, cur_off, dns_data_offset, pinfo, dns_tree);
   }
 
@@ -7673,6 +7726,31 @@ proto_register_dns(void)
       { "Expire", "dns.opt.edns_expire",
         FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_seconds), 0x0,
         "Zone expire time in seconds (RFC7314)", HFILL }},
+
+    { &hf_dns_opt_llq_version,
+      { "LLQ Version", "dns.opt.llq.version",
+        FT_UINT16, BASE_DEC, NULL, 0x0,
+        "LLQ protocol version (RFC8764)", HFILL }},
+
+    { &hf_dns_opt_llq_opcode,
+      { "LLQ Opcode", "dns.opt.llq.opcode",
+        FT_UINT16, BASE_DEC, NULL, 0x0,
+        "LLQ operation code (RFC8764)", HFILL }},
+
+    { &hf_dns_opt_llq_error,
+      { "LLQ Error", "dns.opt.llq.error",
+        FT_UINT16, BASE_DEC, NULL, 0x0,
+        "LLQ error code (RFC8764)", HFILL }},
+
+    { &hf_dns_opt_llq_id,
+      { "LLQ ID", "dns.opt.llq.id",
+        FT_UINT64, BASE_HEX, NULL, 0x0,
+        "LLQ identifier (RFC8764)", HFILL }},
+
+    { &hf_dns_opt_llq_lease,
+      { "LLQ Lease", "dns.opt.llq.lease",
+        FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_seconds), 0x0,
+        "LLQ lease lifetime in seconds (RFC8764)", HFILL }},
 
     { &hf_dns_count_questions,
       { "Questions", "dns.count.queries",

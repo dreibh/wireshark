@@ -39,7 +39,7 @@ if(NOT "c_std_17" IN_LIST CMAKE_C_COMPILE_FEATURES)
 	message(FATAL_ERROR "The C compiler you're using does not support C17, but Wireshark and Stratoshark require it; use GCC or Clang.")
 endif()
 if(NOT "cxx_std_17" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
-	message(FATAL_ERROR "The C++ compiler you're using does not support C17, but Wireshark and Stratoshark require it; use GCC or Clang.")
+	message(FATAL_ERROR "The C++ compiler you're using does not support C++17, but Wireshark and Stratoshark require it; use GCC or Clang.")
 endif()
 
 #
@@ -1466,22 +1466,46 @@ endif()
 #
 # Usage: reset_find_package(<PackageName> [<extra variables to clear>])
 function(reset_find_package _package_name)
+	# All of our _LIBRARY cache variables are uppercase even though for
+	# some the package name passed to FindPackage is mixed case
+	string(TOUPPER "${_package_name}" _package_name)
 	set(variables
 		# find_library / find_package
 		${_package_name}_LIBRARY
+		${_package_name}_LIBRARY_DEBUG
+		${_package_name}_LIBRARY_RELEASE
 		${_package_name}_INCLUDE_DIR
 		# mark_as_advanced
 		${_package_name}_LIBRARIES
 		${_package_name}_INCLUDE_DIRS
 		# Others
 		${_package_name}_DLL_DIR
+		${_package_name}_DLL_DIR_DEBUG
+		${_package_name}_DLL_DIR_RELEASE
 		${_package_name}_DLLS
+		${_package_name}_DLLS_DEBUG
+		${_package_name}_DLLS_RELEASE
 		${_package_name}_DLL
+		${_package_name}_DLL_DEBUG
 		${_package_name}_PDB
+		${_package_name}_PDB_DEBUG
 		${ARGN}
 	)
-	if(NOT ${_package_name}_LIBRARY OR EXISTS ${${_package_name}_LIBRARY})
-		# Cache variable is already missing or cache entry is valid.
+	# FindWSLibrary doesn't create _LIBRARY as a cache variable because
+	# it stores both the release and debug libraries in separate cache
+	# variables
+	if(${_package_name}_LIBRARY)
+		if (EXISTS ${${_package_name}_LIBRARY})
+			# Cache entry is valid
+			return()
+		endif()
+	elseif(${_package_name}_LIBRARY_RELEASE)
+		if (EXISTS ${${_package_name}_LIBRARY_RELEASE})
+			# Cache entry is valid
+			return()
+		endif()
+	else()
+		# Cache variables are missing
 		return()
 	endif()
 	message(STATUS "Package ${_package_name} has changed, clearing cache.")
@@ -1591,7 +1615,7 @@ if(BUILD_wireshark OR BUILD_stratoshark)
 	set(QT_FOUND ON)
 	if(ENABLE_SOFTWARE_UPDATE)
 		if(WIN32)
-			ws_find_package(WinSparkle ENABLE_SOFTWARE_UPDATE HAVE_SOFTWARE_UPDATE)
+			ws_find_package(WinSparkle ENABLE_SOFTWARE_UPDATE HAVE_SOFTWARE_UPDATE 0.8)
 		endif()
 		if(APPLE)
 			ws_find_package(Sparkle ENABLE_SOFTWARE_UPDATE HAVE_SOFTWARE_UPDATE 2)
@@ -2288,6 +2312,7 @@ set(TSHARK_TAP_SRC
 	${CMAKE_SOURCE_DIR}/ui/cli/tap-iostat.c
 	${CMAKE_SOURCE_DIR}/ui/cli/tap-iousers.c
 	${CMAKE_SOURCE_DIR}/ui/cli/tap-macltestat.c
+	${CMAKE_SOURCE_DIR}/ui/cli/tap-mkastat.c
 	${CMAKE_SOURCE_DIR}/ui/cli/tap-oran.c
 	${CMAKE_SOURCE_DIR}/ui/cli/tap-protocolinfo.c
 	${CMAKE_SOURCE_DIR}/ui/cli/tap-protohierstat.c
@@ -2485,118 +2510,14 @@ if(USE_REPOSITORY)
 		)
 	endif()
 
-	# Third party DLLs and PDBs.
-	set (THIRD_PARTY_DLLS)
-	set (THIRD_PARTY_PDBS)
-	list (APPEND THIRD_PARTY_DLLS "${CARES_DLL_DIR}/${CARES_DLL}")
-	list (APPEND THIRD_PARTY_PDBS "${CARES_DLL_DIR}/${CARES_PDB}")
-	# vcpkg's libmaxminddb is static-only for now. This can be uncommented when
-	# https://github.com/maxmind/libmaxminddb/commit/3998f42bdb6678cbaa1a543057e5c81ba1668ac2
-	# percolates up to vcpkg.
-	# if (MAXMINDDB_FOUND)
-	#	list(APPEND THIRD_PARTY_DLLS "$<$<CONFIG:Debug>:${MAXMINDDB_DLL_DIR_DEBUG}/${MAXMINDDB_DLL_DEBUG}")
-	#	list(APPEND THIRD_PARTY_DLLS "$<$<NOT:$<CONFIG:Debug>>:${MAXMINDDB_DLL_DIR_RELEASE}/${MAXMINDDB_DLL_RELEASE}>")
-	# endif(MAXMINDDB_FOUND)
-	if (LIBSSH_FOUND)
-		foreach( _dll ${LIBSSH_DLLS} )
-			list (APPEND THIRD_PARTY_DLLS "${LIBSSH_DLL_DIR}/${_dll}")
-		endforeach(_dll)
-	endif(LIBSSH_FOUND)
-	foreach(_dll ${GLIB2_DLLS_DEBUG})
-		list(APPEND THIRD_PARTY_DLLS "$<$<CONFIG:Debug>:${GLIB2_DLL_DIR_DEBUG}/${_dll}>")
-	endforeach()
-	foreach(_pdb ${GLIB2_PDBS_DEBUG})
-		list(APPEND THIRD_PARTY_PDBS "$<$<CONFIG:Debug>:${GLIB2_DLL_DIR_DEBUG}/${_pdb}>")
-	endforeach()
-	foreach(_dll ${GLIB2_DLLS_RELEASE})
-		list(APPEND THIRD_PARTY_DLLS "$<$<NOT:$<CONFIG:Debug>>:${GLIB2_DLL_DIR_RELEASE}/${_dll}>")
-	endforeach()
-	foreach(_pdb ${GLIB2_PDBS_RELEASE})
-		list(APPEND THIRD_PARTY_PDBS "$<$<NOT:$<CONFIG:Debug>>:${GLIB2_DLL_DIR_RELEASE}/${_pdb}>")
-	endforeach()
-	foreach(_dll ${PCRE2_DEBUG_DLL})
-		list(APPEND THIRD_PARTY_DLLS "$<$<CONFIG:Debug>:${PCRE2_DEBUG_DLL_DIR}/${_dll}>")
-	endforeach()
-	foreach(_pdb ${PCRE2_DEBUG_PDB})
-		list(APPEND THIRD_PARTY_PDBS "$<$<CONFIG:Debug>:${PCRE2_DEBUG_DLL_DIR}/${_pdb}>")
-	endforeach()
-	foreach(_dll ${PCRE2_RELEASE_DLL})
-		list(APPEND THIRD_PARTY_DLLS "$<$<NOT:$<CONFIG:Debug>>:${PCRE2_RELEASE_DLL_DIR}/${_dll}>")
-	endforeach()
-	foreach(_pdb ${PCRE2_RELEASE_PDB})
-		list(APPEND THIRD_PARTY_PDBS "$<$<NOT:$<CONFIG:Debug>>:${PCRE2_RELEASE_DLL_DIR}/${_pdb}>")
-	endforeach()
-	foreach( _dll ${GCRYPT_DLLS} )
-		list (APPEND THIRD_PARTY_DLLS "${GCRYPT_DLL_DIR}/${_dll}")
-	endforeach(_dll)
-	foreach( _dll ${GNUTLS_DLLS} )
-		list (APPEND THIRD_PARTY_DLLS "${GNUTLS_DLL_DIR}/${_dll}")
-	endforeach(_dll)
-	foreach( _dll ${KERBEROS_DLLS} )
-		list (APPEND THIRD_PARTY_DLLS "${KERBEROS_DLL_DIR}/${_dll}")
-	endforeach(_dll)
-	if (LUA_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${LUA_DLL_DIR}/${LUA_DLL}")
-		list (APPEND THIRD_PARTY_PDBS "${LUA_DLL_DIR}/${LUA_PDB}")
-	endif(LUA_FOUND)
-	if (LZ4_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "$<IF:$<CONFIG:Debug>,${LZ4_DLL_DIR_DEBUG}/${LZ4_DLL_DEBUG},${LZ4_DLL_DIR}/${LZ4_DLL}>")
-		list (APPEND THIRD_PARTY_PDBS "$<IF:$<CONFIG:Debug>,${LZ4_DLL_DIR_DEBUG}/${LZ4_PDB_DEBUG},${LZ4_DLL_DIR}/${LZ4_PDB}>")
-	endif(LZ4_FOUND)
-	if (MINIZIP_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${MINIZIP_DLL_DIR}/${MINIZIP_DLL}")
-		list (APPEND THIRD_PARTY_PDBS "${MINIZIP_DLL_DIR}/${MINIZIP_PDB}")
-	endif()
-	if (MINIZIPNG_FOUND)
-		foreach( _dll ${MINIZIPNG_DLLS} )
-			list (APPEND THIRD_PARTY_DLLS "${MINIZIPNG_DLL_DIR}/${_dll}")
-		endforeach(_dll)
-		foreach( _pdb ${MINIZIPNG_PDBS} )
-			list (APPEND THIRD_PARTY_PDBS "${MINIZIPNG_DLL_DIR}/${_pdb}")
-		endforeach(_pdb)
-	endif()
-	if (NGHTTP2_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${NGHTTP2_DLL_DIR}/${NGHTTP2_DLL}")
-		list (APPEND THIRD_PARTY_PDBS "${NGHTTP2_DLL_DIR}/${NGHTTP2_PDB}")
-	endif(NGHTTP2_FOUND)
-	if (NGHTTP3_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${NGHTTP3_DLL_DIR}/${NGHTTP3_DLL}")
-		list (APPEND THIRD_PARTY_PDBS "${NGHTTP3_DLL_DIR}/${NGHTTP3_PDB}")
-	endif(NGHTTP3_FOUND)
-	if (SBC_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${SBC_DLL_DIR}/${SBC_DLL}")
-	endif(SBC_FOUND)
-	if (SPANDSP_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${SPANDSP_DLL_DIR}/${SPANDSP_DLL}")
-	endif(SPANDSP_FOUND)
+	# Transitive dependencies for Falco plugins. Rust plugins will at least
+	# need libunwind.
 	if (SINSP_FOUND AND FALCO_PLUGIN_DIR AND FALCO_PLUGIN_DLLS)
-		foreach(_falco_plugin_dll ${FALCO_PLUGIN_DLLS})
-			list (APPEND THIRD_PARTY_DLLS ${FALCO_PLUGIN_DIR}/${_falco_plugin_dll})
-		endforeach()
+		list(TRANSFORM FALCO_PLUGIN_DLLS PREPEND "${FALCO_PLUGIN_DIR}/" OUTPUT_VARIABLE _falco_plugin_dlls)
+		ws_add_runtime_dlls(${_falco_plugin_dlls} ONLY_FOR stratoshark)
 	endif()
-	if (BCG729_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${BCG729_DLL_DIR}/${BCG729_DLL}")
-	endif(BCG729_FOUND)
-	if (AMRNB_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${AMRNB_DLL_DIR}/${AMRNB_DLL}")
-	endif(AMRNB_FOUND)
-	if (AMRWB_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${AMRWB_DLL_DIR}/${AMRWB_DLL}")
-	endif(AMRWB_FOUND)
-	if (ILBC_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${ILBC_DLL_DIR}/${ILBC_DLL}")
-	endif(ILBC_FOUND)
-	if (OPUS_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${OPUS_DLL_DIR}/${OPUS_DLL}")
-	endif(OPUS_FOUND)
-	foreach( _dll ${LIBXML2_DLLS} )
-		list (APPEND THIRD_PARTY_DLLS "${LIBXML2_DLL_DIR}/${_dll}")
-	endforeach(_dll)
-	foreach( _pdb ${LIBXML2_PDBS} )
-		list (APPEND THIRD_PARTY_PDBS "${LIBXML2_DLL_DIR}/${_pdb}")
-	endforeach(_pdb)
+
 	if (SMI_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${SMI_DLL_DIR}/${SMI_DLL}")
 		# Wireshark.nsi wants SMI_DIR which is the base SMI directory
 		get_filename_component(SMI_DIR ${SMI_DLL_DIR} DIRECTORY)
 
@@ -2648,59 +2569,27 @@ if(USE_REPOSITORY)
 		endforeach()
 
 	endif(SMI_FOUND)
-	if (SNAPPY_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${SNAPPY_DLL_DIR}/${SNAPPY_DLL}")
-	endif(SNAPPY_FOUND)
-	if (WINSPARKLE_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${WINSPARKLE_DLL_DIR}/${WINSPARKLE_DLL}")
-	endif(WINSPARKLE_FOUND)
-	if (XXHASH_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "$<IF:$<CONFIG:Debug>,${XXHASH_DLL_DIR_DEBUG}/${XXHASH_DLL_DEBUG},${XXHASH_DLL_DIR}/${XXHASH_DLL}>")
-		list (APPEND THIRD_PARTY_PDBS "$<IF:$<CONFIG:Debug>,${XXHASH_DLL_DIR_DEBUG}/${XXHASH_PDB_DEBUG},${XXHASH_DLL_DIR}/${XXHASH_PDB}>")
-	endif(XXHASH_FOUND)
-	if (ZLIB_FOUND)
-		foreach(_dll ${ZLIB_DLLS_RELEASE})
-			# list(APPEND THIRD_PARTY_DLLS "$<$<NOT:$<CONFIG:Debug>>:${ZLIB_DLL_DIR_RELEASE}/${_dll}>")
-			list(APPEND THIRD_PARTY_DLLS "${ZLIB_DLL_DIR}/${_dll}")
-		endforeach()
-		list (APPEND THIRD_PARTY_PDBS "${ZLIB_DLL_DIR}/${ZLIB_PDB}")
-	endif(ZLIB_FOUND)
-	if (ZLIBNG_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${ZLIBNG_DLL_DIR}/${ZLIBNG_DLL}")
-		list (APPEND THIRD_PARTY_PDBS "${ZLIBNG_DLL_DIR}/${ZLIBNG_PDB}")
-	endif(ZLIBNG_FOUND)
-	if (BROTLI_FOUND)
-		foreach( _dll ${BROTLI_DLLS} )
-			list (APPEND THIRD_PARTY_DLLS "${BROTLI_DLL_DIR}/${_dll}")
-		endforeach(_dll)
-	endif(BROTLI_FOUND)
-	if (SPEEXDSP_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${SPEEXDSP_DLL_DIR}/${SPEEXDSP_DLL}")
-	endif()
-	if (ZSTD_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${ZSTD_DLL_DIR}/${ZSTD_DLL}")
-	endif()
 
-	# With libs downloaded to c:/wireshark-x64-libs this currently
-	# (early 2018) expands to about 1900 characters.
-	if (THIRD_PARTY_DLLS)
+	# Third party DLLs, registered by our Find modules using
+	# ws_add_runtime_dlls(), and their PDBs.
+	get_property(_runtime_dll_targets GLOBAL PROPERTY WS_RUNTIME_DLL_TARGETS)
+	if (_runtime_dll_targets)
+		list(TRANSFORM _runtime_dll_targets REPLACE ".+" "$<TARGET_FILE:\\0>" OUTPUT_VARIABLE _runtime_dlls)
+		set(_runtime_dll_list "${CMAKE_BINARY_DIR}/runtime-dlls-$<CONFIG>.txt")
+		file(GENERATE OUTPUT "${_runtime_dll_list}"
+			CONTENT "$<JOIN:${_runtime_dlls},\n>\n"
+		)
 		add_custom_command(TARGET copy_cli_dlls PRE_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy_if_different
-				${THIRD_PARTY_DLLS}
-				"${_dll_output_dir}"
+			COMMAND ${CMAKE_COMMAND}
+				-D "RUNTIME_DLL_LIST=${_runtime_dll_list}"
+				-D "DESTINATION=${_dll_output_dir}"
+				-P ${CMAKE_SOURCE_DIR}/cmake/modules/CopyRuntimeDLLs.cmake
 			VERBATIM
 		)
-		install(FILES ${THIRD_PARTY_DLLS} DESTINATION "${CMAKE_INSTALL_BINDIR}")
-	endif(THIRD_PARTY_DLLS)
-
-	if (THIRD_PARTY_PDBS)
-		add_custom_command(TARGET copy_cli_dlls PRE_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy_if_different
-				${THIRD_PARTY_PDBS}
-				"${_dll_output_dir}"
-			VERBATIM
+		install(IMPORTED_RUNTIME_ARTIFACTS ${_runtime_dll_targets}
+			RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
 		)
-	endif(THIRD_PARTY_PDBS)
+	endif()
 
 	add_dependencies(epan copy_cli_dlls)
 
