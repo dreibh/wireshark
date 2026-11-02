@@ -2778,7 +2778,7 @@ selected in random order once the whole file has been read.
 
 After calculating the conversation timestamps, it is time to put them in
 the appropriate columns with the function 'col_set_time' (described in
-section 1.5.9). The column used for relative timestamps is:
+section 1.4.9). The column used for relative timestamps is:
 
 COL_REL_TIME, /* Delta time to last frame in conversation */
 

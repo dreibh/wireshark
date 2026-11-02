@@ -374,7 +374,7 @@ static int dissect_my_state(tvbuff_t * tvb, int offset, proto_tree * tree) {
         offset += 1;
 
         for(i=0; i < id_num; i++) {
-                proto_tree_add_item(tree, hf_cluster_last_packet, tvb, offset, 1, ENC_BIG_ENDIAN);
+                nti = proto_tree_add_item(ntree, hf_cluster_last_packet, tvb, offset, 1, ENC_BIG_ENDIAN);
                 proto_item_append_text(nti, " (Cluster %d)", i);
                 offset += 1;
         }

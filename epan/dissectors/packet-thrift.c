@@ -416,7 +416,7 @@ thrift_binary_utf8_isprint(tvbuff_t *tvb, unsigned offset, unsigned max_len, boo
             } else if ((current & 0x80) == 0) {
                 if (!g_ascii_isprint(current)) {
                     if (!accept_crlf) {
-                        /* New line and chariot return or not valid in the method name */
+                        /* New line and chariot return are not valid in the method name */
                         return -1;
                     }
                     if (current != '\r' && current != '\n') {
@@ -725,6 +725,7 @@ dissect_thrift_varint(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int *
     int64_t varint;
     proto_item *pi;
     int length = thrift_get_varint_enc(tvb, pinfo, tree, *offset, max_length, (uint64_t*)&varint, ENC_VARINT_ZIGZAG);
+    thrift_opt->use_std_dissector = true;
     switch (length) {
     case THRIFT_REQUEST_REASSEMBLY:
         /* Will always return after setting the expert parts. */
@@ -2208,7 +2209,7 @@ dissect_thrift_binary_linear(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
     /* Create the sub-tree. */
     if (nested_count >= thrift_opt->nested_type_depth) {
         expert_add_info(pinfo, proto_tree_get_parent(tree), &ei_thrift_too_many_subtypes);
-        return THRIFT_REQUEST_REASSEMBLY;
+        return THRIFT_SUBDISSECTOR_ERROR;
     }
     p_set_proto_depth(pinfo, proto_thrift, nested_count + 1);
     container_pi = proto_tree_add_item(tree, hf_container, tvb, *offset, -1, ENC_NA);
@@ -2326,7 +2327,7 @@ dissect_thrift_binary_struct(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
     ABORT_ON_INCOMPLETE_PDU(TBP_THRIFT_STRUCT_LEN);
     if (nested_count >= thrift_opt->nested_type_depth) {
         expert_add_info(pinfo, proto_tree_get_parent(tree), &ei_thrift_too_many_subtypes);
-        return THRIFT_REQUEST_REASSEMBLY;
+        return THRIFT_SUBDISSECTOR_ERROR;
     }
     p_set_proto_depth(pinfo, proto_thrift, nested_count + 1);
     pi = proto_tree_add_item(tree, hf_thrift_struct, tvb, *offset, -1, ENC_NA);

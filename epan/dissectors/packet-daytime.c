@@ -46,8 +46,8 @@ dissect_daytime(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data 
     ti = proto_tree_add_item(tree, proto_daytime, tvb, 0, -1, ENC_NA);
     daytime_tree = proto_item_add_subtree(ti, ett_daytime);
 
-    proto_tree_add_boolean(daytime_tree, hf_response_request, tvb, 0, 0, pinfo->srcport==DAYTIME_PORT);
-    if (pinfo->srcport == DAYTIME_PORT) {
+    proto_tree_add_boolean(daytime_tree, hf_response_request, tvb, 0, 0, pinfo->srcport == pinfo->match_uint);
+    if (pinfo->srcport == pinfo->match_uint) {
       proto_tree_add_item(daytime_tree, hf_daytime_string, tvb, 0, -1, ENC_ASCII);
     }
   }

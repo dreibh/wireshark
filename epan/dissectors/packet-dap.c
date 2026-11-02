@@ -1826,7 +1826,9 @@ dissect_dap_SimpleCredentials(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned
                                    SimpleCredentials_sequence, hf_index, ett_dap_SimpleCredentials);
 
 
-	col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", x509if_get_last_dn());
+	/* There is no DN when the name is absent */
+	const char *dn = x509if_get_last_dn();
+	col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", dn ? dn : "");
 
 
 

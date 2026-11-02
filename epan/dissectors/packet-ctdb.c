@@ -14,6 +14,7 @@
 #include <epan/packet.h>
 #include <epan/tfs.h>
 #include <epan/expert.h>
+#include <epan/proto_data.h>
 void proto_register_ctdb(void);
 void proto_reg_handoff_ctdb(void);
 
@@ -773,7 +774,9 @@ dissect_ctdb_reply_dmaster(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_
 	ctdb_trans=(ctdb_trans_t *)wmem_tree_lookup32_array(ctdb_transactions, &tkey[0]);
 
 	if(ctdb_trans){
-		ctdb_trans->response_in=pinfo->num;
+		if(!pinfo->fd->visited){
+			ctdb_trans->response_in=pinfo->num;
+		}
 		ctdb_display_trans(pinfo, tree, tvb, ctdb_trans);
 	}
 
@@ -916,21 +919,14 @@ dissect_ctdb_req_control(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tr
 		tkey[3].length=0;
 
 		wmem_tree_insert32_array(ctdb_controls, &tkey[0], ctdb_control);
+		/* A later request with the same id replaces it in the tree */
+		p_add_proto_data(wmem_file_scope(), pinfo, proto_ctdb, reqid, ctdb_control);
 	} else {
-		wmem_tree_key_t tkey[4];
-
-		tkey[0].length=1;
-		tkey[0].key=&reqid;
-		tkey[1].length=1;
-		tkey[1].key=&src;
-		tkey[2].length=1;
-		tkey[2].key=&dst;
-		tkey[3].length=0;
-		ctdb_control=(ctdb_control_t *)wmem_tree_lookup32_array(ctdb_controls, &tkey[0]);
+		ctdb_control=(ctdb_control_t *)p_get_proto_data(wmem_file_scope(), pinfo, proto_ctdb, reqid);
 	}
 
 	if (ctdb_control) {
-		cd=find_control_dissector(ctdb_control->opcode, true);
+		cd=find_control_dissector(opcode, true);
 		if (cd) {
 			cd(pinfo, tree, tvb, data_offset, 0, endianess);
 		}

@@ -957,7 +957,7 @@ static int parse_value(proto_tree* columns_subtree, packet_info *pinfo, tvbuff_t
 			offset += bytes_length;
 			break;
 		case CQL_RESULT_ROW_TYPE_BOOLEAN:
-			proto_tree_add_boolean(columns_subtree, hf_cql_boolean, tvb, offset, 1, true);
+			proto_tree_add_item(columns_subtree, hf_cql_boolean, tvb, offset, 1, ENC_NA);
 			offset += 1;
 			break;
 		case CQL_RESULT_ROW_TYPE_COUNTER:
@@ -1595,8 +1595,14 @@ dissect_cql_tcp_pdu(tvbuff_t* raw_tvb, packet_info* pinfo, proto_tree* tree, voi
 	}
 
 	if (!cql_trans) {
-		/* Add a fake request to this stream tracking */
-		cql_trans = cql_transaction_add_request(cql_conv, pinfo, stream, 1);
+		if (!PINFO_FD_VISITED(pinfo)) {
+			/* Add a fake request to this stream tracking */
+			cql_trans = cql_transaction_add_request(cql_conv, pinfo, stream, 1);
+		} else {
+			/* A response without a request; do not add another fake
+			 * request to the stream on every pass. */
+			cql_trans = wmem_new0(pinfo->pool, cql_transaction_type);
+		}
 	}
 
 	/* Add state tracking to tree */
@@ -1761,7 +1767,7 @@ dissect_cql_tcp_pdu(tvbuff_t* raw_tvb, packet_info* pinfo, proto_tree* tree, voi
 				cql_subtree = proto_tree_add_subtree(cql_tree, tvb, offset, message_length, ett_cql_message, &ti, "Query");
 
 				if (flags & CQL_HEADER_FLAG_CUSTOM_PAYLOAD) {
-					offset += dissect_custom_payload(tvb, cql_subtree, offset);
+					offset = dissect_custom_payload(tvb, cql_subtree, offset);
 				}
 
 				/* Query */
@@ -1809,7 +1815,7 @@ dissect_cql_tcp_pdu(tvbuff_t* raw_tvb, packet_info* pinfo, proto_tree* tree, voi
 				cql_subtree = proto_tree_add_subtree(cql_tree, tvb, offset, message_length, ett_cql_message, &ti, "Message BATCH");
 
 				if (flags & CQL_HEADER_FLAG_CUSTOM_PAYLOAD) {
-					offset += dissect_custom_payload(tvb, cql_subtree, offset);
+					offset = dissect_custom_payload(tvb, cql_subtree, offset);
 				}
 
 				proto_tree_add_item(cql_subtree, hf_cql_batch_type, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -1932,7 +1938,9 @@ dissect_cql_tcp_pdu(tvbuff_t* raw_tvb, packet_info* pinfo, proto_tree* tree, voi
 
 
 			case CQL_OPCODE_AUTHENTICATE:
-				cql_conv->frame_start_v5_proto = pinfo->num; /* remember the frame number where we got past initial negotiation */
+				/* remember the frame number where we got past initial negotiation */
+				if (!PINFO_FD_VISITED(pinfo) && cql_conv->frame_start_v5_proto == 0)
+					cql_conv->frame_start_v5_proto = pinfo->num;
 				cql_subtree = proto_tree_add_subtree(cql_tree, tvb, offset, message_length, ett_cql_message, &ti, "Message AUTHENTICATE");
 
 				proto_tree_add_item_ret_uint(cql_subtree, hf_cql_string_length, tvb, offset, 2, ENC_BIG_ENDIAN, &string_length);
@@ -1972,7 +1980,7 @@ dissect_cql_tcp_pdu(tvbuff_t* raw_tvb, packet_info* pinfo, proto_tree* tree, voi
 				cql_subtree = proto_tree_add_subtree(cql_tree, tvb, offset, message_length, ett_cql_message, &ti, "Message RESULT");
 
 				if (flags & CQL_HEADER_FLAG_CUSTOM_PAYLOAD) {
-					offset += dissect_custom_payload(tvb, cql_subtree, offset);
+					offset = dissect_custom_payload(tvb, cql_subtree, offset);
 				}
 
 				proto_tree_add_item_ret_int(cql_subtree, hf_cql_result_kind, tvb, offset, 4, ENC_BIG_ENDIAN, &result_kind);
@@ -2170,7 +2178,9 @@ dissect_cql_tcp_pdu(tvbuff_t* raw_tvb, packet_info* pinfo, proto_tree* tree, voi
 				break;
 
 			case CQL_OPCODE_READY:
-				cql_conv->frame_start_v5_proto = pinfo->num; /* remember the frame number where we got past initial negotiation */
+				/* remember the frame number where we got past initial negotiation */
+				if (!PINFO_FD_VISITED(pinfo) && cql_conv->frame_start_v5_proto == 0)
+					cql_conv->frame_start_v5_proto = pinfo->num;
 				/* body should be empty */
 				break;
 

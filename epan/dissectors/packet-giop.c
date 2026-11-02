@@ -1156,7 +1156,7 @@ static void add_sub_handle_repoid_to_comp_req_list(uint32_t fn, giop_sub_handle_
 
   if (entry) {
     entry->subh = sh;
-    entry->repoid = g_strdup(repoid); /* copy and store */
+    entry->repoid = wmem_strdup(wmem_file_scope(), repoid); /* copy and store */
 
   }
 }
@@ -2312,10 +2312,11 @@ static void dissect_data_for_typecode_with_params(tvbuff_t *tvb, packet_info *pi
     parameter = wmem_list_frame_next(parameter); // name
     inner_name = wmem_list_frame_data(parameter);
     parameter = wmem_list_frame_next(parameter); // count
-    if (u_octet4 > *((uint32_t*)wmem_list_frame_data(parameter)))
+    if (u_octet4 >= *((uint32_t*)wmem_list_frame_data(parameter)))
       proto_item_set_text(it, "%s:  ERROR value outside of enum!!! (%u)", inner_name, u_octet4);
     else {
-      for (uint32_t i = 0; i < u_octet4; i++)
+      /* The members follow the count; value 0 is the first member */
+      for (uint32_t i = 0; i <= u_octet4; i++)
         parameter = wmem_list_frame_next(parameter);
       proto_item_set_text(it, "%s: %s (%u)", inner_name, (char*)wmem_list_frame_data(parameter), u_octet4);
     }

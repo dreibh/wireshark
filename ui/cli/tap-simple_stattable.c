@@ -20,7 +20,7 @@
 #include <ui/cli/tshark-tap.h>
 
 typedef struct _table_stat_t {
-	const char *filter;
+	char *filter;
 	stat_data_t stats;
 } table_stat_t;
 
@@ -92,8 +92,10 @@ simple_draw(void *arg)
 static void simple_finish(void *tapdata)
 {
 	stat_data_t *stat_data = (stat_data_t *)tapdata;
+	table_stat_t *ui = (table_stat_t *)stat_data->user_data;
 
-	g_free(stat_data->user_data);
+	g_free(ui->filter);
+	g_free(ui);
 }
 
 static bool

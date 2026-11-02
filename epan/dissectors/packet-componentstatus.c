@@ -301,9 +301,9 @@ typedef enum
 static stat_tap_table_item componentstatusprotocol_stat_fields[] = {
   { TABLE_ITEM_STRING, TAP_ALIGN_LEFT,  "ComponentStatusProtocol Message Type", "%-25s" },
   { TABLE_ITEM_UINT,   TAP_ALIGN_RIGHT, "Messages ",            "%u"       },
-  { TABLE_ITEM_UINT,   TAP_ALIGN_RIGHT, "Messages Share (%)"  , "%1.3f %%" },
+  { TABLE_ITEM_FLOAT,  TAP_ALIGN_RIGHT, "Messages Share (%)"  , "%1.3f %%" },
   { TABLE_ITEM_UINT,   TAP_ALIGN_RIGHT, "Bytes (B)",            "%u"       },
-  { TABLE_ITEM_UINT,   TAP_ALIGN_RIGHT, "Bytes Share (%) ",     "%1.3f %%" },
+  { TABLE_ITEM_FLOAT,  TAP_ALIGN_RIGHT, "Bytes Share (%) ",     "%1.3f %%" },
   { TABLE_ITEM_FLOAT,  TAP_ALIGN_LEFT,  "First Seen (s)",       "%1.6f"    },
   { TABLE_ITEM_FLOAT,  TAP_ALIGN_LEFT,  "Last Seen (s)",        "%1.6f"    },
   { TABLE_ITEM_FLOAT,  TAP_ALIGN_LEFT,  "Interval (s)",         "%1.6f"    },
@@ -406,7 +406,7 @@ componentstatusprotocol_stat_packet(void* tapdata, packet_info* pinfo _U_, epan_
 
     msg_data = stat_tap_get_field_data(table, i, BYTES_SHARE_COLUMN);
     msg_data->type = TABLE_ITEM_FLOAT;
-    msg_data->value.float_value = 100.0 * b / (double)componentstatusprotocol_total_bytes;
+    msg_data->value.float_value = componentstatusprotocol_total_bytes ? 100.0 * b / (double)componentstatusprotocol_total_bytes : 0.0;
     stat_tap_set_field_data(table, i, BYTES_SHARE_COLUMN, msg_data);
     i++;
   }

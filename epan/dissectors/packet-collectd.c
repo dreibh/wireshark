@@ -17,6 +17,7 @@
 
 #include <epan/packet.h>
 #include <epan/expert.h>
+#include <epan/prefs.h>
 #include <epan/proto_data.h>
 #include <epan/stats_tree.h>
 #include <epan/to_str.h>
@@ -206,6 +207,7 @@ static expert_field ei_collectd_invalid_length;
 static expert_field ei_collectd_data_valcnt;
 static expert_field ei_collectd_garbage;
 static expert_field ei_collectd_sighash_bad;
+static expert_field ei_collectd_too_deep;
 
 /* Prototype for the handoff function */
 void proto_reg_handoff_collectd (void);
@@ -431,7 +433,7 @@ collectd_proto_tree_add_assembled_metric (tvbuff_t *tvb,
 	proto_tree *subtree;
 	nstime_t nstime;
 
-	subtree = proto_tree_add_subtree(root, tvb, offset + 6, length - 6,
+	subtree = proto_tree_add_subtree(root, tvb, offset, length,
 			ett_collectd_dispatch, &root_item, "Assembled metric");
 	proto_item_set_generated (root_item);
 
@@ -479,7 +481,7 @@ collectd_proto_tree_add_assembled_notification (tvbuff_t *tvb,
 	proto_tree *subtree;
 	nstime_t nstime;
 
-	subtree = proto_tree_add_subtree(root, tvb, offset + 6, length - 6,
+	subtree = proto_tree_add_subtree(root, tvb, offset, length,
 			ett_collectd_dispatch, &root_item, "Assembled notification");
 	proto_item_set_generated (root_item);
 
@@ -1088,9 +1090,15 @@ dissect_collectd_encrypted(tvbuff_t *tvb, packet_info *pinfo,
 			hf_collectd_data_sighash_status, &ei_collectd_sighash_bad, pinfo,
 			hash, 20, PROTO_CHECKSUM_VERIFY);
 		if (tvb_memeql(decrypted_tvb, 0, hash, 20) == 0) {
-			// We recurse here, but consumed 22 + username_len bytes
-			// so we'll run out of packet before stack exhaustion.
+			// We recurse here, and decrypt the rest of the packet again
+			// at every level, so limit the depth.
+			if (pinfo->dissection_depth + 16 >= prefs.gui_max_tree_depth) {
+				proto_tree_add_expert_remaining(pt, pinfo, &ei_collectd_too_deep, decrypted_tvb, 20);
+				return 0;
+			}
+			increment_dissection_depth(pinfo);
 			dissect_collectd_parts(tvb_new_subset_remaining(decrypted_tvb, 20), pinfo, tree_root, NULL);
+			decrement_dissection_depth(pinfo);
 		}
 	}
 	return 0;
@@ -1296,6 +1304,8 @@ dissect_collectd_parts(tvbuff_t *tvb, packet_info *pinfo, proto_tree *collectd_t
 					collectd_tree, &pi);
 			if (status != 0)
 				col_data->pkt_errors++;
+			ndispatch.time_off = vdispatch.time_off;
+			ndispatch.time_value = vdispatch.time_value;
 
 			break;
 		}
@@ -1360,7 +1370,7 @@ dissect_collectd_parts(tvbuff_t *tvb, packet_info *pinfo, proto_tree *collectd_t
 			pt = proto_item_get_subtree (pi);
 
 			collectd_proto_tree_add_assembled_notification (tvb,
-					offset + 4, part_length - 1,
+					offset + 4, part_length - 4,
 					&ndispatch, pt);
 
 			break;
@@ -1462,7 +1472,7 @@ dissect_collectd (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 
 	/* Put summary information in columns */
 	col_add_fstr(pinfo->cinfo, COL_INFO, "Host=%s, %2d value%s for %d plugin%s %d message%s",
-			col_data->pkt_host,
+			STR_NONNULL(col_data->pkt_host),
 			col_data->pkt_values, plurality(col_data->pkt_values, " ", "s"),
 			col_data->pkt_plugins, plurality(col_data->pkt_plugins, ", ", "s,"),
 			col_data->pkt_messages, plurality(col_data->pkt_messages, ", ", "s"));
@@ -1473,7 +1483,7 @@ dissect_collectd (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 	}
 
 	if (col_data->pkt_errors) {
-		col_add_fstr(pinfo->cinfo, COL_INFO, ", %d error%s",
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", %d error%s",
 			col_data->pkt_errors, plurality(col_data->pkt_errors, "", "s"));
 	}
 
@@ -1614,6 +1624,7 @@ void proto_register_collectd(void)
 		{ &ei_collectd_data_valcnt, { "collectd.data.valcnt.mismatch", PI_MALFORMED, PI_WARN, "Number of values and length of part do not match. Assuming length is correct.", EXPFILL }},
 		{ &ei_collectd_type, { "collectd.type.unknown", PI_UNDECODED, PI_NOTE, "Unknown part type", EXPFILL }},
 		{ &ei_collectd_sighash_bad, { "collectd.data.sighash.bad", PI_CHECKSUM, PI_ERROR, "Bad hash", EXPFILL }},
+		{ &ei_collectd_too_deep, { "collectd.too_deep", PI_UNDECODED, PI_WARN, "Encrypted parts nested too deeply", EXPFILL }},
 	};
 
 	/* Register the protocol name and description */

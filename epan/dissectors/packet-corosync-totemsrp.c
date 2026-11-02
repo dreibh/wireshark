@@ -517,11 +517,11 @@ dissect_corosync_totemsrp_mcast(tvbuff_t *tvb,
   proto_item_append_text(item, " (ring: %" PRIu64 " node: %u)",
                            ring_id, node_id);
 
-  proto_tree_add_item(tree, hf_corosync_totemsrp_mcast_node_id,
+  proto_tree_add_item(mcast_tree, hf_corosync_totemsrp_mcast_node_id,
                         tvb, offset, 4, encoding);
   offset += 4;
 
-  proto_tree_add_item(tree, hf_corosync_totemsrp_mcast_guarantee,
+  proto_tree_add_item(mcast_tree, hf_corosync_totemsrp_mcast_guarantee,
                         tvb, offset, 4, encoding);
   offset += 4;
 
@@ -936,7 +936,7 @@ proto_register_corosync_totemsrp(void)
         FT_UINT32, BASE_DEC, NULL, 0x0,
         NULL, HFILL }},
     { &hf_corosync_totemsrp_orf_token_token_seq,
-      { "The largest sequence number", "corosync_totemsrp.orf_token.seq",
+      { "The largest sequence number", "corosync_totemsrp.orf_token.token_seq",
         FT_UINT32, BASE_DEC, NULL, 0x0,
         "The largest sequence number of any message "
         "that has been broadcast on the ring"

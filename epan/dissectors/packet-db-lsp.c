@@ -101,8 +101,8 @@ dissect_db_lsp_pdu (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
   if (type == TYPE_CONFIG) {
     proto_tree_add_item_ret_uint8 (db_lsp_tree, hf_opvalue, tvb, offset, 1, ENC_BIG_ENDIAN, &opvalue);
 
-    if (opvalue == OP_CERT) {
-      /* X509 Certificate */
+    if (opvalue == OP_CERT && length >= 10) {
+      /* X509 Certificate, after 10 octets */
       tvbuff_t *cert_tvb = tvb_new_subset_length (tvb, offset+10, length-10);
       dissect_x509af_Certificate_PDU (cert_tvb, pinfo, db_lsp_tree, NULL);
     } else {

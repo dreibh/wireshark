@@ -123,6 +123,27 @@ dissect_cups(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     const char   *str;
     cups_ptype_t  ptype;
     unsigned int  state;
+    static int * const ptype_fields[] = {
+        &hf_cups_ptype_default,
+        &hf_cups_ptype_implicit,
+        &hf_cups_ptype_variable,
+        &hf_cups_ptype_large,
+        &hf_cups_ptype_medium,
+        &hf_cups_ptype_small,
+        &hf_cups_ptype_sort,
+        &hf_cups_ptype_bind,
+        &hf_cups_ptype_cover,
+        &hf_cups_ptype_punch,
+        &hf_cups_ptype_collate,
+        &hf_cups_ptype_copies,
+        &hf_cups_ptype_staple,
+        &hf_cups_ptype_duplex,
+        &hf_cups_ptype_color,
+        &hf_cups_ptype_bw,
+        &hf_cups_ptype_remote,
+        &hf_cups_ptype_class,
+        NULL
+    };
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, PROTO_TAG_CUPS);
     col_clear(pinfo->cinfo, COL_INFO);
@@ -138,24 +159,10 @@ dissect_cups(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     if (len != 0) {
         ti = proto_tree_add_uint(cups_tree, hf_cups_ptype, tvb, offset, len, ptype);
         ptype_subtree = proto_item_add_subtree(ti, ett_cups_ptype);
-        proto_tree_add_item(ptype_subtree, hf_cups_ptype_default, tvb, offset, len, ENC_BIG_ENDIAN);
-        proto_tree_add_item(ptype_subtree, hf_cups_ptype_implicit, tvb, offset, len, ENC_BIG_ENDIAN);
-        proto_tree_add_item(ptype_subtree, hf_cups_ptype_variable, tvb, offset, len, ENC_BIG_ENDIAN);
-        proto_tree_add_item(ptype_subtree, hf_cups_ptype_large, tvb, offset, len, ENC_BIG_ENDIAN);
-        proto_tree_add_item(ptype_subtree, hf_cups_ptype_medium, tvb, offset, len, ENC_BIG_ENDIAN);
-        proto_tree_add_item(ptype_subtree, hf_cups_ptype_small, tvb, offset, len, ENC_BIG_ENDIAN);
-        proto_tree_add_item(ptype_subtree, hf_cups_ptype_sort, tvb, offset, len, ENC_BIG_ENDIAN);
-        proto_tree_add_item(ptype_subtree, hf_cups_ptype_bind, tvb, offset, len, ENC_BIG_ENDIAN);
-        proto_tree_add_item(ptype_subtree, hf_cups_ptype_cover, tvb, offset, len, ENC_BIG_ENDIAN);
-        proto_tree_add_item(ptype_subtree, hf_cups_ptype_punch, tvb, offset, len, ENC_BIG_ENDIAN);
-        proto_tree_add_item(ptype_subtree, hf_cups_ptype_collate, tvb, offset, len, ENC_BIG_ENDIAN);
-        proto_tree_add_item(ptype_subtree, hf_cups_ptype_copies, tvb, offset, len, ENC_BIG_ENDIAN);
-        proto_tree_add_item(ptype_subtree, hf_cups_ptype_staple, tvb, offset, len, ENC_BIG_ENDIAN);
-        proto_tree_add_item(ptype_subtree, hf_cups_ptype_duplex, tvb, offset, len, ENC_BIG_ENDIAN);
-        proto_tree_add_item(ptype_subtree, hf_cups_ptype_color, tvb, offset, len, ENC_BIG_ENDIAN);
-        proto_tree_add_item(ptype_subtree, hf_cups_ptype_bw, tvb, offset, len, ENC_BIG_ENDIAN);
-        proto_tree_add_item(ptype_subtree, hf_cups_ptype_remote, tvb, offset, len, ENC_BIG_ENDIAN);
-        proto_tree_add_item(ptype_subtree, hf_cups_ptype_class, tvb, offset, len, ENC_BIG_ENDIAN);
+        /* The type is hexadecimal text; show the flags of its value */
+        for (int i = 0; ptype_fields[i]; i++) {
+            proto_tree_add_boolean(ptype_subtree, *ptype_fields[i], tvb, offset, len, ptype);
+        }
     }
     offset = next_offset;
 

@@ -1420,11 +1420,11 @@ static void dissect_cops_object_data(tvbuff_t *tvb, packet_info *pinfo, uint32_t
             dissect_cops_pr_objects(tvb, pinfo, offset, dec_tree, len, &oid_info, &pprid_subids, &pprid_subids_len);
         }
 
-        /* PacketCable : Analyze the remaining data if available */
+        /* PacketCable : Analyze the remaining data of the object if available */
         if (client_type == COPS_CLIENT_PC_DQOS && c_type == 4) {
-            cops_analyze_packetcable_dqos_obj(tvb, pinfo, tree, op_code, offset);
+            cops_analyze_packetcable_dqos_obj(tvb_new_subset_length(tvb, offset, len), pinfo, tree, op_code, 0);
         } else if (client_type == COPS_CLIENT_PC_MM && c_type == 4) {
-            cops_analyze_packetcable_mm_obj(tvb, pinfo, tree, op_code, offset);
+            cops_analyze_packetcable_mm_obj(tvb_new_subset_length(tvb, offset, len), pinfo, tree, op_code, 0);
         }
 
         break;
@@ -1451,10 +1451,10 @@ static void dissect_cops_object_data(tvbuff_t *tvb, packet_info *pinfo, uint32_t
 
         /* For PacketCable */
         if (client_type == COPS_CLIENT_PC_DQOS && c_type == 1) {
-            cops_analyze_packetcable_dqos_obj(tvb, pinfo, tree, op_code, offset);
+            cops_analyze_packetcable_dqos_obj(tvb_new_subset_length(tvb, offset, len), pinfo, tree, op_code, 0);
             break;
         } else if (client_type == COPS_CLIENT_PC_MM && c_type == 1) {
-            cops_analyze_packetcable_mm_obj(tvb, pinfo, tree, op_code, offset);
+            cops_analyze_packetcable_mm_obj(tvb_new_subset_length(tvb, offset, len), pinfo, tree, op_code, 0);
             break;
         }
 
@@ -1793,7 +1793,7 @@ static int dissect_cops_pr_object_data(tvbuff_t *tvb, packet_info *pinfo, uint32
         cperror_sub = tvb_get_ntohs(tvb, offset + 2);
         cperror_tree = proto_tree_add_subtree_format(tree, tvb, offset, 4, ett_cops_gperror, NULL,
                                  "Contents: Error-Code: %s, Error Sub-code: 0x%04x",
-                                 val_to_str_const(gperror, cops_gperror_vals, "<Unknown value>"), gperror_sub);
+                                 val_to_str_const(cperror, cops_cperror_vals, "<Unknown value>"), cperror_sub);
         proto_tree_add_uint(cperror_tree, hf_cops_cperror, tvb, offset, 2, cperror);
         offset += 2;
         if (cperror == 13) { /* RFC 3084 4.5 */

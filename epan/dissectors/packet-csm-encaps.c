@@ -235,7 +235,7 @@ dissect_csm_encaps(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
         proto_tree_add_item(csm_encaps_tree, hf_csm_encaps_opcode, tvb, 0, 2, ENC_BIG_ENDIAN);
         proto_tree_add_item(csm_encaps_tree, hf_csm_encaps_seq, tvb, 2, 1, ENC_BIG_ENDIAN);
 
-        proto_tree_add_bitmask(tree, tvb, 3, hf_csm_encaps_ctrl, ett_csm_encaps_control, control_flags, ENC_NA);
+        proto_tree_add_bitmask(csm_encaps_tree, tvb, 3, hf_csm_encaps_ctrl, ett_csm_encaps_control, control_flags, ENC_NA);
 
         proto_tree_add_item(csm_encaps_tree, hf_csm_encaps_channel, tvb, 4, 2, ENC_BIG_ENDIAN);
         proto_tree_add_item(csm_encaps_tree, hf_csm_encaps_length, tvb, 6, 1, ENC_BIG_ENDIAN);

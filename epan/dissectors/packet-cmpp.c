@@ -265,8 +265,8 @@ cmpp_version(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, int field, int
 static char*
 cmpp_timestamp(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, int field, int offset)
 {
-	int8_t  month, day, hour, minute, second;
-	int32_t timevalue;
+	unsigned month, day, hour, minute, second;
+	uint32_t timevalue;
 	char   *strval;
 
 	timevalue = tvb_get_ntohl(tvb, offset);
@@ -345,7 +345,7 @@ cmpp_msg_id(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, int field, int 
 	strval = wmem_strdup_printf(pinfo->pool, "%02u/%02u %02u:%02u:%02u", month, day,
 		hour, minute, second);
 
-	ismg_code = (tvb_get_ntohl(tvb, offset + 3) & 0x3FFFFF00) >> 16;
+	ismg_code = (tvb_get_ntohl(tvb, offset + 3) & 0x3FFFFF00) >> 8;
 
 	proto_tree_add_string(sub_tree, hf_msg_id_timestamp, tvb, offset, 4, strval);
 	proto_tree_add_uint(sub_tree, hf_msg_id_ismg_code, tvb, offset + 3, 3, ismg_code);
@@ -422,7 +422,7 @@ cmpp_submit(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb)
 	cmpp_octet_string(tree, pinfo, tvb, hf_cmpp_submit_At_Time, offset, 17);
 	offset += 17;
 
-	cmpp_octet_string(tree, pinfo, tvb, hf_cmpp_submit_Src_Id, offset, 17);
+	cmpp_octet_string(tree, pinfo, tvb, hf_cmpp_submit_Src_Id, offset, 21);
 	offset += 21;
 	destUsr = cmpp_uint1(tree, tvb, hf_cmpp_submit_DestUsr_tl, offset);
 	offset++;

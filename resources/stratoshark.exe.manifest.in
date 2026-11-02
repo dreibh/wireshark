@@ -50,6 +50,12 @@
            https://nullprogram.com/blog/2021/12/30/
       -->
       <activeCodePage xmlns="http://schemas.microsoft.com/SMI/2019/WindowsSettings">UTF-8</activeCodePage>
+      <!-- Allow pathnames longer than MAX_PATH (260 characters) without
+           the \\?\ prefix, if long paths are also enabled on the system
+           (the LongPathsEnabled registry value or group policy).
+           https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
+      -->
+      <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
       <!-- Below might help with https://gitlab.com/wireshark/wireshark/-/work_items/18137
            on new enough Windows.
       <consoleAllocationPolicy xmlns="http://schemas.microsoft.com/SMI/2024/WindowsSettings">detached</consoleAllocationPolicy>

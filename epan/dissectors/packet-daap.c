@@ -699,6 +699,8 @@ dissect_daap_one_tag(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb)
 
       offset += tagsize;
    }
+   /* The depth counts nesting, not the containers seen */
+   p_set_proto_depth(pinfo, proto_daap, recursion_depth - 1);
 }
 
 
