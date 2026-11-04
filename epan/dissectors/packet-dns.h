@@ -79,6 +79,8 @@
 #define DNS_T_SVCB          64              /* draft-ietf-dnsop-svcb-https-01 */
 #define DNS_T_HTTPS         65              /* draft-ietf-dnsop-svcb-https-01 */
 #define DNS_T_DSYNC         66              /* draft-ietf-dnsop-generalized-notify */
+#define DNS_T_HHIT          67              /* DRIP Entity Tags (RFC 9886) */
+#define DNS_T_BRID          68              /* DRIP Entity Tags (RFC 9886) */
 #define DNS_T_SPF           99              /* SPF RR (RFC 4408) section 3 */
 #define DNS_T_UINFO        100              /* [IANA-Reserved] */
 #define DNS_T_UID          101              /* [IANA-Reserved] */
@@ -90,6 +92,7 @@
 #define DNS_T_LP           107              /* ILNP [RFC6742] */
 #define DNS_T_EUI48        108              /* EUI 48 Address (RFC7043) */
 #define DNS_T_EUI64        109              /* EUI 64 Address (RFC7043) */
+#define DNS_T_NXNAME       128              /* Compact Denial of Existence (RFC9824) */
 #define DNS_T_TKEY         249              /* Transaction Key (RFC 2930) */
 #define DNS_T_TSIG         250              /* Transaction Signature (RFC 2845) */
 #define DNS_T_IXFR         251              /* incremental transfer (RFC 1995) */

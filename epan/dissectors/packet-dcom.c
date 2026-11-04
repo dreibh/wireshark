@@ -729,7 +729,7 @@ dissect_dcom_extent(tvbuff_t *tvb, unsigned offset,
 			/* look for a registered uuid name */
 			if((uuid_name = guids_get_guid_name(&uuidExtend, pinfo->pool)) != NULL) {
 				proto_tree_add_guid_format_value(sub_tree, hf_dcom_extent_id, tvb,
-								 offset, sizeof(e_guid_t), (e_guid_t *) &uuidExtend,
+								 u32VariableOffset, sizeof(e_guid_t), (e_guid_t *) &uuidExtend,
 								 "%s (%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x)",
 								 uuid_name,
 								 uuidExtend.data1, uuidExtend.data2, uuidExtend.data3,
@@ -1385,7 +1385,7 @@ dissect_dcom_VARIANT(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
 			break;
 		case(WIRESHARK_VT_CY):
 				offset = dissect_dcom_I8(tvb, offset, pinfo, NULL, di, drep,
-						0, (uint64_t*)&cyData);
+						-1, (uint64_t*)&cyData);
 				proto_tree_add_int64_format(sub_tree, hf_dcom_vt_cy, tvb, offset - 8,
 						8, cyData, "%s: %" PRId64 ".%.04" PRId64,
 						proto_registrar_get_name(hf_dcom_vt_cy),
@@ -2070,15 +2070,18 @@ dissect_dcom_OBJREF(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
 		break;
 		case(0x2):	/* handler (untested) */
 			offset = dissect_dcom_STDOBJREF(tvb, offset, pinfo, sub_tree, di, drep, hfindex,
-								&oxid, &oid, &iid);
+								&oxid, &oid, &ipid);
 			offset = dissect_dcom_UUID(tvb, offset, pinfo, sub_tree, di, drep,
 								hf_dcom_clsid, &clsid);
 			offset = dissect_dcom_DUALSTRINGARRAY(tvb, offset, pinfo, sub_tree, di, drep,
 								hf_dcom_objref_resolver_address, ip);
 		break;
 		case(0x4):	/* custom */
+		    /* A custom marshaler can hold an OBJREF of its own */
+		    increment_dissection_depth(pinfo);
 		    offset = dissect_dcom_CUSTOBJREF(tvb, offset, pinfo, sub_tree, di, drep, hfindex,
 		                        &clsid, &iid);
+		    decrement_dissection_depth(pinfo);
 		    break;
 	}
 

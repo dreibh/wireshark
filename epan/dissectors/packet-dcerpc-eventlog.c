@@ -288,6 +288,7 @@ eventlog_dissect_element_ReadEventLogW_data_(tvbuff_t *tvb, unsigned offset, pac
 	 * NDR encoded at all and there are byte offsets into this buffer
 	 * encoded therein.
 	 */
+	tvb_ensure_bytes_exist64(tvb, offset, len);
 	record_tvb=tvb_new_subset_length(tvb, offset, len);
 	eventlog_dissect_struct_Record(record_tvb, 0, pinfo, tree, di, drep, hf_eventlog_Record, 0);
 	offset+=len;
@@ -620,7 +621,9 @@ eventlog_dissect_element_Record_data_offset(tvbuff_t *tvb _U_, unsigned offset _
 static unsigned
 eventlog_dissect_element_Record_raw_data(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	offset = dissect_null_term_string(tvb, offset, pinfo, tree, drep, hf_eventlog_eventlog_Record_raw_data , 0);
+	if (!di->conformant_run) {
+		offset = dissect_null_term_string(tvb, offset, pinfo, tree, drep, hf_eventlog_eventlog_Record_raw_data , 0);
+	}
 
 	return offset;
 }

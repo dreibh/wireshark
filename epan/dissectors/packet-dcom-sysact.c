@@ -352,7 +352,10 @@ dissect_dcom_ActivationProperty(tvbuff_t *tvb, unsigned offset, packet_info *pin
     /* the following data depends on the clsid, get the routine by clsid */
     routine = dcom_get_routine_by_uuid(clsid);
     if (routine){
+        /* ActivationPropertiesIn/Out can hold properties of their own */
+        increment_dissection_depth(pinfo);
         routine(tvb, offset, pinfo, tree, di, drep, size);
+        decrement_dissection_depth(pinfo);
     }
 
     return offset+size;
@@ -1520,6 +1523,9 @@ proto_register_ISystemActivator (void)
     proto_register_field_array (proto_ISystemActivator, hf_actproperties, array_length (hf_actproperties));
     proto_register_field_array(proto_ISystemActivator, hf_tshdr, array_length(hf_tshdr));
     proto_register_subtree_array (ett, array_length (ett));
+    /* The marshaler list is per file; register before any packet
+     * needs it, not only when an activation call is seen. */
+    register_init_routine(sysact_register_routines);
 }
 
 void
