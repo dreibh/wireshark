@@ -8154,6 +8154,294 @@ class TestDissectAprs:
                               for n, c in zip(range(145, 163), comments)]
 
 
+# The ax25_*.pcap.gz captures are synthetic (text2pcap): each exercises one
+# part of the AX.25 link tracking. The frame numbers below are those of the
+# comments in the script that made them.
+AX25_CAPTURES = (
+    'ax25_sabme_mod128.pcap.gz', 'ax25_sabm.pcap.gz', 'ax25_disc_stray.pcap.gz',
+    'ax25_dm.pcap.gz', 'ax25_frmr.pcap.gz', 'ax25_xid.pcap.gz',
+    'ax25_segments.pcap.gz', 'ax25_pre20.pcap.gz', 'ax25_digi_dup.pcap.gz',
+    'ax25_t3_gap.pcap.gz', 'ax25_midsession.pcap.gz', 'ax25_kiss_ports.pcap.gz',
+    'ax25_interfaces.pcapng.gz',
+)
+
+
+class TestDissectAx25Link:
+    def run_fields(self, cmd_tshark, capture_file, test_env, capture, *fields, opts=()):
+        stdout = subprocess.check_output((cmd_tshark, *opts,
+                '-r', capture_file(capture),
+                '-Tfields', '-eframe.number', *('-e' + f for f in fields),
+            ), encoding='utf-8', env=test_env)
+        return {int(line.split('\t')[0]): line.split('\t')[1:]
+                for line in stdout.splitlines()}
+
+    def matching(self, cmd_tshark, capture_file, test_env, capture, dfilter, opts=()):
+        '''Frame numbers matching a display filter.'''
+        stdout = subprocess.check_output((cmd_tshark, *opts,
+                '-r', capture_file(capture), '-Y', dfilter,
+                '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=test_env)
+        return [int(n) for n in stdout.split()]
+
+    def test_ax25_two_pass_identical(self, cmd_tshark, capture_file, test_env):
+        '''State is only built on the first pass, so the output is the same
+        with and without -2, and nothing is malformed.'''
+        for capture in AX25_CAPTURES:
+            outputs = [subprocess.check_output((cmd_tshark, *opts,
+                    '-r', capture_file(capture), '-V',
+                ), encoding='utf-8', env=test_env) for opts in ((), ('-2',))]
+            assert outputs[0] == outputs[1], capture
+            assert self.matching(cmd_tshark, capture_file, test_env, capture,
+                                 '_ws.malformed || _ws.expert.severity == error') == [], capture
+
+    def test_ax25_sabme_mod128(self, cmd_tshark, capture_file, test_env):
+        '''SABME and UA set modulo 128 from the UA on; two-octet control
+        fields are decoded with seven-bit sequence numbers.'''
+        f = self.run_fields(cmd_tshark, capture_file, test_env, 'ax25_sabme_mod128.pcap.gz',
+                            'ax25.stream', 'ax25.modulo', 'ax25.modulo.source', 'ax25.modulo.frame',
+                            'ax25.ctl.n_s_ext', 'ax25.ctl.n_r_ext', 'ax25.ctl_ext')
+        assert all(f[n][0] == '0' for n in f)
+        for n in (3, 4, 5, 6, 7, 8):
+            assert f[n][1:4] == ['128', '3', '2']
+        assert f[7][4:6] == ['100', '2']
+        assert f[8][5] == '101'
+        assert f[3][6] == '0x0000'
+
+    def test_ax25_sabm(self, cmd_tshark, capture_file, test_env):
+        '''A SABM link is modulo 8; SABM retries stay in the stream, a new
+        SABM after DISC/UA starts the next one. UI with P=1 keeps its PID.'''
+        f = self.run_fields(cmd_tshark, capture_file, test_env, 'ax25_sabm.pcap.gz',
+                            'ax25.stream', 'ax25.modulo', 'ax25.link.state', 'ax25.pid')
+        # The UI frame (10) is connectionless and has no stream
+        assert [f[n][0] for n in sorted(f)] == ['0'] * 9 + [''] + ['1'] * 3
+        assert f[4][1] == '8'
+        assert f[9][2] == '4'               # Disconnected (DISC/UA)
+        assert f[10][3] == '0xf0'           # UI P=1
+        assert f[13][2] == '2'              # Connected
+
+    def test_ax25_disc_stray(self, cmd_tshark, capture_file, test_env):
+        '''I frames and RR/RNR/REJ commands after DISC/UA are flagged, with
+        the frame that disconnected the link; responses, UI, TEST, XID and
+        SABM are not.'''
+        def m(dfilter):
+            return self.matching(cmd_tshark, capture_file, test_env, 'ax25_disc_stray.pcap.gz', dfilter)
+        assert m('ax25.link.disconnecting') == [5]
+        assert m('ax25.link.after_disc') == [7, 8, 9, 10]
+        assert m('ax25.link.state_frame == 6') == [7, 8, 9, 10]
+        assert m('ax25.link.state_frame == 4') == [5]
+        assert m('_ws.expert.group == "Sequence"') == [5, 7, 8, 9, 10]
+        assert m('ax25.stream == 1') == [15]
+
+    def test_ax25_dm(self, cmd_tshark, capture_file, test_env):
+        '''DM answering a SABM(E) refuses it; a SABM after a refused SABME is
+        a v2.0 fallback in the same stream; I frames after DM are flagged.'''
+        def m(dfilter):
+            return self.matching(cmd_tshark, capture_file, test_env, 'ax25_dm.pcap.gz', dfilter)
+        assert m('ax25.link.refused') == [2, 5]
+        assert m('ax25.link.refused == 4') == [5]
+        assert m('ax25.link.after_dm') == [3, 10]
+        assert m('ax25.link.state_frame == 9') == [10]
+        assert m('ax25.link.fallback == 5') == [6]
+        assert m('ax25.stream == 1') == [4, 5, 6, 7, 8, 9, 10]
+
+    def test_ax25_frmr(self, cmd_tshark, capture_file, test_env):
+        '''FRMR answering XID is a v2.0 peer, not a link error; any other
+        FRMR is; FRMR answering SABME leads to a SABM fallback.'''
+        def m(dfilter):
+            return self.matching(cmd_tshark, capture_file, test_env, 'ax25_frmr.pcap.gz', dfilter)
+        assert m('ax25.link.frmr_xid == 3') == [4]
+        assert m('ax25.link.after_frmr') == [7]
+        assert m('ax25.link.state_frame == 6') == [7]
+        assert m('ax25.link.refused == 8') == [9]
+        assert m('ax25.link.fallback == 9') == [10]
+        assert m('_ws.expert.severity == warning') == [7]
+        # v2.0 evidence is about the stations, so it carries over to the next stream
+        assert m('ax25.param.version == 0 && ax25.param.version.frame == 4') == [4, 5, 6, 7, 8, 9]
+
+    def test_ax25_xid(self, cmd_tshark, capture_file, test_env):
+        '''Every PI is decoded; bit fields are least significant octet
+        first and numbers big-endian.'''
+        f = self.run_fields(cmd_tshark, capture_file, test_env, 'ax25_xid.pcap.gz',
+                            'ax25.xid.cop', 'ax25.xid.cop.abm', 'ax25.xid.cop.half',
+                            'ax25.xid.hdlc', 'ax25.xid.hdlc.srej', 'ax25.xid.hdlc.mod128',
+                            'ax25.xid.hdlc.segmenter', 'ax25.xid.n1_tx', 'ax25.xid.n1_rx',
+                            'ax25.xid.k_tx', 'ax25.xid.k_rx', 'ax25.xid.t1', 'ax25.xid.n2',
+                            'ax25.xid.gl')
+        assert f[2] == ['0x0021', 'True', 'True', '0x42a884', 'True', 'True', 'True',
+                        '2048', '512', '7', '2', '4000', '12', '30']
+        assert f[19][13] == '0'
+
+    def test_ax25_xid_parameters(self, cmd_tshark, capture_file, test_env):
+        '''XID before the SABME carries over to its stream: N1 and k are
+        what the receiver notified, T1 and N2 what the response set.'''
+        f = self.run_fields(cmd_tshark, capture_file, test_env, 'ax25_xid.pcap.gz',
+                            'ax25.stream', 'ax25.param.n1', 'ax25.param.n1.source',
+                            'ax25.param.k', 'ax25.param.t1', 'ax25.param.t1.source',
+                            'ax25.param.n2', 'ax25.param.version', 'ax25.param.xid_frame')
+        assert f[1][1:3] == ['256', '0']    # nothing notified yet: spec default
+        assert f[5] == ['1', '64', '3', '2', '4000', '3', '12', '1', '2,2,2,2']
+        assert f[6][1:4] == ['128', '3', '4']
+        assert f[16][4:6] == ['3000', '3']  # PL=0: the default, from XID
+
+    def test_ax25_xid_experts(self, cmd_tshark, capture_file, test_env):
+        def m(dfilter):
+            return self.matching(cmd_tshark, capture_file, test_env, 'ax25_xid.pcap.gz', dfilter)
+        assert m('ax25.param.n1.exceeded') == [5]
+        assert m('ax25.xid.negotiation') == [8]
+        assert m('ax25.xid.sabm_modulo') == [11]
+        assert m('ax25.xid.modulo_change') == [15]
+        assert m('ax25.modulo == 128 && ax25.modulo.source == 4') == [16, 17, 20, 21]
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ax25_xid.pcap.gz'), '-Y', 'frame.number == 8',
+                '-Tfields', '-e_ws.expert.message',
+            ), encoding='utf-8', env=test_env)
+        for why in ('full duplex', 'SREJ', 'modulo 128', 'T1 2000 ms < 5000 ms', 'N2 5 < 10'):
+            assert why in stdout
+
+    def test_ax25_xid_negotiation(self, cmd_tshark, capture_file, test_env):
+        '''XID frames show what a command offers and what a response selects,
+        with the command it answers, defaults, kept values and rule breaches.'''
+        fields = ('ax25.xid.neg.command_frame', 'ax25.xid.neg.duplex', 'ax25.xid.neg.reject',
+                  'ax25.xid.neg.modulo', 'ax25.xid.neg.segmenter', 'ax25.xid.neg.t1',
+                  'ax25.xid.neg.n2', 'ax25.xid.neg.n1', 'ax25.xid.neg.k')
+        f = self.run_fields(cmd_tshark, capture_file, test_env, 'ax25_xid.pcap.gz', *fields)
+        assert f[1] == ['', '0', '2', '128', 'True', '3000', '10', '128', '4']    # offer
+        assert f[2] == ['1', '0', '2', '128', 'True', '4000', '12', '64', '2']    # result
+        assert f[19] == ['18', '0', '2', '128', 'False', '3000', '10', '256', '32']  # GL=0
+        assert f[23] == ['22', '', '', '', '', '', '', '', '16']
+
+        def m(dfilter):
+            return self.matching(cmd_tshark, capture_file, test_env, 'ax25_xid.pcap.gz', dfilter)
+        assert m('ax25.xid.neg.v22') == [2, 8, 10, 15, 19, 23]
+        assert m('ax25.xid.neg.kept') == [23]
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ax25_xid.pcap.gz'), '-Y', 'frame.number == 8', '-V',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.count('[breaks section 6.3.2]') == 5
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ax25_xid.pcap.gz'), '-Y', 'frame.number == 23', '-V',
+            ), encoding='utf-8', env=test_env)
+        assert 'current value is kept (128)' in stdout
+        assert 'current value is kept (3000 ms, XID)' in stdout
+
+    def test_ax25_segments(self, cmd_tshark, capture_file, test_env):
+        '''Segment headers, the original PID in the first segment, and the
+        sequence checks over I and UI.'''
+        f = self.run_fields(cmd_tshark, capture_file, test_env, 'ax25_segments.pcap.gz',
+                            'ax25.seg.first', 'ax25.seg.remaining', 'ax25.seg.pid',
+                            'ax25.seg.first_frame')
+        assert f[5][:3] == ['True', '2', '0xcc']
+        assert [f[n][3] for n in (6, 7, 8)] == ['5', '5', '5']
+
+        def m(dfilter):
+            return self.matching(cmd_tshark, capture_file, test_env, 'ax25_segments.pcap.gz', dfilter)
+        assert m('ax25.seg.missing_first') == [10]
+        assert m('ax25.seg.remaining.bad') == [11, 19]
+        assert m('ax25.seg.interleaved') == [12, 20]
+        assert m('ax25.seg.too_long') == [13]
+        assert m('ax25.seg.tr210') == [14]
+        assert m('ax25.seg.negotiation_not_captured') == [16, 18, 19]
+        assert m('ax25.seg.not_negotiated') == [25]
+        # Segments over UI belong to no stream, and a link with only UI
+        # frames doesn't use up a stream index
+        assert m('ax25.stream') == list(range(1, 16)) + list(range(21, 26))
+        assert m('ax25.stream == 2') == [21, 22]
+        # A retransmitted segment isn't a new one
+        assert 7 not in m('_ws.expert')
+        # TR210 from the preference
+        assert self.matching(cmd_tshark, capture_file, test_env, 'ax25_segments.pcap.gz',
+                             'ax25.seg.tr210', opts=('-o', 'ax25.tr210:200')) == []
+
+    def test_ax25_pre20(self, cmd_tshark, capture_file, test_env):
+        '''C/R 00 and 11 are pre-2.0: C/R comes from the frame type, and is
+        unknown (P/F shown as such) for S frames and XID.'''
+        f = self.run_fields(cmd_tshark, capture_file, test_env, 'ax25_pre20.pcap.gz',
+                            'ax25.version', 'ax25.cr', 'ax25.ctl.pf', 'ax25.ctl.p', 'ax25.ctl.f')
+        assert [f[n][:2] for n in sorted(f)] == [
+            ['0', '0'], ['0', '1'], ['0', '0'], ['0', '2'], ['1', '1'],
+            ['0', '2'], ['0', '0'], ['0', '0'], ['0', '1'], ['0', '0']]
+        assert f[4][2:] == ['True', '', '']
+        assert f[9][2:] == ['', '', 'True']
+
+        def m(dfilter):
+            return self.matching(cmd_tshark, capture_file, test_env, 'ax25_pre20.pcap.gz', dfilter)
+        assert m('ax25.cr.mixed') == [5, 9]
+        assert m('ax25.pre20.v22_feature') == [6, 7, 10]
+
+    def test_ax25_digi_dup(self, cmd_tshark, capture_file, test_env):
+        '''A copy with more H bits set within T1 is a digipeated copy; a
+        retransmission (same H bits) and a late copy are not.'''
+        f = self.run_fields(cmd_tshark, capture_file, test_env, 'ax25_digi_dup.pcap.gz',
+                            'ax25.link.dup_of', 'ax25.link.state')
+        assert [f[n][0] for n in sorted(f)] == ['', '1', '', '3', '', '5', '', '7', '']
+        assert f[9][1] == '2'
+
+    def test_ax25_t3_gap(self, cmd_tshark, capture_file, test_env):
+        '''Silence longer than T3 + N2 x T1 presumes the link down; if N(S)
+        carries on it's a possible capture gap.'''
+        def m(dfilter, opts=()):
+            return self.matching(cmd_tshark, capture_file, test_env, 'ax25_t3_gap.pcap.gz',
+                                 dfilter, opts=opts)
+        assert m('ax25.link.capture_gap') == [5]
+        assert m('ax25.link.after_idle') == [7]
+        assert m('ax25.link.state_frame == 6') == [7]
+        assert m('ax25.link.state == 2') == [2, 3, 4, 5, 6, 7, 8]
+        assert m('ax25.stream != 0') == []
+        assert m('ax25.link.after_idle || ax25.link.capture_gap', opts=('-o', 'ax25.t3:1000')) == []
+        assert m('ax25.link.after_idle || ax25.link.capture_gap', opts=('-o', 'ax25.t3:0')) == []
+
+    def test_ax25_midsession(self, cmd_tshark, capture_file, test_env):
+        '''Mid-session start: the modulo is inferred from the first decisive
+        S frame, assumed to be 8 before, and taken from an unanswered SABME
+        once the initiator sends I frames.'''
+        f = self.run_fields(cmd_tshark, capture_file, test_env, 'ax25_midsession.pcap.gz',
+                            'ax25.modulo', 'ax25.modulo.source', 'ax25.modulo.frame')
+        assert f[1] == ['8', '0', '']
+        assert f[2] == ['8', '1', '2']      # bits 4-7 set
+        assert f[3] == ['8', '0', '']
+        assert f[4] == ['128', '1', '4']    # two octets
+        assert f[5] == ['128', '1', '4']
+        assert f[6] == ['8', '1', '6']      # one octet
+        assert f[7] == ['8', '0', '']
+        assert f[8] == ['8', '0', '']       # not decisive
+        assert f[10] == ['128', '2', '9']   # SABME, UA not captured
+
+        def m(dfilter):
+            return self.matching(cmd_tshark, capture_file, test_env, 'ax25_midsession.pcap.gz', dfilter)
+        assert m('ax25.modulo.assumed') == [1, 3, 7, 8]
+        assert m('ax25.modulo.inferred') == [2, 4, 5, 6]
+        assert m('ax25.modulo.no_ua') == [10]
+
+    def test_ax25_link_key(self, cmd_tshark, capture_file, test_env):
+        '''The KISS port and the capture interface are part of the link.'''
+        f = self.run_fields(cmd_tshark, capture_file, test_env, 'ax25_kiss_ports.pcap.gz',
+                            'ax25_kiss.port', 'ax25.stream', 'ax25.link.refused')
+        assert f == {1: ['0', '0', ''], 2: ['1', '1', ''], 3: ['1', '1', ''],
+                     4: ['1', '1', ''], 5: ['0', '0', '1']}
+        f = self.run_fields(cmd_tshark, capture_file, test_env, 'ax25_interfaces.pcapng.gz',
+                            'frame.interface_id', 'ax25.stream', 'ax25.link.state')
+        assert f[1][1] != f[2][1]
+        assert f[1][0] == f[3][0] and f[1][1] == f[3][1] and f[3][2] == '5'   # DM
+        assert f[2][0] == f[4][0] and f[2][1] == f[4][1] and f[4][2] == '2'   # UA
+
+    def test_ax25_station_table(self, cmd_tshark, capture_file, test_env):
+        '''The station table comes after XID and before the preferences.'''
+        uat = ('-o', 'uat:ax25_stations:"NJ7P","5000","60","3","100","5","2.2"')
+        f = self.run_fields(cmd_tshark, capture_file, test_env, 'ax25_sabm.pcap.gz',
+                            'ax25.src', 'ax25.param.t1', 'ax25.param.t1.source',
+                            'ax25.param.n1', 'ax25.param.n1.source', 'ax25.param.k',
+                            opts=uat + ('-o', 'ax25.t1:4000', '-o', 'ax25.n1:200'))
+        assert f[3] == ['NJ7P', '5000', '2', '200', '1', '7']    # sent by NJ7P
+        assert f[4] == ['N7LEM', '4000', '1', '100', '2', '5']   # sent to NJ7P
+        f = self.run_fields(cmd_tshark, capture_file, test_env, 'ax25_xid.pcap.gz',
+                            'ax25.param.n1.source', opts=uat)
+        assert f[5] == ['3']                # XID wins
+        f = self.run_fields(cmd_tshark, capture_file, test_env, 'ax25_sabm.pcap.gz',
+                            'ax25.param.k', 'ax25.param.k.source',
+                            opts=('-o', 'ax25.k_mod8_default:4'))
+        assert f[4] == ['4', '0']
+
+
 # ar_drone_coverage.pcap.gz is synthetic: every packet was generated, to
 # cover as much of the AR Drone dissector as possible. No UDP port is
 # registered for it by default and its heuristic is disabled.
@@ -11640,7 +11928,7 @@ class TestDissectAx25:
 
     def test_ax25_control(self, cmd_tshark, capture_file, test_env):
         '''S and U frames show the command or response modifier from the
-        C bits, and only I and UI frames (without the P bit) have a PID.'''
+        C bits, and only I and UI frames have a PID.'''
         frames = self.run_fields(cmd_tshark, capture_file, test_env,
                                  '-Y', 'frame.number >= 14 && frame.number <= 43',
                                  '-e_ws.col.info', '-eax25.ctl.u_cmd',
@@ -11659,10 +11947,11 @@ class TestDissectAx25:
         assert frames[22][0] == 'U, func=FRMR'
         assert frames[23][0] == 'U, func=XID'
         assert frames[25][0] == 'U, func=TEST'
-        # UI with the P bit: no PID; a UI response has one
-        assert frames[27] == ['U P, func=UI', '0x00', '', '']
+        # UI with the P bit has a PID too (section 3.4, Figure 4.4): here
+        # the first octet of the text, 'U'
+        assert frames[27] == ['U P, func=UI, Unknown (0x55)', '0x00', '', '0x55']
         assert frames[28][2:] == ['0x00', '0xf0']
-        assert all(f[3] == '' for f in frames[:28])
+        assert all(f[3] == '' for f in frames[:27])
 
     def test_ax25_pids(self, cmd_tshark, capture_file, test_env):
         '''The I frames go to the dissector registered for the PID or to
@@ -12241,7 +12530,8 @@ class TestDissectBacnet:
                     '-Y', '_ws.malformed || _ws.expert.severity >= warning',
                     '-Tfields', '-eframe.number',
                 ), encoding='utf-8', env=test_env)
-            assert count_output(stdout) == 0
+            # Frame 97 is a short NPDU in Frame Type 33, which MS/TP flags.
+            assert stdout.split() == ['97']
         one_pass = subprocess.check_output((cmd_tshark,
                 '-r', capture_file('bacnet_coverage.pcap.gz'), '-V',
             ), encoding='utf-8', env=test_env)
@@ -24901,7 +25191,8 @@ class TestDissectCimetrics:
                     '-Y', '_ws.malformed || _ws.expert.severity >= warning',
                     '-Tfields', '-eframe.number',
                 ), encoding='utf-8', env=test_env)
-            assert count_output(stdout) == 0
+            # Frame 10 is Frame Type 48 with Length 0, which MS/TP flags.
+            assert stdout.split() == ['10']
 
     def test_cimetrics_fields(self, cmd_tshark, capture_file, test_env):
         '''The Cimetrics header, the MS/TP frame after it with good
@@ -24947,6 +25238,159 @@ class TestDissectCimetrics:
             'BACnet MS/TP, Src (11), Dst (255), BACnet Data Not Expecting Reply',
             'BACnet MS/TP, Src (11), Dst (10), Unknown Frame Type (48)',
             'BACnet MS/TP, Src (127), Dst (10), Unknown Frame Type (128)',
+        ]
+
+
+# mstp-6lobac.pcapng is synthetic except frame 11, the example frame of
+# RFC 8163 Appendix D. It is written by tools/gen-mstp-test-capture.py,
+# whose docstring lists every frame.
+MSTP_CAPTURE = 'mstp-6lobac.pcapng'
+MSTP_OPTS = ('-o', '6lowpan.context0:aaaa::/64')
+
+
+def mstp_run(n):
+    '''n non-zero octets, as in the capture generator.'''
+    return bytes((i % 255) + 1 for i in range(n))
+
+
+class TestDissectMstp:
+    def mstp_fields(self, cmd_tshark, capture_file, test_env, display_filter, *fields):
+        args = [cmd_tshark, *MSTP_OPTS, '-r', capture_file(MSTP_CAPTURE), '-Tfields']
+        if display_filter:
+            args += ['-Y', display_filter]
+        for field in fields:
+            args += ['-e', field]
+        return subprocess.check_output(args, encoding='utf-8', env=test_env)
+
+    def frame_numbers(self, cmd_tshark, capture_file, test_env, display_filter):
+        stdout = self.mstp_fields(cmd_tshark, capture_file, test_env, display_filter,
+                                  'frame.number')
+        return [int(n) for n in stdout.split()]
+
+    def test_mstp_frame_types(self, cmd_tshark, capture_file, test_env):
+        '''Every frame is MS/TP, with the frame type the generator wrote.'''
+        stdout = self.mstp_fields(cmd_tshark, capture_file, test_env, None, 'mstp.frame_type')
+        assert [int(t) for t in stdout.split()] == (
+            [0, 1, 2, 3, 4, 5, 6, 7, 32, 33, 34, 34, 34, 35, 128] + [35] * 8 +
+            [0, 6, 34, 34, 34, 34, 34, 34] + [32, 34, 35, 35])
+
+    def test_mstp_checksums(self, cmd_tshark, capture_file, test_env):
+        '''The Extended Data CRC (CRC-32K) is shown for every COBS-encoded
+        frame that decodes, and only the three frames with a bad header CRC,
+        data CRC or CRC-32K have a bad checksum.'''
+        assert self.frame_numbers(cmd_tshark, capture_file, test_env, 'mstp.ext_data_crc') == (
+            [9, 10, 11, 12, 13, 14] + list(range(16, 24)) + [26, 32, 33, 35])
+        assert self.frame_numbers(cmd_tshark, capture_file, test_env,
+                                  'mstp.checksum.status == 0') == [24, 25, 26]
+        stdout = self.mstp_fields(cmd_tshark, capture_file, test_env, 'frame.number == 11',
+                                  'mstp.ext_data_crc')
+        assert stdout.strip() == '0x9e7259e2'
+
+    def test_mstp_dispatch(self, cmd_tshark, capture_file, test_env):
+        '''Types 5, 6, 32 and 33 go to BACnet and type 34 to 6LoWPAN, even
+        when the data CRC or CRC-32K is bad (frames 25 and 26).'''
+        assert self.frame_numbers(cmd_tshark, capture_file, test_env, 'bacnet') == [6, 7, 9, 10, 25, 32]
+        assert self.frame_numbers(cmd_tshark, capture_file, test_env, '6lowpan') == [11, 12, 13, 26, 33]
+        assert self.frame_numbers(cmd_tshark, capture_file, test_env, 'icmpv6') == [11, 12, 13, 26, 33]
+
+    def test_mstp_cobs_corner_cases(self, cmd_tshark, capture_file, test_env):
+        '''COBS blocks of exactly 254 non-zero octets (code 0xFF), at the end
+        of the data and elsewhere, and zero octets decode exactly.'''
+        expected = {
+            14: bytes(range(32)),
+            15: b'vendor data',
+            16: b'\x10\x00' + mstp_run(254) + b'\x30\x40\x50',
+            17: b'\x10\x00' + mstp_run(254),
+            18: b'\x10\x00' + mstp_run(253),
+            19: b'\x10\x00' + mstp_run(255),
+            20: mstp_run(254) + b'\x00\x60',
+            21: mstp_run(508),
+            22: b'\x00',
+            23: bytes(10),
+        }
+        stdout = self.mstp_fields(cmd_tshark, capture_file, test_env,
+                                  'frame.number >= 14 && frame.number <= 23',
+                                  'frame.number', 'data.data')
+        decoded = {int(n): bytes.fromhex(d) for n, d in (line.split('\t') for line in stdout.splitlines())}
+        assert decoded == expected
+
+    def test_mstp_cobs_errors(self, cmd_tshark, capture_file, test_env):
+        '''Damaged COBS-encoded frames are reported at the octet in error, and
+        the octets decoded before it are shown.'''
+        stdout = self.mstp_fields(cmd_tshark, capture_file, test_env, 'mstp.cobs.bad',
+                                  'frame.number', '_ws.expert.message')
+        lines = stdout.splitlines()
+        assert [int(line.split('\t')[0]) for line in lines] == [27, 28, 29]
+        assert 'runs past the end of the Encoded Data field' in lines[0]
+        assert 'Octet 0x55' in lines[1] and 'Encoded CRC-32K field' in lines[1]
+        assert 'Octet 0x55' in lines[2] and 'Encoded Data field' in lines[2]
+        assert self.frame_numbers(cmd_tshark, capture_file, test_env, 'mstp.len.bad') == [30, 31, 34, 35]
+        assert self.frame_numbers(cmd_tshark, capture_file, test_env,
+                                  '_ws.malformed || _ws.expert.severity == error') == [27, 28, 29, 30, 31, 34, 35]
+        stdout = subprocess.check_output((cmd_tshark, *MSTP_OPTS,
+                '-r', capture_file(MSTP_CAPTURE),
+                '-Y', 'frame.number >= 27 && frame.number <= 30', '-x',
+            ), encoding='utf-8', env=test_env)
+        assert count_output(stdout, r'^Decoded Data \(partial\) \(\d+ bytes\):') == 4
+
+    def test_mstp_length_limits(self, cmd_tshark, capture_file, test_env):
+        '''A COBS-encoded frame with a Length outside 5 to 2043 is an error
+        (Clause 9.5.3); a BACnet NPDU outside 502 to 1497 octets in Frame
+        Type 32 or 33 (Clauses 9.2 and 9.3) and an IPv6 over MS/TP frame
+        with a Length above 1510 are warnings.'''
+        assert self.frame_numbers(cmd_tshark, capture_file, test_env,
+                                  'mstp.bacnet_npdu_len.unexpected') == [32]
+        assert self.frame_numbers(cmd_tshark, capture_file, test_env,
+                                  'mstp.ipv6_len.too_long') == [33]
+        stdout = self.mstp_fields(cmd_tshark, capture_file, test_env,
+                                  'frame.number == 34 || frame.number == 35',
+                                  '_ws.expert.message')
+        assert stdout.splitlines() == [
+            'Length 0 is outside 5 to 2043, the range for COBS-encoded frames',
+            'Length 2112 is outside 5 to 2043, the range for COBS-encoded frames',
+        ]
+
+    def test_mstp_rfc8163_appendix_d(self, cmd_tshark, capture_file, test_env):
+        '''The example frame of RFC 8163 Appendix D gives the three byte dumps
+        printed there: the frame, the decoded data and CRC-32K, and the
+        decompressed IPv6 packet.'''
+        stdout = subprocess.check_output((cmd_tshark, *MSTP_OPTS,
+                '-r', capture_file(MSTP_CAPTURE),
+                '-Y', 'frame.number == 11', '-x',
+            ), encoding='utf-8', env=test_env)
+        dumps, name = {}, None
+        for line in stdout.splitlines():
+            if line.endswith('bytes):'):
+                name = line.split(' (')[0]
+                dumps[name] = bytearray()
+            elif name and len(line) > 6 and line[4:6] == '  ':
+                dumps[name] += bytes.fromhex(line[6:6 + 48])
+        # The first dump is the frame itself ("Frame" in RFC 8163, "Packet" now).
+        frame = dumps[next(iter(dumps))]
+        decoded = dumps['Decoded Data and CRC32K']
+        ipv6 = dumps['Decompressed 6LoWPAN IPHC']
+        assert (len(frame), len(decoded), len(ipv6)) == (547, 537, 558)
+        assert decoded[:15] == bytes.fromhex('78d6003a3f00000000000000010001')
+        assert decoded[-4:] == bytes.fromhex('9e7259e2')
+        assert ipv6[:40] == bytes.fromhex(
+            '60000000' '02063a3f'
+            'aaaa0000000000000000000000000001'
+            'aaaa000000000000000000fffe000001')
+        assert ipv6[40:] == decoded[15:-4]
+        stdout = self.mstp_fields(cmd_tshark, capture_file, test_env, 'frame.number == 11',
+                                  'icmpv6.checksum.status')
+        assert stdout.strip() == '1'
+
+    def test_mstp_6lowpan_iids(self, cmd_tshark, capture_file, test_env):
+        '''IIDs elided by 6LoWPAN are derived from the MS/TP addresses
+        (RFC 8163), so the addresses, and the ICMPv6 checksums that cover
+        them, are right.'''
+        stdout = self.mstp_fields(cmd_tshark, capture_file, test_env,
+                                  'frame.number == 12 || frame.number == 13',
+                                  'ipv6.src', 'ipv6.dst', 'icmpv6.checksum.status')
+        assert stdout.splitlines() == [
+            'aaaa::ff:fe00:2\taaaa::ff:fe00:3\t1',
+            'aaaa::ff:fe00:3\taaaa::ff:fe00:2\t1',
         ]
 
 
@@ -27995,7 +28439,7 @@ class TestDissectCoapEap:
         assert stdout.splitlines() == [
             '3\t1,3\tAES-CCM-16-64-128, SHA-256 (0),A128GCM, SHA-256 (1),A256GCM, SHA-384 (2),ChaCha20/Poly1305, SHA-256 (3),ChaCha20/Poly1305, SHAKE256 (4),Unknown (9)\t\t0a0b\t',
             '4\t1,2\tAES-CCM-16-64-128, SHA-256 (0)\t01\t\t',
-            '7\t4,7,4294967295\t\t\t\t8760',
+            '7\t4,7,4294967301\t\t\t\t8760',
             '9\t4\t\t\t\t4294967296',
             # the first cipher suite is a map: skipped, no leading comma
             '11\t1,4,3,2\tA256GCM, SHA-384 (2),ChaCha20/Poly1305, SHA-256 (3)\t05\t\t',
@@ -28008,8 +28452,36 @@ class TestDissectCoapEap:
             '25\t1,60\tChaCha20/Poly1305, SHAKE256 (4)\t\t\t',
             '26\t4,2\t\t0102\t\t',
             '27\t1,4\t\t\t\t60',
-            '28\t300,4294967295\t\t\t\t',
+            '28\t300,4294967300\t\t\t\t',
         ]
+
+    def test_coap_eap_cbormap_key_filter(self, cmd_tshark, capture_file, test_env):
+        '''coap_eap.cbormap_key is a 64-bit field: keys above 255 and above
+        2^32 can be filtered on and are shown with their own value instead
+        of being truncated to a known key.'''
+        def frames(dfilter):
+            stdout = subprocess.check_output((cmd_tshark,
+                    '-r', capture_file('coap_eap_coverage.pcap.gz'),
+                    '-Y', dfilter,
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            return stdout.split()
+
+        assert frames('coap_eap.cbormap_key == 300') == ['28']
+        assert frames('coap_eap.cbormap_key == 4294967300') == ['28']
+        assert frames('coap_eap.cbormap_key == 4294967301') == ['7']
+        assert frames('coap_eap.cbormap_key > 4294967295') == ['7', '28']
+        # 2^32+4 is not the Session-Lifetime key (4) in the same frame
+        assert frames('coap_eap.cbormap_key == 4 && frame.number == 28') == []
+
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('coap_eap_coverage.pcap.gz'),
+                '-Y', 'frame.number == 3 || frame.number == 7',
+                '-V',
+            ), encoding='utf-8', env=test_env)
+        assert 'CBOR Map Key: Cipher Suites (1)' in stdout
+        assert 'CBOR Map Key: Session-Lifetime (4)' in stdout
+        assert 'CBOR Map Key: Unknown (4294967301)' in stdout
 
     def test_coap_eap_media_without_info(self, cmd_tshark, capture_file, test_env):
         '''An ID3v2 picture in an MP3 over HTTP that claims to be
@@ -36437,7 +36909,7 @@ class TestDissectDcerpcNetlogon:
             assert stdout.count('Secure Channel Verifier') == 2
             assert stdout.count('Operation: NetrLogonGetCapabilities (21)') == 2
 
-    def test_netlogon_schannel_keys(self, cmd_tshark, capture_file, test_env):
+    def test_netlogon_schannel_keys(self, cmd_tshark, capture_file, features, test_env):
         '''Port 50006 negotiates session keys from the NT password
         SchannelCover. With that password, ServerAuthenticate2/3 report
         the AES, MD5 and DES keys and the sealed GetCapabilities stubs
@@ -36446,6 +36918,8 @@ class TestDissectDcerpcNetlogon:
         on this connection is decrypted, and neither way is malformed.
         One pass and two passes agree. The password is not in the
         capture: the suite passes it as an NTLMSSP credential.'''
+        if not features.have_kerberos:
+            pytest.skip('Requires Kerberos.')
         cred = ('-o', 'uat:ntlmssp_creds:"NT Password","SchannelCover"')
         aes = 'Using session key learned in frame 725 (45807f4f) from <NT Password 1>'
         md5 = 'Using session key learned in frame 735 (3d593e66) from <NT Password 1>'
@@ -36489,12 +36963,14 @@ class TestDissectDcerpcNetlogon:
                     ), encoding='utf-8', env=test_env)
                 assert count_output(stdout) == 0
 
-    def test_netlogon_session_key_buffers(self, cmd_tshark, capture_file, test_env):
+    def test_netlogon_session_key_buffers(self, cmd_tshark, capture_file, features, test_env):
         '''Port 50007 decrypts netr_CryptPassword and the OpaqueBuffer
         with the AES and STRONGKEY session keys of SchannelCover. A
         plaintext length that does not survive decryption is reported
         unusable, and the DES key has no cipher. One pass and two passes
         agree.'''
+        if not features.have_kerberos:
+            pytest.skip('Requires Kerberos.')
         cred = ('-o', 'uat:ntlmssp_creds:"NT Password","SchannelCover"')
         aes = 'session key learned in frame 763 (3d5cc643) from <NT Password 1>'
         md5 = 'session key learned in frame 775 (76464ee5) from <NT Password 1>'
@@ -53891,3 +54367,3965 @@ class TestDissectEsun:
                 '-Y', 'frame.number == 2', '-V', '-O', 'esun',
             ), encoding='utf-8', env=test_env)
         assert '    Flow Label: 48879 <Ignored (F=0)>' in stdout.splitlines()
+
+
+class TestDissectEtag:
+    def test_etag_protocols(self, cmd_tshark, capture_file, test_env):
+        '''Every frame has an E-Tag and none is malformed or has an
+        expert info, in one and two passes.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('etag_coverage.pcap.gz'),
+                '-Y', 'etag', '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=test_env)
+        assert count_output(stdout) == 15
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('etag_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_etag_fields(self, cmd_tshark, capture_file, test_env):
+        '''PCP, DEI, group, reserved bits and the CIDs of every frame,
+        and the nested E-Tag of frame 11.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('etag_coverage.pcap.gz'),
+                '-Tfields', '-eframe.number', '-eetag.pcp', '-eetag.dei',
+                '-eetag.group', '-eetag.resv', '-eetag.iecid_base',
+                '-eetag.ecid_base', '-eetag.iecid_ext', '-eetag.ecid_ext',
+                '-eetag.etype',
+            ), encoding='utf-8', env=test_env)
+        lines = [l.split('\t') for l in stdout.splitlines()]
+        assert len(lines) == 15
+        assert lines[0] == ['1', '0', '0', '0', '0', '0x0100', '0x0200', '0x00', '0x10', '0x0800']
+        assert lines[7] == ['8', '7', '1', '3', '0', '0x0107', '0x0207', '0x07', '0x17', '0x0800']
+        assert lines[8] == ['9', '7', '1', '3', '3', '0x0fff', '0x0fff', '0xff', '0xff', '0x0800']
+        assert lines[10] == ['11', '1,2', '0,0', '1,2', '0,0', '0x0005,0x0007',
+                             '0x0006,0x0008', '0x00,0x01', '0x00,0x01', '0x893f,0x0800']
+        assert lines[12][-1] == '0x1234'
+        assert lines[14][-1] == '0x88b5'
+
+    def test_etag_nested(self, cmd_tshark, capture_file, test_env):
+        '''The payload of a nested E-Tag (frame 11) is dissected down to UDP.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('etag_coverage.pcap.gz'),
+                '-Y', 'frame.number == 11 && udp.dstport == 9',
+                '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.split() == ['11']
+
+
+class TestDissectEtch:
+    ETCH_FRAMES = [4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28,
+                   33, 35, 38, 44, 46, 48, 52, 66, 68]
+
+    def test_etch_protocols(self, cmd_tshark, capture_file, test_env):
+        '''22 frames are decoded by Etch (found by the heuristic on port
+        4001 and 9999); none is malformed or has an error expert info, in
+        one and two passes, except frame 8, whose two undefined type codes
+        (0x8a, 0xa0) are reported as etch.unknown_type.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('etch_coverage.pcap.gz'),
+                '-Y', 'etch', '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=test_env)
+        assert [int(n) for n in stdout.split()] == self.ETCH_FRAMES
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('etch_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert.severity >= error',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert stdout.split() == ['8']
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('etch_coverage.pcap.gz'),
+                    '-Y', 'etch.unknown_type',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert stdout.split() == ['8']
+
+    def test_etch_struct_field_count(self, cmd_tshark, capture_file, test_env):
+        '''A struct whose field count is a BYTE, SHORT or INT (frames 10,
+        12, 14) has its fields decoded (they were skipped before the fix).'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('etch_coverage.pcap.gz'),
+                '-Y', 'frame.number in {4, 10, 12, 14, 22, 8}',
+                '-Tfields', '-eframe.number', '-eetch.keyvalue',
+            ), encoding='utf-8', env=test_env)
+        counts = {}
+        for line in stdout.splitlines():
+            num, _, kvs = line.partition('\t')
+            counts[int(num)] = len(kvs.split(',')) if kvs else 0
+        assert counts == {4: 2, 8: 19, 10: 2, 12: 2, 14: 2, 22: 0}
+
+    def test_etch_info_symbols(self, cmd_tshark, capture_file, test_env, tmp_path):
+        '''With a symbol folder the message hash is shown in the Info
+        column; the PDU count is per frame ("[2]", "[3]") and a frame
+        without a complete PDU shows no stale count.'''
+        (tmp_path / 'calc.ewh').write_text(
+            '11223344,Calc.add\n55667788,Calc.add_result\n'
+            '99aabbcc,Calc.notify\nshort\nzzzzzzzzzz,nothex\n')
+        (tmp_path / 'other.txt').write_text('11223344,Ignored\n')
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-o', 'etch.file:' + str(tmp_path),
+                    '-r', capture_file('etch_coverage.pcap.gz'),
+                    '-Y', 'etch', '-Tfields', '-eframe.number', '-e_ws.col.info',
+                ), encoding='utf-8', env=test_env)
+            info = {}
+            for line in stdout.splitlines():
+                num, _, text = line.partition('\t')
+                info[int(num)] = text.strip()
+            assert info[4] == 'Calc.add()'
+            assert info[6] == 'Calc.add_result()'
+            assert info[8] == 'Calc.notify()'
+            assert info[24] == ''
+            assert info[33] == '[2] Calc.add() Calc.add_result()'
+            assert info[35] == '[3] Calc.add() Calc.add_result() Calc.add()'
+            # a PDU completed by reassembly and a second PDU in one segment
+            assert info[48] == '[2] Calc.notify() Calc.add_result()'
+
+    def test_etch_reassembly(self, cmd_tshark, capture_file, test_env):
+        '''PDUs split over two or three segments, or with the header split
+        after 3 or 6 octets, are reassembled and decoded in the last
+        segment (frames 38, 44, 52); the short segments show no Etch.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('etch_coverage.pcap.gz'),
+                '-Y', 'frame.number in {37, 38, 40, 41, 43, 44, 50, 51, 52}',
+                '-Tfields', '-eframe.number', '-e_ws.col.protocol',
+                '-eetch.msglength', '-eetch.string',
+            ), encoding='utf-8', env=test_env)
+        rows = [l.split('\t') for l in stdout.splitlines()]
+        assert [(r[0], r[1]) for r in rows] == [
+            ('37', 'TCP'), ('38', 'ETCH'), ('40', 'TCP'), ('41', 'TCP'),
+            ('43', 'TCP'), ('44', 'ETCH'), ('50', 'TCP'), ('51', 'TCP'),
+            ('52', 'ETCH')]
+        for r in rows:
+            if r[1] == 'ETCH':
+                assert r[2] == '121,2,100'
+                assert r[3] == 'q' * 100
+
+    def test_etch_values(self, cmd_tshark, capture_file, test_env):
+        '''Scalars, floats and strings of the all-types message (frame 8)
+        and the string/bytes message (frame 16).'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('etch_coverage.pcap.gz'),
+                '-Y', 'frame.number == 8',
+                '-Tfields', '-eetch.byte', '-eetch.short', '-eetch.int',
+                '-eetch.long', '-eetch.float', '-eetch.double',
+            ), encoding='utf-8', env=test_env)
+        byte, short, int_, long_, flt, dbl = stdout.rstrip('\n').split('\t')
+        assert byte == '-7'
+        assert short == '-300'
+        assert '70000' in int_.split(',')
+        assert long_ == '-5000000000'
+        # Decimal separator depends on the locale
+        assert flt in ('1.5', '1,5')
+        assert dbl in ('-2.25', '-2,25')
+
+
+class TestDissectEth:
+    '''Ethernet (packet-eth.c) from the synthetic capture
+    eth_coverage.pcapng.gz: Ethernet II, 802.3/LLC, padding, trailers and
+    FCS on interfaces with an unknown, a 4 octet and a 0 octet FCS length,
+    ISL, encapsulated Ethernet (bridging, GRE, VXLAN, NSH, SLL, CHDLC,
+    sFlow, NFLOG), and the preferences that change the code that runs.
+    77 frames; frames 39-41 and 56-62 are reproducers of
+    "Ethernet: Fix FCS/padding handling and a stale tap stream index".'''
+
+    def _fields(self, cmd_tshark, capture_file, test_env, flt, fields, *opts):
+        args = [cmd_tshark, *opts, '-r', capture_file('eth_coverage.pcapng.gz'),
+                '-Y', flt, '-Tfields']
+        for f in fields:
+            args += ['-e', f]
+        out = subprocess.check_output(args, encoding='utf-8', env=test_env, timeout=120)
+        return [line.split('\t') for line in out.splitlines()]
+
+    def test_eth_frames(self, cmd_tshark, capture_file, test_env):
+        '''77 frames, none malformed and none with an error expert info, in
+        one and two passes; both passes give the same -V output.'''
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('eth_coverage.pcapng.gz'),
+                    '-Y', '_ws.malformed || _ws.expert.severity >= 0x00800000',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env, timeout=120)
+            assert count_output(stdout) == 0
+        outs = []
+        for passes in ((), ('-2',)):
+            outs.append(subprocess.check_output((cmd_tshark, *passes, '-V',
+                    '-r', capture_file('eth_coverage.pcapng.gz'),
+                ), encoding='utf-8', env=test_env, timeout=120))
+        assert outs[0] == outs[1]
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('eth_coverage.pcapng.gz'),
+                '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=test_env, timeout=120)
+        assert count_output(stdout) == 77
+
+    def test_eth_runt_fcs(self, cmd_tshark, capture_file, test_env):
+        '''Runt frames on an interface with a 4 octet FCS: the padding no
+        longer swallows the FCS (the trailer length wrapped around and the
+        frame was shown as truncated).'''
+        rows = self._fields(cmd_tshark, capture_file, test_env,
+                'frame.number in {39,40,41}',
+                ['frame.number', 'eth.fcs', 'eth.padding', '_ws.malformed'])
+        assert rows == [
+            ['39', '0x00112233', '00' * 22, ''],
+            ['40', '0xaa112233', '00' * 22, ''],
+            ['41', '0x00000000', '00' * 26, ''],
+        ]
+
+    def test_eth_padding_any_snap(self, cmd_tshark, capture_file, test_env):
+        '''A 60 octet frame captured as 40: with "padding any" the padding
+        is limited to the captured data.'''
+        rows = self._fields(cmd_tshark, capture_file, test_env,
+                'frame.number in {12,13,56}',
+                ['frame.number', 'eth.padding', 'eth.trailer', '_ws.malformed'],
+                '-o', 'eth.padding:any')
+        assert rows == [
+            ['12', 'deadbeef1122334455667788deadbeef112233445566', '', ''],
+            ['13', '00' * 12 + 'deadbeef112233445566', '', ''],
+            ['56', '00' * 6, '', ''],
+        ]
+
+    def test_eth_padding_trailers(self, cmd_tshark, capture_file, test_env):
+        '''Zero padding followed by a PRP trailer, undecoded trailers, a
+        guessed FCS on a frame over 64 octets, and the expert info when no
+        zero padding is found.'''
+        rows = self._fields(cmd_tshark, capture_file, test_env,
+                'frame.number in {10,11,12,13,15,16,19}',
+                ['frame.number', 'prp.trailer.version', 'eth.padding', 'eth.trailer',
+                 'eth.fcs', 'eth.padding_bad'])
+        assert rows[0][:3] == ['10', 'PRP-1', '00' * 16]
+        assert rows[1][:3] == ['11', 'PRP-0', '00' * 18]
+        assert rows[2][0] == '12' and rows[2][2] == ''
+        assert rows[2][3] == 'deadbeef1122334455667788deadbeef112233445566'
+        assert rows[3][:4] == ['13', '', '00' * 12, 'deadbeef112233445566']
+        assert rows[4][:5] == ['15', '', '', 'deadbeef', '0x9ab1dcae']
+        assert rows[5][:5] == ['16', '', '', '010203', '']
+        assert rows[6][:2] == ['19', 'PRP-1'] and rows[6][4] == '0x8970e1dc'
+
+    def test_eth_check_fcs(self, cmd_tshark, capture_file, test_env):
+        '''With "check_fcs" the FCS of Ethernet II, VLAN and 802.3 frames
+        validates (status Good = 1); the FCS of frame 38 is 0xfda44af5.'''
+        rows = self._fields(cmd_tshark, capture_file, test_env,
+                'frame.number in {15,38,42,44,45,47}',
+                ['frame.number', 'eth.fcs.status'], '-o', 'eth.check_fcs:TRUE')
+        assert rows == [[n, '1'] for n in ('15', '38', '42', '44', '45', '47')]
+
+    def test_eth_encapsulated(self, cmd_tshark, capture_file, test_env):
+        '''Ethernet in Ethernet (0x6558, 3 levels), GRE, IP protocol 143,
+        VXLAN, NSH, sFlow, SLL, CHDLC and NFLOG all reach the Ethernet
+        dissector; NFLOG calls the header-only variant.'''
+        rows = self._fields(cmd_tshark, capture_file, test_env,
+                'frame.number in {63,64,65,66,67,69,71,72,73,74,75,77}',
+                ['frame.number', 'eth.src'])
+        by = {int(r[0]): r[1] for r in rows}
+        assert by[64] == ('02:00:00:00:00:01,02:00:00:00:00:05,02:00:00:00:00:03')
+        assert by[63] == '02:00:00:00:00:01,02:00:00:00:00:03'
+        for n in (65, 66, 67, 69, 71, 72, 77):
+            assert by[n] == '02:00:00:00:00:01,02:00:00:00:00:03', n
+        assert by[73] == by[74] == '02:00:00:00:00:03'
+        assert by[75] == ''
+
+    def test_eth_802_3_isl_invalid(self, cmd_tshark, capture_file, test_env):
+        '''802.3 raw IPX (length 40), invalid length/type values with the
+        warning expert info, ISL carrying Ethernet with VLAN 100.'''
+        rows = self._fields(cmd_tshark, capture_file, test_env,
+                'frame.number in {24,27,28,29,30}',
+                ['frame.number', '_ws.col.protocol', 'eth.invalid_lentype', 'eth.len', 'isl.vlan_id'])
+        assert rows == [
+            ['24', 'IPX MSG', '', '40', ''],
+            ['27', 'Ethernet', '0x05ff', '', ''],
+            ['28', 'SPP', '', '', ''],
+            ['29', 'Ethernet', '0x05dd', '', ''],
+            ['30', 'IPv4', '', '', '100'],
+        ]
+
+    def test_eth_preferences(self, cmd_tshark, capture_file, test_env):
+        '''CCSDS Space Packet recognition, the duplicate destination MAC
+        of Cisco FEX and the TTEthernet constant field.'''
+        rows = self._fields(cmd_tshark, capture_file, test_env,
+                'frame.number in {26,76}', ['frame.number', '_ws.col.protocol'])
+        assert rows == [['26', 'SNA'], ['76', 'SNA']]
+        rows = self._fields(cmd_tshark, capture_file, test_env,
+                'frame.number in {26,76}', ['frame.number', '_ws.col.protocol'],
+                '-o', 'eth.ccsds_heuristic_length:TRUE')
+        assert rows == [['26', 'CCSDS SP'], ['76', 'CCSDS SP']]
+        rows = self._fields(cmd_tshark, capture_file, test_env,
+                'frame.number in {26,76}', ['frame.number', '_ws.col.protocol'],
+                '-o', 'eth.ccsds_heuristic_bit:TRUE')
+        assert rows == [['26', 'CCSDS SP'], ['76', 'SNA']]
+        rows = self._fields(cmd_tshark, capture_file, test_env,
+                'frame.number == 37', ['eth.src', 'eth.type', 'ip.proto'],
+                '-o', 'eth.deduplicate_dmac:TRUE')
+        assert rows == [['88:b5:00:00:00:01', '0x0800', '253']]
+        rows = self._fields(cmd_tshark, capture_file, test_env,
+                'frame.number == 32', ['_ws.col.protocol'],
+                '-o', 'tte.ct_mask_value:ffff0000', '-o', 'tte.ct_marker_value:0fff0000')
+        assert rows == [['TTE/0x88d7']]
+
+    def test_eth_stats(self, cmd_tshark, capture_file, test_env):
+        '''The Ethernet conversation table counts every Ethernet header, also
+        those that leave the dissector early (invalid length/type).'''
+        stdout = subprocess.check_output((cmd_tshark, '-q', '-z', 'conv,eth',
+                '-r', capture_file('eth_coverage.pcapng.gz'),
+            ), encoding='utf-8', env=test_env, timeout=120)
+        total = 0
+        for line in stdout.splitlines():
+            if '<->' in line:
+                total += int(line.split('<->')[1].split()[7])
+        assert total == 89   # 77 frames, 12 more Ethernet headers in encapsulations
+
+
+class TestDissectEtherip:
+    def test_etherip_protocols(self, cmd_tshark, capture_file, test_env):
+        '''All 11 frames carry EtherIP, none is malformed or has an
+        expert info other than the EtherIP ones, in one and two passes.'''
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('etherip_coverage.pcap.gz'),
+                    '-Y', 'etherip', '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 11
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('etherip_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || (_ws.expert && !etherip.ver.not3 && !etherip.reserved.not0)',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_etherip_fields(self, cmd_tshark, capture_file, test_env):
+        '''Version, reserved bits and the warnings for a version other
+        than 3 and for non-zero reserved bits; the inner protocol.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('etherip_coverage.pcap.gz'),
+                '-Tfields', '-eframe.number', '-eetherip.ver',
+                '-eetherip.reserved', '-e_ws.col.protocol',
+                '-e_ws.expert.message',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.splitlines() == [
+            '1\t3\t0x0000\tUDP\t',
+            '2\t3\t0x0000\tARP\t',
+            '3\t3\t0x0000\tUDP\t',
+            '4\t3\t0x0000\tUDP\t',
+            '5\t3\t0x0000\tUDP\t',
+            '6\t3\t0x0000\tARP\t',
+            '7\t2\t0x0000\tUDP\tVersion must be 3',
+            '8\t15\t0x0000\tARP\tVersion must be 3',
+            '9\t3\t0x0001\tUDP\tReserved field must be 0',
+            '10\t3\t0x0fff\tARP\tReserved field must be 0',
+            '11\t1\t0x0800\tUDP\tVersion must be 3,Reserved field must be 0',
+        ]
+
+
+class TestDissectEthertype:
+    def test_ethertype_protocols(self, cmd_tshark, capture_file, test_env):
+        '''Frame protocol stacks: the ethertype dispatcher calls the
+        subdissector, or Data for unknown ethertypes; none of the 23
+        frames is malformed or has an error, in one and two passes, and
+        only frame 23 (nesting limit) has a warning.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ethertype_coverage.pcapng.gz'),
+                '-Tfields', '-eframe.number', '-eframe.protocols',
+            ), encoding='utf-8', env=test_env)
+        frames = [l.split('\t') for l in stdout.splitlines()]
+        assert len(frames) == 23
+        assert frames[0][1] == 'eth:ethertype:ip:udp:discard'
+        assert frames[2][1] == 'eth:ethertype:arp'
+        assert frames[3][1] == 'eth:ethertype:ipv6:data'
+        assert frames[5][1] == 'eth:ethertype:data'
+        assert frames[8][1] == 'eth'
+        assert frames[13][1] == 'eth:ethertype:vlan:ethertype:ip:udp:discard'
+        assert frames[21][1] == 'eth:ethertype:eth:ethertype:ip:udp:discard'
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('ethertype_coverage.pcapng.gz'),
+                    '-Y', '_ws.malformed || _ws.expert.severity >= 0x600000',
+                    '-Tfields', '-eframe.number', '-e_ws.expert.message',
+                ), encoding='utf-8', env=test_env)
+            assert stdout.splitlines() == [
+                '23\tEthertype encapsulation nested too deeply']
+
+    def test_ethertype_unknown(self, cmd_tshark, capture_file, test_env):
+        '''Unknown ethertypes show the ethertype in the Protocol column
+        and the Data length; a known name goes in the Info column.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ethertype_coverage.pcapng.gz'),
+                '-Y', 'frame.number in {6,7,8,10,11,12,13}',
+                '-Tfields', '-eframe.number', '-e_ws.col.protocol',
+                '-e_ws.col.info', '-edata.len',
+            ), encoding='utf-8', env=test_env)
+        assert [l.split('\t') for l in stdout.splitlines()] == [
+            ['6', '0x1234', 'Ethernet II', '25'],
+            ['7', '0xc0de', 'eXpressive Internet Protocol', '11'],
+            ['8', '0x88b5', 'Local Experimental Ethertype 1', '20'],
+            ['10', '0xfff2', 'Cisco ACI ARP gleaning', ''],
+            ['11', '0xfff2', 'Cisco ACI ARP gleaning', '3'],
+            ['12', '0xfff2', 'Cisco ACI ARP gleaning', ''],
+            ['13', '0xfff2', 'Cisco ACI ARP gleaning', ''],
+        ]
+
+    def test_ethertype_aci_gleaning(self, cmd_tshark, capture_file, test_env):
+        '''Cisco ACI gleaning dissects the payload as IPv4, IPv6 or ARP
+        according to the first nibble.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ethertype_coverage.pcapng.gz'),
+                '-Y', 'frame.number in {10,11,12}',
+                '-Tfields', '-eframe.number', '-eframe.protocols',
+            ), encoding='utf-8', env=test_env)
+        assert [l.split('\t') for l in stdout.splitlines()] == [
+            ['10', 'eth:ethertype:ip:udp:discard'],
+            ['11', 'eth:ethertype:ipv6:data'],
+            ['12', 'eth:ethertype:arp'],
+        ]
+
+    def test_ethertype_trailer_fcs(self, cmd_tshark, capture_file, test_env):
+        '''Padding and trailers after the payload are in the Ethernet
+        (or VLAN) trailer; on an interface with a 4 octet FCS the FCS is
+        removed from the payload first and checked.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ethertype_coverage.pcapng.gz'),
+                '-Tfields', '-eframe.number', '-eeth.trailer',
+                '-evlan.trailer', '-eeth.fcs.status',
+            ), encoding='utf-8', env=test_env)
+        frames = {l.split('\t')[0]: l.split('\t')[1:] for l in stdout.splitlines()}
+        assert frames['1'] == ['', '', '']
+        assert frames['2'] == ['00000000000000000000', '', '']
+        assert frames['4'] == ['deadbeef', '', '']
+        assert frames['5'] == ['', '', '']   # trailer cut off by the snaplen
+        assert frames['14'] == ['', '00000000000000000000', '']
+        assert frames['16'] == ['', '', '2']
+        assert frames['18'] == ['747261696c657221', '', '2']
+        assert frames['19'] == ['', '', '2']
+
+    def test_ethertype_nesting_limit(self, cmd_tshark, capture_file, test_env):
+        '''300 nested Ethernet headers (frame 23) stop at the nesting
+        limit with ethertype.nesting_too_deep instead of failing the
+        layer assertion, and are not marked malformed.'''
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('ethertype_coverage.pcapng.gz'),
+                    '-Y', 'ethertype.nesting_too_deep && !_ws.malformed',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert stdout.split() == ['23']
+
+
+class TestDissectSmb:
+    @staticmethod
+    def smb_fields(cmd_tshark, capture_file, test_env, display_filter, *fields, passes=()):
+        '''Run tshark on the SMB coverage capture and return the tab
+        separated -T fields rows (one list per matching frame).'''
+        args = [cmd_tshark, *passes, '-r', capture_file('smb_coverage.pcap.gz'),
+                '-Y', display_filter, '-Tfields', '-eframe.number']
+        for f in fields:
+            args += ['-e', f]
+        stdout = subprocess.check_output(args, encoding='utf-8', env=test_env)
+        return [line.split('\t') for line in stdout.splitlines()]
+
+    def test_smb_protocols(self, cmd_tshark, capture_file, test_env):
+        '''The synthetic capture holds 1034 frames, 999 of them SMB, over
+        TCP 445 and 139, TPKT/COTP, IPX and NetBIOS datagrams.  None is
+        malformed or has an error expert info, in one and two passes.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('smb_coverage.pcap.gz'),
+                '-Tfields', '-eframe.number', '-Y', 'smb',
+            ), encoding='utf-8', env=test_env)
+        assert count_output(stdout) == 999
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('smb_coverage.pcap.gz'),
+                '-Tfields', '-e_ws.col.protocol',
+            ), encoding='utf-8', env=test_env)
+        protocols = stdout.splitlines()
+        assert len(protocols) == 1034
+        assert protocols.count('SMB') == 967
+        assert protocols.count('SMB Pipe') == 17
+        assert protocols.count('NBSS') == 5
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('smb_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert.severity == error',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_smb_commands_and_transactions(self, cmd_tshark, capture_file, test_env):
+        '''Core commands, AndX commands, Transaction, Transaction2 and NT
+        Transact (with their sub-commands and information levels) are all
+        present.'''
+        def count(flt):
+            return len(self.smb_fields(cmd_tshark, capture_file, test_env, flt))
+        assert count('smb.cmd == 0x32') == 486
+        assert count('smb.cmd == 0x25') == 38
+        assert count('smb.cmd == 0xa0') == 56
+        assert count('smb.qpi_loi') == 190
+        assert count('smb.ff2_loi') == 45
+        assert count('smb.qfsi_loi') == 59
+        assert count('smb.spi_loi') == 66
+        assert count('nt.sec_desc.revision') == 11
+        # Every command of the core protocol is seen in a request
+        cmds = set()
+        for row in self.smb_fields(cmd_tshark, capture_file, test_env, 'smb.cmd && !(smb.flags.response == 1)', 'smb.cmd'):
+            cmds.update(int(c, 16) for c in row[1].split(','))
+        for c in (0x00, 0x04, 0x0a, 0x0b, 0x24, 0x2b, 0x2d, 0x2e, 0x2f, 0x32, 0x33, 0x70, 0x72, 0x73, 0x75, 0x81, 0xa0, 0xa2, 0xc0, 0xd0):
+            assert c in cmds
+
+    def test_smb_nt_create_andx_extended(self, cmd_tshark, capture_file, test_env):
+        '''The NT Create AndX response with 42 words used to reset the
+        offset to 0, so the byte count was read from the SMB marker; with
+        an AndX chain it was malformed.'''
+        for passes in ((), ('-2',)):
+            rows = self.smb_fields(cmd_tshark, capture_file, test_env, 'frame.number == 941 || frame.number == 943',
+                              'smb.fid', 'smb.bcc', 'smb.cmd', passes=passes)
+            assert rows == [['941', '0x4a01', '0', '0xa2,0xff'],
+                            ['943', '0x4a02', '0,0', '0xa2,0x04']]
+
+    def test_smb_two_pass_transaction_matching(self, cmd_tshark, capture_file, test_env):
+        '''A Trans2 request with an interim response and a secondary request
+        keeps its matches in later passes: the secondary is a continuation
+        of the request, the final response has its request and sub-command.'''
+        for passes in ((), ('-2',)):
+            rows = self.smb_fields(cmd_tshark, capture_file, test_env, 'frame.number == 946 || frame.number == 947',
+                              'smb.continuation_of', 'smb.response_to', 'smb.trans2.cmd', passes=passes)
+            assert rows == [['946', '944', '', ''], ['947', '', '944', '0x0003']]
+
+    def test_smb_multi_command_info(self, cmd_tshark, capture_file, test_env):
+        '''Two Trans2 SMBs in one segment: the Info column is the same in
+        every pass (the "Data: x of y" suffix depended on the pass).'''
+        infos = []
+        for passes in ((), ('-2',)):
+            rows = self.smb_fields(cmd_tshark, capture_file, test_env, 'frame.number == 948',
+                              '_ws.col.info', passes=passes)
+            infos.append(rows[0][1])
+        assert infos[0] == infos[1]
+        assert infos[0].startswith('Trans2 Request; SET_FILE_INFO, Data: 10 of 100, FID: 0x1234')
+        assert infos[0].endswith('; QUERY_FS_INFO, Query FS Size Info')
+
+    def test_smb_tid_tracking(self, cmd_tshark, capture_file, test_env):
+        '''An unmapped TID shows no tree path (it used to take the nearest
+        lower TID) and a re-used TID keeps the share of the time of the
+        frame.'''
+        for passes in ((), ('-2',)):
+            rows = self.smb_fields(cmd_tshark, capture_file, test_env, 'frame.number == 930 || frame.number == 932 || frame.number == 936',
+                              'smb.tid', 'smb.path', passes=passes)
+            # tshark escapes the backslashes in -Tfields output
+            assert rows == [['930', '2053', ''],
+                            ['932', '2048', r'\\\\SRV\\SHAREA'],
+                            ['936', '2048', r'\\\\SRV\\SHAREB']]
+
+    def test_smb_small_fixes(self, cmd_tshark, capture_file, test_env):
+        '''The Requested Dialects tree covers the dialects, the Find Close
+        Data Length is little endian and the Mac Query FS Info Backup Time
+        advances the offset.'''
+        import re
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('smb_coverage.pcap.gz'),
+                '-Y', 'frame.number == 4', '-Tpdml',
+            ), encoding='utf-8', env=test_env)
+        m = re.search(r'<field name="smb.bcc" showname="Byte Count \(BCC\): (\d+)".*?'
+                      r'<field name="" show="Requested Dialects" size="(\d+)"', stdout, re.S)
+        assert m and m.group(1) == m.group(2) != '0'
+        rows = self.smb_fields(cmd_tshark, capture_file, test_env, 'frame.number == 75', 'smb.data_len')
+        assert rows == [['75', '1']]
+        rows = self.smb_fields(cmd_tshark, capture_file, test_env, 'frame.number == 950',
+                          'smb.backup.time', 'smb.alloc.count', 'smb.alloc.size',
+                          'smb.free_block.count', 'smb.root.file.count', 'smb.root.dir.count')
+        assert len(rows) == 1 and rows[0][2:] == ['286331153', '572662306', '858993459', '68', '85']
+        assert rows[0][1] != ''
+
+    def test_smb_pipes_dcerpc(self, cmd_tshark, capture_file, test_env):
+        '''DCE/RPC binds and acknowledgements over a pipe are found in Write
+        AndX, Read AndX, Write, Read and TransactNmPipe, and the Read
+        response knows the FID of its request.'''
+        for passes, ack in (((), 5), (('-2',), 6)):
+            rows = self.smb_fields(cmd_tshark, capture_file, test_env, 'dcerpc.pkt_type == 11', passes=passes)
+            assert len(rows) == 5
+            rows = self.smb_fields(cmd_tshark, capture_file, test_env, 'dcerpc.pkt_type == 12', passes=passes)
+            assert len(rows) == ack     # the reassembled one is shown in pass 2 only
+        for flt in ('dcerpc.pkt_type == 12 && smb.cmd == 0x0a', 'dcerpc.pkt_type == 12 && smb.cmd == 0x2e',
+                    'dcerpc.pkt_type == 11 && smb.cmd == 0x0b', 'dcerpc.pkt_type == 11 && smb.cmd == 0x2f'):
+            for passes in ((), ('-2',)):
+                assert len(self.smb_fields(cmd_tshark, capture_file, test_env, flt, passes=passes)) == 1
+
+    def test_smb_dfs_referral(self, cmd_tshark, capture_file, test_env):
+        '''DFS referrals of versions 1 to 4 including name list referrals.'''
+        rows = self.smb_fields(cmd_tshark, capture_file, test_env, 'smb.dfs.referral.node',
+                          'smb.dfs.referral.node')
+        assert len(rows) == 3
+        assert rows[2][1] == 'node'
+
+    def test_smb_trans_reassembly(self, cmd_tshark, capture_file, test_env):
+        '''Multi-part Transaction2, Transaction and NT Transact responses
+        are reassembled; the reassembly is shown in the first part in
+        later passes.'''
+        assert len(self.smb_fields(cmd_tshark, capture_file, test_env, 'smb.reassembled_in')) == 4
+        assert len(self.smb_fields(cmd_tshark, capture_file, test_env, 'smb.reassembled_in', passes=('-2',))) == 6
+        rows = self.smb_fields(cmd_tshark, capture_file, test_env, 'frame.number == 669', '_ws.col.info',
+                          passes=('-2',))
+        assert rows[0][1].endswith('Fragment data 42-91')
+
+    def test_smb_other_transports(self, cmd_tshark, capture_file, test_env):
+        '''SMB over IPX sockets, TPKT/COTP and NetBIOS datagrams.'''
+        rows = self.smb_fields(cmd_tshark, capture_file, test_env, 'ipx && smb', 'ipx.dst.socket')
+        assert [r[1] for r in rows] == ['0x0550', '0x0552', '0x0554']
+        assert len(self.smb_fields(cmd_tshark, capture_file, test_env, 'cotp && smb')) == 2
+        rows = self.smb_fields(cmd_tshark, capture_file, test_env, 'nbdgm && smb && browser', 'browser.command')
+        assert rows == [['1034', '0x01']]
+
+    def test_smb_export_objects(self, cmd_tshark, capture_file, test_env, tmp_path):
+        '''Chunks written and read out of order, overlapping, empty and
+        beyond the file length build the exported files; offsets that do
+        not fit in memory give empty files.'''
+        export_dir = tmp_path / 'export'
+        export_dir.mkdir()
+        subprocess.check_call((cmd_tshark,
+                '-r', capture_file('smb_coverage.pcap.gz'),
+                '-q', '--export-objects', f'smb,{export_dir}',
+            ), env=test_env)
+        files = {p.name: p.read_bytes() for p in export_dir.iterdir()}
+        assert files['%5cexport%5cbig.bin'] == b'J' * 1600
+        mid = files['%5cexport%5cmid.bin']
+        assert len(mid) == 700
+        assert mid[:100] == b'a' * 100 and mid[150:550] == b'e' * 400 and mid[600:] == b'd' * 100
+        assert files['%5cexport%5chuge.bin'] == b''
+        assert files['%5cexport%5cwrap.bin'] == b''
+        # a directory is listed but has no content
+        assert files['%5cexport%5cdir'] == b''
+
+
+class TestDissectEti:
+    @staticmethod
+    def eti_fields(cmd_tshark, capture_file, test_env, *args, passes=()):
+        stdout = subprocess.check_output((cmd_tshark, *passes,
+                '-r', capture_file('eti_coverage.pcap.gz'),
+                '-Tfields', *args,
+            ), encoding='utf-8', env=test_env)
+        return stdout.splitlines()
+
+    def test_eti_protocols(self, cmd_tshark, capture_file, test_env):
+        '''Four TCP flows (ports 19006, 19043, 19506, 19543) carry ETI
+        messages of every template, none is malformed or has a warning or
+        error expert info (counter overflow, bad length, missing or
+        overused values), in one and two passes.'''
+        lines = self.eti_fields(cmd_tshark, capture_file, test_env, '-e_ws.col.protocol')
+        assert len(lines) == 63
+        assert lines.count('ETI') == 43
+        assert lines.count('TCP') == 20
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('eti_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert.severity > 4194304 || '
+                          'eti.counter_overflow || eti.invalid_template || eti.invalid_length || '
+                          'eti.unaligned || eti.missing || eti.overused',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_eti_templates(self, cmd_tshark, capture_file, test_env):
+        '''280 messages, one or more for each of the 143 allocated
+        templates, several per TCP segment.'''
+        lines = self.eti_fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'eti', '-eeti.templateid')
+        ids = [i for l in lines for i in l.split(',')]
+        assert len(ids) == 280
+        assert len(set(ids)) == 143
+        assert min(int(i) for i in ids) == 10000
+        assert max(int(i) for i in ids) < 10720
+
+    def test_eti_messages(self, cmd_tshark, capture_file, test_env):
+        '''Frame 4 holds twelve messages; the first are ModifyOrderNRResponse
+        style header-only layouts with the body length in the first field.'''
+        lines = self.eti_fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number == 4', '-eeti.bodylen', '-eeti.templateid',
+                '-e_ws.col.info')
+        assert lines == ['280,48,32,32,32,40,56,40,32,248,344,184\t'
+                         '10000,10008,10012,10024,10028,10032,10036,10040,10044,10100,10104,10108\t'
+                         'ModifyOrderNRResponse']
+
+    def test_eti_fixed_point_int64(self, cmd_tshark, capture_file, test_env):
+        '''Fixed point fields registered as FT_UINT64 (NettingCoefficient,
+        TradeToQuoteRatio, TradeToRequestRatio) are FT_INT64 now: large
+        values decode without an exception.'''
+        lines = self.eti_fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'eti.nettingcoefficient', '-eframe.number', '-eeti.nettingcoefficient')
+        values = dict(l.split('\t') for l in lines)
+        assert values['5'] == '740740734'
+        assert values['26'] == '2345678991,3333333303'
+        assert values['22'] == '-9223372036854775808'     # NO_VALUE
+
+    def test_eti_reassembly(self, cmd_tshark, capture_file, test_env):
+        '''Messages longer than a TCP segment are reassembled.'''
+        lines = self.eti_fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'tcp.segments', '-eframe.number')
+        assert len(lines) > 0
+
+
+class TestDissectEtsiCardAppToolkit:
+    @staticmethod
+    def cat_fields(cmd_tshark, capture_file, test_env, *args, passes=()):
+        stdout = subprocess.check_output((cmd_tshark, *passes,
+                '-r', capture_file('etsi_card_app_toolkit_coverage.pcap.gz'),
+                '-Tfields', *args,
+            ), encoding='utf-8', env=test_env)
+        return stdout.splitlines()
+
+    def test_etsi_cat_protocols(self, cmd_tshark, capture_file, test_env):
+        '''All frames are GSMTAP SIM APDUs (GSM SIM, GSM SMS for the SMS
+        TPDUs) and none is malformed or has an expert info, in one and two
+        passes.'''
+        lines = self.cat_fields(cmd_tshark, capture_file, test_env, '-e_ws.col.protocol')
+        assert len(lines) == 188
+        assert lines.count('GSM SIM') == 185
+        assert lines.count('GSM SMS') == 3
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('etsi_card_app_toolkit_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_etsi_cat_info(self, cmd_tshark, capture_file, test_env):
+        '''The Info column names the APDU, the proactive command and the
+        events.'''
+        lines = self.cat_fields(cmd_tshark, capture_file, test_env, '-eframe.number', '-e_ws.col.info')
+        info = {int(l.split('\t')[0]): ' '.join(l.split('\t')[1].split()) for l in lines}
+        assert info[1] == 'ETSI TS 102.221 FETCH Proactive Command DISPLAY TEXT'
+        assert info[10] == 'ETSI TS 102.221 FETCH Proactive Command DISPLAY TEXT'
+        assert info[11] == 'ETSI TS 102.221 FETCH Proactive Command SELECT ITEM'
+        assert info[15] == 'ETSI TS 102.221 FETCH Proactive Command SEND SHORT MESSAGE'
+        assert info[160] == 'ETSI TS 102.221 TERMINAL RESPONSE PROVIDE LOCAL INFORMATION'
+        assert info[180] == 'ETSI TS 102.221 ENVELOPE GSM/3GPP/3GPP2 - SMS-PP Download'
+        assert info[182] == 'ETSI TS 102.221 ENVELOPE Event Download IMS Registration'
+
+    def test_etsi_cat_nmr_two_passes(self, cmd_tshark, capture_file, test_env):
+        '''The measurement qualifier E-UTRAN in a terminal response (frame
+        165) does not change how its network measurement results are
+        decoded: GERAN in both passes. Before the fix the first pass decoded
+        them as GERAN and later passes as an LTE MeasurementReport.'''
+        for passes in ((), ('-2',)):
+            lines = self.cat_fields(cmd_tshark, capture_file, test_env,
+                    '-eframe.number', '-e_ws.col.info', passes=passes)
+            info = {int(l.split('\t')[0]): l.split('\t')[1] for l in lines}
+            assert 'MeasurementReport' not in info[163]
+            assert 'MeasurementReport' not in info[165]
+            # UTRAN and E-UTRAN transactions still decode the results as RRC
+            assert 'MeasurementReport' in info[167]
+            assert 'MeasurementReport' in info[169]
+
+    def test_etsi_cat_plmn_list(self, cmd_tshark, capture_file, test_env):
+        '''Every PLMN of a PLMN list is read from its own offset.'''
+        lines = self.cat_fields(cmd_tshark, capture_file, test_env,
+                '-eframe.number', '-ee212.mcc', '-ee212.mnc')
+        info = {l.split('\t')[0]: l.split('\t')[1:] for l in lines}
+        assert info['100'] == ['262,310,001', '01,410,01']
+        assert info['105'] == ['262,310,208', '01,410,01']
+
+    def test_etsi_cat_utran_bearer(self, cmd_tshark, capture_file, test_env):
+        '''The UTRAN bearer description shows the PDP type (octet 18, not
+        the traffic class) and labels the uplink guaranteed bit rate UL.'''
+        lines = self.cat_fields(cmd_tshark, capture_file, test_env,
+                '-eframe.number', '-eetsi_cat.comp_tlv.bearer.utran.pdp_type',
+                '-eetsi_cat.comp_tlv.bearer.utran.traffic_class',
+                '-Y', 'frame.number == 45')
+        assert lines == ['45\t2\t3']
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('etsi_card_app_toolkit_coverage.pcap.gz'),
+                '-Y', 'frame.number == 45', '-V', '-O', 'etsi_cat',
+            ), encoding='utf-8', env=test_env)
+        assert 'Guaranteed Bitrate UL: 768' in stdout
+        assert 'Guaranteed Bitrate DL: 1025' in stdout
+
+    def test_etsi_cat_empty_address(self, cmd_tshark, capture_file, test_env):
+        '''Address and broadcast network information TLVs of length 0 no
+        longer swallow the device identity that follows (frame 103).'''
+        lines = self.cat_fields(cmd_tshark, capture_file, test_env,
+                '-eframe.number', '-eetsi_cat.comp_tlv.src_dev',
+                '-eetsi_cat.comp_tlv.dst_dev', '-Y', 'frame.number == 103')
+        assert lines == ['103\t0x81\t0x83']
+
+
+class TestDissectEtv:
+    @staticmethod
+    def etv_fields(cmd_tshark, capture_file, test_env, name, *fields, passes=()):
+        stdout = subprocess.check_output((cmd_tshark, *passes,
+                '-r', capture_file(name), '-Tfields', *fields,
+            ), encoding='utf-8', env=test_env)
+        return stdout.splitlines()
+
+    def test_etv_protocols(self, cmd_tshark, capture_file, test_env):
+        '''Every frame is DSM-CC (the last dissector called by ETV)
+        except the first fragment of a section split over two frames;
+        none is malformed or has an expert info, in one and two passes.'''
+        lines = self.etv_fields(cmd_tshark, capture_file, test_env,
+                'etv_coverage.pcap.gz', '-e_ws.col.protocol')
+        assert len(lines) == 14
+        assert lines.count('DSM-CC') == 13
+        assert lines[8] == 'MPEG TS'
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('etv_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_etv_filter_info(self, cmd_tshark, capture_file, test_env):
+        '''DII sections carry filter info 0xfbfb, DDB sections a value in
+        0x0001-0xfbef; both appear in the same frame 11.'''
+        lines = self.etv_fields(cmd_tshark, capture_file, test_env,
+                'etv_coverage.pcap.gz', '-eframe.number',
+                '-eetv-dii.filter_info', '-eetv-ddb.filter_info')
+        assert lines == [
+            '1\t0xfbfb\t', '2\t0xfbfb\t', '3\t0xfbfb\t', '4\t0xfbfb\t',
+            '5\t\t0x0001', '6\t\t0xfbef', '7\t\t0x1234', '8\t\t0x0002',
+            '9\t\t', '10\t\t0x0003', '11\t0xfbfb\t0x0009',
+            '12\t\t0x0004', '13\t\t0x0005', '14\t\t0x0006',
+        ]
+
+    def test_etv_info(self, cmd_tshark, capture_file, test_env):
+        '''The Info column holds the section length and the filter info,
+        including for sections reassembled over several TS packets or
+        frames (8, 10, 12).'''
+        lines = self.etv_fields(cmd_tshark, capture_file, test_env,
+                'etv_coverage.pcap.gz', '-eframe.number', '-e_ws.col.info')
+        infos = [' '.join(l.split('\t', 1)[1].split()) for l in lines]
+        assert infos[0].endswith('ETV DII, Length: 69, Filter: 0xfbfb')
+        assert infos[7].endswith('ETV DDB, Length: 637, Filter: 0x2')
+        assert infos[9] == 'ETV DDB, Length: 417, Filter: 0x3'
+        assert infos[10].endswith('ETV DII, Length: 69, Filter: 0xfbfb ETV DDB, Length: 40, Filter: 0x9')
+        assert infos[11].endswith('ETV DDB, Length: 1016, Filter: 0x4')
+
+    def test_etv_dsmcc_payload(self, cmd_tshark, capture_file, test_env):
+        '''The part after the filter info goes to DSM-CC: the DII modules
+        and the DDB block.'''
+        lines = self.etv_fields(cmd_tshark, capture_file, test_env,
+                'etv_coverage.pcap.gz', '-eframe.number',
+                '-empeg_dsmcc.dii.module_count', '-empeg_dsmcc.ddb.block_num')
+        assert lines[0] == '1\t1\t'
+        assert lines[1] == '2\t3\t'
+        assert lines[3] == '4\t0\t'
+        assert lines[4] == '5\t\t0x0000'
+
+    def test_etv_short_section(self, cmd_tshark, capture_file, test_env):
+        '''A section_length below 7 (the fixed header) gets an expert info
+        and stops. Before the fix section_length - 7 wrapped around and
+        DSM-CC reported the section as malformed.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('etv_short_section.pcap.gz'),
+                '-Tfields', '-eframe.number', '-e_ws.col.protocol',
+                '-e_ws.expert.message',
+            ), encoding='utf-8', env=test_env)
+        lines = stdout.splitlines()
+        assert len(lines) == 6
+        for i, line in enumerate(lines):
+            assert line == '%d\tETV-%s\tInvalid section_length (must be at least 7)' % (
+                i + 1, 'DII' if i % 2 == 0 else 'DDB')
+        stdout = subprocess.check_output((cmd_tshark, '-2',
+                '-r', capture_file('etv_short_section.pcap.gz'),
+                '-Y', '_ws.malformed && !etv-dii.section_length_short && !etv-ddb.section_length_short',
+                '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=test_env)
+        assert count_output(stdout) == 0
+
+
+class TestDissectEtw:
+    @staticmethod
+    def _frames(cmd_tshark, capture_file, test_env, dfilter, *args):
+        stdout = subprocess.check_output((cmd_tshark, *args,
+                '-r', capture_file('etw_coverage.pcapng.gz'),
+                '-Y', dfilter, '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=test_env)
+        return [int(n) for n in stdout.split()]
+
+    def test_etw_no_malformed(self, cmd_tshark, capture_file, test_env):
+        '''37 records, none malformed or with an expert info, in one and
+        two passes (the ERF record of the reproducer is frame 36).'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('etw_coverage.pcapng.gz'),
+                '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=test_env)
+        assert len(stdout.split()) == 37
+        for passes in ((), ('-2',)):
+            assert self._frames(cmd_tshark, capture_file, test_env,
+                    '_ws.malformed || _ws.expert', *passes) == []
+        assert self._frames(cmd_tshark, capture_file, test_env, 'etw.size') == \
+            [n for n in range(1, 38) if n != 36]
+
+    def test_etw_event_types(self, cmd_tshark, capture_file, test_env):
+        '''Manifest, WPP, classic and TraceLogging events, the provider
+        name from the TLV, extended data types, properties and the
+        addresses and session id TLVs.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('etw_coverage.pcapng.gz'),
+                '-Y', 'frame.number <= 8', '-Tfields', '-eframe.number',
+                '-eetw.type', '-e_ws.col.Protocol', '-eetw.edata.exttype',
+                '-eetw.prop.key', '-eetw.prop.value', '-eetw.sessid',
+                '-e_ws.col.Source', '-e_ws.col.Destination',
+            ), encoding='utf-8', env=test_env)
+        rows = [l.split('\t') for l in stdout.splitlines()]
+        assert rows[0] == ['1', 'Manifest-based', 'Contoso-Demo-Provider', '',
+                           'path,error', 'C:\\\\temp\\\\a.txt,ACCESS_DENIED', '',
+                           'windows', 'windows']
+        assert rows[1][1:5] == ['WPP', 'Packet', '1', '']
+        assert rows[2][1] == 'MOF (classic)'
+        assert rows[3][1:4] == ['TraceLogging', 'MyCompany.MyProvider', '11,2,6,12,16']
+        assert rows[4][3] == '12,12'
+        assert rows[5][3] == '1'
+        assert rows[6][5:] == ['7', '4294967303', '192.0.2.1:49152', '192.0.2.2:445']
+        assert rows[6][2] == 'Net-Provider'
+
+    def test_etw_message_formatting(self, cmd_tshark, capture_file, test_env):
+        '''%N is replaced by property N (also %N!S!), other percent
+        sequences stay. The formatted message is capped at 64 KiB: once
+        the next substitution would exceed it, the rest is appended
+        unformatted. Frame 11 is the reproducer of "ETW: Bound the
+        formatted message size" (a 64 KiB value and 48000 substitutions
+        used to need 4.7 GB).'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('etw_coverage.pcapng.gz'),
+                '-Y', 'etw.message_formatted', '-Tfields', '-eframe.number',
+                '-eetw.message_formatted',
+            ), encoding='utf-8', env=test_env)
+        rows = {int(l.split('\t')[0]): l.split('\t')[1] for l in stdout.splitlines()}
+        assert rows[1] == 'File C:\\\\temp\\\\a.txt failed with error ACCESS_DENIED (%0, %99, %123, %, 100%)'
+        assert rows[7] == 'Connection 7 opened'
+        assert len(rows[9]) == 60100 and rows[9].endswith('y' * 100)
+        assert len(rows[10]) == 60024            # three substitutions, then the rest as is
+        assert rows[10].endswith('A %1 %1 %1 %1 %1 %1 %1 ')
+        assert rows[11] == '%1' * 48000          # the first substitution would exceed the limit
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('etw_coverage.pcapng.gz'),
+                '-Y', 'frame.number == 3', '-Tfields', '-e_ws.col.Info',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.strip() == 'classic event %1 without properties'
+
+    def test_etw_providers(self, cmd_tshark, capture_file, test_env):
+        '''The providers with a handler pass their user data on to MBIM,
+        SMB, HTTP, LDAP and Bluetooth; anything else with the same GUID
+        is plain ETW. MBIM frames get host/device addresses from the
+        pcapng packet direction.'''
+        def frames(f):
+            return self._frames(cmd_tshark, capture_file, test_env, f)
+        assert frames('mbim') == [12, 13, 14, 15, 37]
+        assert frames('smb2') == [16, 17]
+        assert frames('http.request') == [19, 20, 24, 25]
+        assert frames('http.response') == [21, 22, 26, 27]
+        assert frames('ldap') == [29, 30]
+        assert frames('bthci_cmd') == [32]
+        assert frames('bthci_evt') == [33]
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('etw_coverage.pcapng.gz'),
+                '-Y', 'frame.number >= 12 && frame.number <= 15',
+                '-Tfields', '-e_ws.col.Source', '-e_ws.col.Destination',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.splitlines() == ['device\thost', 'host\tdevice',
+                                       'windows\twindows', 'windows\twindows']
+        # an MBIM event after an ERF record with extension headers: the
+        # ERF pseudo header is not passed on to the MBIM dissector
+        assert frames('frame.number == 37 && mbim') == [37]
+
+
+class TestDissectEvrc:
+    @staticmethod
+    def _run(cmd_tshark, capture_file, test_env, *args):
+        # The legacy format (payload type 60) needs the preference
+        return subprocess.check_output((cmd_tshark,
+                '-o', 'evrc.legacy_pt_60:TRUE', *args,
+                '-r', capture_file('evrc_coverage.pcap.gz'),
+            ), encoding='utf-8', env=test_env)
+
+    def test_evrc_protocols(self, cmd_tshark, capture_file, test_env):
+        '''Two SIP/SDP packets that set up the streams, then 100 EVRC
+        packets (92 without the legacy preference, the rest are RTP);
+        none is malformed or has an expert info, in one and two passes.'''
+        stdout = self._run(cmd_tshark, capture_file, test_env,
+                '-Tfields', '-e_ws.col.protocol')
+        protocols = stdout.split()
+        assert len(protocols) == 102
+        assert protocols.count('SIP/SDP') == 2
+        assert protocols.count('EVRC') == 100
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('evrc_coverage.pcap.gz'),
+                '-Tfields', '-e_ws.col.protocol',
+            ), encoding='utf-8', env=test_env)
+        protocols = stdout.split()
+        assert protocols.count('EVRC') == 92
+        assert protocols.count('RTP') == 8
+        for passes in ((), ('-2',)):
+            stdout = self._run(cmd_tshark, capture_file, test_env, *passes,
+                    '-Y', '_ws.malformed || _ws.expert')
+            assert count_output(stdout) == 0
+
+    def test_evrc_variants(self, cmd_tshark, capture_file, test_env):
+        '''The variants follow their SDP names: the mode request field
+        of each one, the frame counts and the ToC frame types.'''
+        stdout = self._run(cmd_tshark, capture_file, test_env,
+                '-Tfields', '-eframe.number', '-eevrc.mode_request',
+                '-eevrc.b.mode_request', '-eevrc.wb.mode_request',
+                '-eevrc.nw.mode_request', '-eevrc.nw2k.mode_request',
+                '-eevrc.frame_count')
+        rows = [l.split('\t') for l in stdout.splitlines()]
+        assert rows[2] == ['3', '0', '', '', '', '', '0']      # EVRC
+        assert rows[12][0:7] == ['13', '', '0', '', '', '', '0']   # EVRC-B
+        assert rows[22][0:7] == ['23', '', '', '0', '', '', '0']   # EVRC-WB
+        assert rows[32][0:7] == ['33', '', '', '', '0', '', '0']   # EVRC-NW
+        assert rows[42][0:7] == ['43', '', '', '', '', '0', '0']   # EVRC-NW2K
+        assert rows[10][6] == '31'
+        assert rows[5] == ['6', '3', '', '', '', '', '3']
+        # mode requests 0-7 of EVRC-WB in frames 55-102 order
+        modes = [r[3] for r in rows if r[3]]
+        assert modes[10:] == [str(m) for m in range(8)]
+
+    def test_evrc_toc_and_speech_data(self, cmd_tshark, capture_file, test_env):
+        '''The speech data lengths follow the ToC frame types
+        (1/8 rate 2, 1/4 rate 5, 1/2 rate 10, full rate 22 octets);
+        data that does not fit is not shown, and the padding nibble
+        follows an odd number of frames.'''
+        stdout = self._run(cmd_tshark, capture_file, test_env,
+                '-Tfields', '-eframe.number', '-eevrc.toc.frame_type_hi',
+                '-eevrc.toc.frame_type_lo', '-eevrc.padding',
+                '-eevrc.speech_data', '-Y', 'frame.number >= 3 && frame.number <= 12')
+        rows = [l.split('\t') for l in stdout.splitlines()]
+        sizes = [[len(v) // 2 for v in r[4].split(',') if v and v != '<MISSING>']
+                 for r in rows]
+        assert sizes[0] == [22]
+        assert sizes[1] == [10, 2]
+        assert sizes[2] == [22]                # 4, 0, 5: only the full rate frame
+        assert sizes[3] == [5, 2, 10, 22]      # 1/4 rate is 5 octets
+        assert rows[2][3] == '0'               # padding of three frames
+        assert sizes[7] == [10]                # 6, 7, 15 and 1/2 rate
+        assert sizes[8] == [2] * 32            # 32 frames in one packet
+        assert sizes[9] == [10]                # data cut short after 15 octets
+
+    def test_evrc_legacy_toc(self, cmd_tshark, capture_file, test_env):
+        '''The legacy ToC: the frame type is 6 bits and the reduced rate
+        bit (0x40) is separate. With the reduced rate bit set the speech
+        data length used to be computed as 0 ("EVRC: Fix the frame type
+        mask of the legacy ToC").'''
+        stdout = self._run(cmd_tshark, capture_file, test_env,
+                '-Tfields', '-eframe.number', '-eevrc.legacy.toc.reduced_rate',
+                '-eevrc.legacy.toc.frame_type', '-eevrc.speech_data',
+                '-Y', 'frame.number >= 95')
+        rows = [l.split('\t') for l in stdout.splitlines()]
+        sizes = {r[0]: [len(v) // 2 for v in r[3].split(',') if v and v != '<MISSING>']
+                 for r in rows if len(r) > 3}
+        assert rows[0][1:3] == ['0', '4'] and sizes['95'] == [22]
+        assert rows[2][1:3] == ['1,1,1,0', '3,4,1,14']
+        assert sizes['97'] == [10, 22, 2]
+        assert rows[3][1:3] == ['1,1,0,0', '4,14,2,2']
+        assert sizes['98'] == [22, 5, 5]
+        assert len(rows[4][2].split(',')) == 32
+        assert sizes['99'] == [22] * 32
+
+
+class TestDissectEvs:
+    @staticmethod
+    def _info(cmd_tshark, capture_file, test_env, *args):
+        stdout = subprocess.check_output((cmd_tshark, *args,
+                '-r', capture_file('evs_coverage.pcap.gz'),
+                '-Tfields', '-eframe.number', '-e_ws.col.info',
+                '-eevs.packet_length',
+            ), encoding='utf-8', env=test_env)
+        rows = {}
+        for l in stdout.splitlines():
+            f = l.split('\t')
+            rows[int(f[0])] = (f[1], f[2] if len(f) > 2 else '')
+        return rows
+
+    def test_evs_protocols(self, cmd_tshark, capture_file, test_env):
+        '''One SIP/SDP packet that sets up the RTP streams, then 127 EVS
+        packets, none malformed or with an expert info, in one and two
+        passes.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('evs_coverage.pcap.gz'),
+                '-Tfields', '-e_ws.col.protocol',
+            ), encoding='utf-8', env=test_env)
+        protocols = stdout.split()
+        assert len(protocols) == 128
+        assert protocols.count('SIP/SDP') == 1
+        assert protocols.count('EVS') == 127
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('evs_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_evs_compact_format(self, cmd_tshark, capture_file, test_env):
+        '''The payload size selects the Compact format and the mode.'''
+        rows = self._info(cmd_tshark, capture_file, test_env)
+        expect = {
+            2: ('EVS Primary SID 2.4', '48'),
+            6: ('EVS Primary 2.8', '56'),
+            10: ('EVS AMR-WB IO 6.6', '136'),
+            12: ('EVS Primary 7.2', '144'),
+            22: ('EVS Primary 13.2', '264'),
+            38: ('EVS Primary 24.4', '488'),
+            42: ('EVS Primary 32.0', '640'),
+            49: ('EVS Primary 64.0', '1280'),
+            54: ('EVS Primary 96.0', '1920'),
+            56: ('EVS Primary 128.0', '2560'),
+        }
+        for n, (text, bits) in expect.items():
+            assert rows[n][0].endswith(', ' + text), n
+            assert rows[n][1] == bits, n
+
+    def test_evs_header_full(self, cmd_tshark, capture_file, test_env):
+        '''Header-Full: CMR and ToC, several frames, and the 56 bit AMR-WB
+        IO SID, which is a Compact frame (it was decoded as Header-Full
+        before "EVS: Treat the 56-bit AMR-WB IO SID payload as Compact
+        format").'''
+        rows = self._info(cmd_tshark, capture_file, test_env)
+        assert rows[8][0].endswith(', EVS AMR-WB IO SID')
+        assert rows[114][0].endswith(
+            ', Primary 9.6 kbps, Primary 9.6 kbps… (2 frames in packet)')
+        assert rows[115][0].endswith('… (3 frames in packet)')
+        assert rows[116][0].endswith(', NO_DATA… (1 frame in packet)')
+
+    def test_evs_rtp_padding_and_hf_only(self, cmd_tshark, capture_file, test_env):
+        '''RTP padding counts for the payload size; hf-only=1 in the SDP
+        (or the preference) makes the compact sizes Header-Full.'''
+        rows = self._info(cmd_tshark, capture_file, test_env)
+        assert rows[119][0].endswith(', EVS Primary SID 2.4')   # 5 + 1 octets
+        assert rows[120][0].endswith(', EVS Primary 7.2')       # 16 + 2 octets
+        assert rows[122][0].endswith('Primary 13.2 kbps… (1 frame in packet)')
+        assert rows[122][1] == ''
+        assert rows[128][0].endswith(', EVS Primary 13.2')
+        rows = self._info(cmd_tshark, capture_file, test_env, '-o', 'evs.hf_only:TRUE')
+        assert rows[128][1] == ''
+        assert rows[10][1] == ''
+
+
+class TestDissectExablaze:
+    @staticmethod
+    def _env(test_env):
+        env = test_env.copy()
+        env['TZ'] = 'UTC'
+        return env
+
+    def test_exablaze_trailers(self, cmd_tshark, capture_file, test_env):
+        '''The heuristic is disabled by default; enabled, the frames with
+        a valid trailer (within a week of the capture time, with or
+        without a new FCS after it) are decoded and no frame is
+        malformed or has an error expert info, in one and two passes.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('exablaze_coverage.pcap.gz'),
+                '-Y', 'exablaze',
+                '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=self._env(test_env))
+        assert count_output(stdout) == 0
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '--enable-heuristic', 'exablaze_eth',
+                    '-r', capture_file('exablaze_coverage.pcap.gz'),
+                    '-Tfields', '-eframe.number', '-eexablaze.device',
+                    '-eexablaze.port', '-eexablaze.timestamp.seconds',
+                    '-eexablaze.original_fcs',
+                ), encoding='utf-8', env=self._env(test_env))
+            rows = [l.split('\t') for l in stdout.splitlines()]
+            assert len(rows) == 16
+            assert rows[0] == ['1', '1', '2', '1700000000', '0xdeadbeef']
+            assert rows[1] == ['2', '3', '4', '1700000001', '0xdeadbeef']
+            # in the future and in the past, device and port 255 and 0
+            assert rows[2] == ['3', '255', '255', '1700003602', '0xdeadbeef']
+            assert rows[3] == ['4', '0', '0', '1699913603', '0xdeadbeef']
+            # padding before the trailer, exactly a week either way
+            assert rows[4] == ['5', '9', '10', '1700000004', '0xdeadbeef']
+            assert rows[5] == ['6', '11', '12', '1700604805', '0xdeadbeef']
+            assert rows[6] == ['7', '13', '14', '1699395206', '0xdeadbeef']
+            assert rows[7] == ['8', '15', '16', '1700000007', '0xdeadbeef']
+            assert rows[8] == ['9', '17', '18', '1699999008', '0xdeadbeef']
+            # a week and a second off, too short, none, wrong octets
+            for r in rows[9:]:
+                assert r[1:] == ['', '', '', '']
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '--enable-heuristic', 'exablaze_eth',
+                    '-r', capture_file('exablaze_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert.severity >= error',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=self._env(test_env))
+            assert count_output(stdout) == 0
+
+    def test_exablaze_timestamp(self, cmd_tshark, capture_file, test_env):
+        '''The timestamp is the seconds plus the 40 bit binary fraction.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '--enable-heuristic', 'exablaze_eth',
+                '-r', capture_file('exablaze_coverage.pcap.gz'),
+                '-Y', 'exablaze.timestamp.fractional_seconds >= 0.5 && exablaze.timestamp.fractional_seconds < 0.5001',
+                '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=self._env(test_env))
+        assert stdout.split() == ['1', '2', '9']
+        stdout = subprocess.check_output((cmd_tshark,
+                '--enable-heuristic', 'exablaze_eth',
+                '-r', capture_file('exablaze_coverage.pcap.gz'),
+                '-Y', 'frame.number == 4 && exablaze.timestamp == "2023-11-13 22:13:23"',
+                '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=self._env(test_env))
+        assert stdout.split() == ['4']
+        stdout = subprocess.check_output((cmd_tshark,
+                '--enable-heuristic', 'exablaze_eth',
+                '-r', capture_file('exablaze_coverage.pcap.gz'),
+                '-Y', 'exablaze.timestamp.fractional_seconds > 0.99999999999',
+                '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=self._env(test_env))
+        assert stdout.split() == ['3']
+        stdout = subprocess.check_output((cmd_tshark,
+                '--enable-heuristic', 'exablaze_eth',
+                '-r', capture_file('exablaze_coverage.pcap.gz'),
+                '-Y', 'frame.number == 1', '-V', '-O', 'exablaze',
+            ), encoding='utf-8', env=self._env(test_env))
+        assert "Exablaze trailer, Device: 1, Port: 2, Timestamp: 22:13:20" in stdout
+
+
+class TestDissectExec:
+    @staticmethod
+    def _fields(cmd_tshark, capture_file, test_env, *args):
+        stdout = subprocess.check_output((cmd_tshark, *args,
+                '-r', capture_file('exec_coverage.pcap.gz'),
+                '-Tfields', '-eframe.number', '-eexec.stderr_port',
+                '-eexec.username', '-eexec.password', '-eexec.command',
+                '-e_ws.col.info',
+            ), encoding='utf-8', env=test_env)
+        return [l.split('\t') for l in stdout.splitlines()]
+
+    def test_exec_protocols(self, cmd_tshark, capture_file, test_env):
+        '''Every frame is EXEC and none is malformed or has an expert
+        info, in one and two passes.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('exec_coverage.pcap.gz'),
+                '-Tfields', '-e_ws.col.protocol',
+            ), encoding='utf-8', env=test_env)
+        protocols = stdout.split()
+        assert len(protocols) == 41
+        assert protocols.count('EXEC') == 41
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('exec_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_exec_info_same_in_two_passes(self, cmd_tshark, capture_file, test_env):
+        '''The Info column does not depend on the pass: the user name
+        learned in frame 38 is shown in its own Info (it was only shown
+        on the second pass before "Exec: Build the Info column after
+        parsing the packet"). Frames 25-27 and 32-37 too.'''
+        one = self._fields(cmd_tshark, capture_file, test_env)
+        two = self._fields(cmd_tshark, capture_file, test_env, '-2')
+        assert one == two
+        assert one[37] == ['38', '', 'root', 'pw', '', 'Username:root Client -> Server data']
+        assert one[38][5] == 'Username:root Server -> Client Data'
+
+    def test_exec_fields(self, cmd_tshark, capture_file, test_env):
+        '''Fields in one packet and one per packet, empty fields and
+        values that do not fit a field (treated as session data).'''
+        rows = self._fields(cmd_tshark, capture_file, test_env)
+        assert len(rows) == 41
+        # Everything in the first packet of the conversation
+        assert rows[0] == ['1', '', 'root', 'secret', 'uptime', 'Session Establishment']
+        assert rows[1][5] == 'Username:root Server -> Client Data'
+        assert rows[2][5] == 'Username:root Client -> Server data'
+        # One field per packet
+        assert rows[5] == ['6', '1234', '', '', '', 'Session Establishment']
+        assert rows[6][1:5] == ['', 'alice', '', '']
+        assert rows[7][1:5] == ['', '', 'pw', '']
+        assert rows[8][1:5] == ['', '', '', 'echo hi']
+        assert rows[9][5] == 'Username:alice Server -> Client Data'
+        # An empty password is not shown, the command follows
+        assert rows[12][1:5] == ['', 'bob', '', '']
+        assert rows[14][1:5] == ['', '', '', 'ls -l']
+        assert rows[15][5] == 'Username:bob Server -> Client Data'
+        # Too long stderr port, user name, command and a non-printable
+        # user name: everything is session data
+        assert rows[22][5] == 'Client -> Server data'
+        assert rows[23][5] == 'Client -> Server data'
+        assert rows[26][1:5] == ['', 'u', 'p', '']
+        assert rows[26][5] == 'Username:u Client -> Server data'
+        # A password that is too long is skipped, the command follows
+        assert rows[24][1:5] == ['', 'u', '', 'cmd']
+        # Port, user name and password, then the command
+        assert rows[31][1] == '7'
+        assert rows[32][1:5] == ['', 'dave', 'pw', '']
+        assert rows[33][4] == 'who'
+        assert rows[36][5] == 'Username:dave Server -> Client Data'
+
+    def test_exec_prefs(self, cmd_tshark, capture_file, test_env):
+        '''The Info column shows the command with the preference and
+        hides the user name with the other.'''
+        rows = self._fields(cmd_tshark, capture_file, test_env,
+                '-o', 'exec.info_show_command:TRUE',
+                '-o', 'exec.info_show_username:FALSE')
+        assert rows[1][5] == 'Command:uptime Server -> Client Data'
+        assert rows[15][5] == 'Command:ls -l Server -> Client Data'
+        assert rows[39][5] == 'Client -> Server data'
+
+
+class TestDissectExtreme:
+    '''Extreme Discovery Protocol (EDP, ESRP, EAPS, ESL, ELSM, ELRP) from
+    the synthetic capture extreme_coverage.pcap.gz.'''
+
+    @staticmethod
+    def _short_esl_pcap(path):
+        # EDP frame whose ESL TLV (type 0x0e) has only 4 octets of value,
+        # followed by a NULL TLV: the dissector read 38 octets of fixed fields.
+        def cksum(d):
+            s = sum(struct.unpack('>%dH' % (len(d) // 2), d))
+            while s >> 16:
+                s = (s & 0xffff) + (s >> 16)
+            return (~s) & 0xffff
+        tlvs = struct.pack('>BBH', 0x99, 0x0e, 8) + bytes(4) + \
+            struct.pack('>BBH', 0x99, 0, 4)
+        pdu = struct.pack('>BBHHH', 1, 0, 16 + len(tlvs), 0, 1) + \
+            bytes(2) + bytes.fromhex('02aabbccdd01') + tlvs
+        pdu = pdu[:4] + struct.pack('>H', cksum(pdu)) + pdu[6:]
+        payload = bytes.fromhex('aaaa0300e02b00bb') + pdu
+        fr = bytes.fromhex('00e02b000000' '02aabbccdd01') + \
+            struct.pack('>H', len(payload)) + payload
+        fr += bytes(max(0, 60 - len(fr)))
+        with open(path, 'wb') as f:
+            f.write(struct.pack('<IHHiIII', 0xa1b2c3d4, 2, 4, 0, 0, 65535, 1))
+            f.write(struct.pack('<IIII', 1700000000, 0, len(fr), len(fr)))
+            f.write(fr)
+
+    @staticmethod
+    def _fields(cmd_tshark, capture, test_env, passes=(), extra=()):
+        stdout = subprocess.check_output((cmd_tshark, *passes, '-r', capture,
+                *extra), encoding='utf-8', env=test_env, timeout=120)
+        return [l for l in stdout.splitlines()]
+
+    def test_extreme_protocols(self, cmd_tshark, capture_file, test_env):
+        '''35 frames: the column protocol shows EDP, ESRP, EAPS or ESL.'''
+        lines = self._fields(cmd_tshark, capture_file('extreme_coverage.pcap.gz'),
+                test_env, extra=('-Tfields', '-e_ws.col.protocol'))
+        protocols = [l.strip() for l in lines]
+        assert len(protocols) == 35
+        assert protocols.count('EDP') == 22
+        assert protocols.count('ESRP') == 3
+        assert protocols.count('EAPS') == 4
+        assert protocols.count('ESL') == 6
+
+    def test_extreme_no_errors(self, cmd_tshark, capture_file, test_env):
+        '''No malformed packets or expert infos in one and two passes.'''
+        for passes in ((), ('-2',)):
+            lines = self._fields(cmd_tshark, capture_file('extreme_coverage.pcap.gz'),
+                    test_env, passes, ('-Y', '_ws.malformed || _ws.expert',
+                                       '-Tfields', '-eframe.number'))
+            assert count_output('\n'.join(lines)) == 0
+
+    def test_extreme_tlvs(self, cmd_tshark, capture_file, test_env):
+        '''Decoded values: slot/port are shown one higher than sent, the
+        VLAN, ESRP, EAPS and ESL fields and the ELSM summary.'''
+        cap = capture_file('extreme_coverage.pcap.gz')
+        def one(frame, field):
+            return self._fields(cmd_tshark, cap, test_env,
+                    extra=('-Y', 'frame.number == %d' % frame, '-Tfields',
+                           '-e' + field))[0].strip()
+        assert one(3, 'edp.info.slot') == '4'
+        assert one(3, 'edp.info.port') == '48'
+        assert one(2, 'edp.vlan.id') == '4094'
+        assert one(2, 'edp.vlan.name') == 'a-very-long-vlan-name-0123456789'
+        assert one(5, 'edp.esrp.proto') == '1'
+        assert one(7, 'edp.eaps.vlanid') == '4000'
+        assert one(11, 'edp.esl.numlinks') == '3'
+        assert one(11, 'edp.esl.linklist') == '1,2,3'
+        assert one(14, 'edp.esl.linklist') == '1,2'
+        assert one(18, '_ws.col.info') == 'EDP: ELSM Unknown (0x09) Unknown (0x07) (#18)'
+        assert one(32, 'edp.checksum.status') == '2'
+
+    def test_extreme_short_fixed_tlv(self, cmd_tshark, result_file, test_env):
+        '''A fixed size TLV shorter than its fixed part gets an expert
+        info and is skipped instead of running into the next TLV and
+        ending in an exception ("EDP: Check the TLV length of fixed size
+        TLVs").'''
+        pcap = result_file('extreme_short_esl.pcap')
+        self._short_esl_pcap(pcap)
+        lines = self._fields(cmd_tshark, pcap, test_env,
+                extra=('-Tfields', '-e_ws.expert.message'))
+        assert len(lines) == 1
+        assert 'ESL TLV is too short' in lines[0]
+        assert 'Exception' not in lines[0]
+
+
+class TestDissectExtremeExeh:
+    '''EXEH (EXos internal Extra Header, ethertype 0xE555) from the
+    synthetic capture extreme_exeh_coverage.pcap.gz.'''
+
+    @staticmethod
+    def _tshark(cmd_tshark, capture, test_env, *args):
+        stdout = subprocess.check_output((cmd_tshark, '-r', capture, *args),
+                encoding='utf-8', env=test_env, timeout=120)
+        return stdout.splitlines()
+
+    def test_extreme_exeh_frames(self, cmd_tshark, capture_file, test_env):
+        '''All 14 frames contain EXEH; no malformed packets and no error
+        expert infos in one and two passes.'''
+        cap = capture_file('extreme_exeh_coverage.pcap.gz')
+        lines = self._tshark(cmd_tshark, cap, test_env, '-Y', 'exeh', '-Tfields',
+                '-eframe.number')
+        assert len(lines) == 14
+        for passes in ((), ('-2',)):
+            lines = self._tshark(cmd_tshark, cap, test_env, *passes, '-Y',
+                    '_ws.malformed || _ws.expert.severity >= 0x00800000',
+                    '-Tfields', '-eframe.number')
+            assert count_output('\n'.join(lines)) == 0
+
+    def test_extreme_exeh_expert_warnings(self, cmd_tshark, capture_file, test_env):
+        '''Frames with a wrong 0x8100 length, unequal ports, a non-zero
+        incoming frame source and an unknown outgoing frame source magic
+        get warnings.'''
+        cap = capture_file('extreme_exeh_coverage.pcap.gz')
+        lines = self._tshark(cmd_tshark, cap, test_env, '-Y', '_ws.expert',
+                '-Tfields', '-eframe.number', '-e_ws.expert.message')
+        got = {l.split('\t')[0]: l.split('\t')[1] for l in lines}
+        assert got['6'] == 'Unexpected length'
+        assert got['10'] == 'Unequal ports,Incoming framesource non-zero'
+        assert got['11'] == 'Unequal ports,Outgoing framesource unknown magic'
+        assert got['12'] == 'Unequal ports'
+        assert got['14'] == 'Ethertype encapsulation nested too deeply'
+        assert sorted(got, key=int) == ['6', '10', '11', '12', '14']
+
+    def test_extreme_exeh_fields(self, cmd_tshark, capture_file, test_env):
+        '''Direction, module, port and frame source values.'''
+        cap = capture_file('extreme_exeh_coverage.pcap.gz')
+        lines = self._tshark(cmd_tshark, cap, test_env, '-Y', 'frame.number <= 3',
+                '-Tfields', '-eexeh.direction', '-eexeh.module1', '-eexeh.port1',
+                '-eexeh.module2', '-eexeh.port2', '-eexeh.framesource')
+        assert lines == ['0x0007\t1\t2\t1\t2\t0x0000',
+                         '0x00ff\t3\t4\t0\t0\t0x0000',
+                         '0x00ff\t1\t9\t0\t0\t0x4248']
+
+    def test_extreme_exeh_nesting_limit(self, cmd_tshark, capture_file, test_env):
+        '''Frame 14 nests EXEH 600 times. The nesting is limited (no stack
+        exhaustion or endless dissection) with a warning on the ethertype
+        item ("Ethertype: Limit the nesting of encapsulated payloads").'''
+        cap = capture_file('extreme_exeh_coverage.pcap.gz')
+        lines = self._tshark(cmd_tshark, cap, test_env, '-Y', 'frame.number == 14',
+                '-Tfields', '-e_ws.expert.message')
+        assert lines == ['Ethertype encapsulation nested too deeply']
+
+
+class TestDissectExtrememesh:
+    '''Extreme Mesh (ethertype 0x88A9: Mesh header, MCH, Path Selection,
+    L2 update, probe) from the synthetic capture
+    extrememesh_coverage.pcap.gz.'''
+
+    PS_INFO = {
+        'Extreme Mesh Path Selection Authorization Request': 8,
+        'Extreme Mesh Path Selection Authorization Reply': 8,
+        'Extreme Mesh Path Selection Bind Request': 12,
+        'Extreme Mesh Path Selection Bind Reply': 8,
+        'Extreme Mesh Path Selection Bind Announcement': 8,
+        'Extreme Mesh Path Selection Bind Removed': 8,
+        'Extreme Mesh Path Selection Status Request': 8,
+        'Extreme Mesh Path Selection Status Reply': 8,
+        'Extreme Mesh Path Selection Path Request': 10,
+        'Extreme Mesh Path Selection Path Reply': 10,
+        'Extreme Mesh Path Selection Path Error': 6,
+        'Extreme Mesh Path Selection Path Reset': 3,
+        'Extreme Mesh Path Selection Proxy Remove': 10,
+        'Extreme Mesh Path Selection Trace Path': 6,
+        'Extreme Mesh Path Selection Proxy Error': 8,
+        'Extreme Mesh L2 Update': 3,
+        'Extreme Mesh Probe Message': 3,
+    }
+
+    @staticmethod
+    def _tshark(cmd_tshark, capture, test_env, *args):
+        stdout = subprocess.check_output((cmd_tshark, '-r', capture, *args),
+                encoding='utf-8', env=test_env, timeout=120)
+        return stdout.splitlines()
+
+    def test_extrememesh_frames(self, cmd_tshark, capture_file, test_env):
+        '''150 frames, all with Extreme Mesh; every path selection frame
+        type, L2 update and probe is shown; no malformed packets and no
+        error expert infos in one and two passes.'''
+        cap = capture_file('extrememesh_coverage.pcap.gz')
+        lines = self._tshark(cmd_tshark, cap, test_env, '-Y', 'extrememesh',
+                '-Tfields', '-e_ws.col.info')
+        assert len(lines) == 150
+        for info, n in self.PS_INFO.items():
+            assert lines.count(info) == n, info
+        for passes in ((), ('-2',)):
+            lines = self._tshark(cmd_tshark, cap, test_env, *passes, '-Y',
+                    '_ws.malformed || _ws.expert.severity >= 0x00800000',
+                    '-Tfields', '-eframe.number')
+            assert count_output('\n'.join(lines)) == 0
+
+    def test_extrememesh_mch_fields(self, cmd_tshark, capture_file, test_env):
+        '''MCH header values of frames 8-10 (an Ethernet frame inside).'''
+        cap = capture_file('extrememesh_coverage.pcap.gz')
+        lines = self._tshark(cmd_tshark, cap, test_env, '-Y',
+                'frame.number >= 8 && frame.number <= 10', '-Tfields',
+                '-eextrememesh.mch.version', '-eextrememesh.mch.lq',
+                '-eextrememesh.mch.htl', '-eextrememesh.mch.priority',
+                '-eextrememesh.mch.src')
+        assert lines == ['0x01\t0xc8\t0x05\t0x03\t02:00:00:00:00:0d',
+                         '0x02\t0x00\t0x00\t0x07\t02:00:00:00:00:0d',
+                         '0x01\t0xff\t0xff\t0x00\t02:00:00:00:00:0d']
+
+    def test_extrememesh_counts(self, cmd_tshark, capture_file, test_env):
+        '''Probe ballast lengths and the destination and hop counts.'''
+        cap = capture_file('extrememesh_coverage.pcap.gz')
+        lines = self._tshark(cmd_tshark, cap, test_env, '-Y',
+                'extrememesh.probe.ballast_len', '-Tfields', '-eextrememesh.probe.ballast_len')
+        assert lines == ['0x000a', '0x0000', '0x0003']
+        lines = self._tshark(cmd_tshark, cap, test_env, '-Y',
+                'extrememesh.ps.perr.dest_count', '-Tfields', '-eframe.number',
+                '-eextrememesh.ps.perr.dest_count')
+        assert lines == ['113\t0x00', '114\t0x00', '115\t0x01', '116\t0x01',
+                         '117\t0x04', '118\t0x04']
+
+    def test_extrememesh_mch_nesting_limit(self, cmd_tshark, capture_file, test_env):
+        '''Frame 150 nests 600 MCH headers. The nesting is limited with a
+        warning instead of recursing to the end of the packet
+        ("extrememesh: Limit the nesting of MCH headers").'''
+        cap = capture_file('extrememesh_coverage.pcap.gz')
+        lines = self._tshark(cmd_tshark, cap, test_env, '-Y', 'frame.number == 150',
+                '-Tfields', '-e_ws.expert.message')
+        assert lines == ['Too many nested MCH headers']
+        lines = self._tshark(cmd_tshark, cap, test_env, '-Y', '_ws.expert',
+                '-Tfields', '-eframe.number')
+        assert lines == ['150']
+
+
+class TestDissectF1ap:
+    '''F1AP over SCTP (port 38472, PPID 62) from the synthetic capture
+    f1ap_coverage.pcap.gz: every elementary procedure message encoded
+    from the F1AP ASN.1 modules, then SIB type variants (654-682 with
+    two PDUs in frame 682) and the reproducer for "F1AP: Do not reuse
+    RRC container state across PDUs" (683-684).'''
+
+    @staticmethod
+    def f1ap_fields(cmd_tshark, capture_file, test_env, *args):
+        return subprocess.check_output((cmd_tshark,
+                '-r', capture_file('f1ap_coverage.pcap.gz'), *args),
+            encoding='utf-8', env=test_env, timeout=300)
+
+    def test_f1ap_protocols(self, cmd_tshark, capture_file, test_env):
+        '''Every frame is F1AP over SCTP, some with NR RRC inside; none is
+        malformed or has an error expert info, in one and two passes.'''
+        stdout = self.f1ap_fields(cmd_tshark, capture_file, test_env,
+                                  '-Tfields', '-e_ws.col.protocol')
+        protocols = [p.strip() for p in stdout.splitlines()]
+        assert len(protocols) == 684
+        counts = {p: protocols.count(p) for p in set(protocols)}
+        assert counts['F1AP'] == 661
+        assert counts['F1AP/NR RRC'] == 19
+        assert counts['F1AP/NR RRC/NR RRC'] == 2
+        assert counts['F1AP/F1AP/NR RRC'] == 1
+        assert counts['F1AP//NR RRC'] == 1
+        for passes in ((), ('-2',)):
+            stdout = self.f1ap_fields(cmd_tshark, capture_file, test_env, *passes,
+                    '-Y', '_ws.malformed || _ws.expert.severity >= error',
+                    '-Tfields', '-eframe.number')
+            assert count_output(stdout) == 0
+
+    def test_f1ap_info(self, cmd_tshark, capture_file, test_env):
+        '''The first frames are the Reset and ResetAcknowledge messages;
+        the last ones UEContextReleaseCommand.'''
+        stdout = self.f1ap_fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number <= 6 || frame.number >= 683',
+                '-Tfields', '-eframe.number', '-e_ws.col.info')
+        assert stdout.splitlines() == [
+            '1\tReset', '2\tReset', '3\tReset', '4\tReset',
+            '5\tResetAcknowledge', '6\tResetAcknowledge',
+            '683\tUEContextReleaseCommand, UEContextReleaseCommand, UEContextReleaseCommand',
+            '684\tUEContextReleaseCommand',
+        ]
+
+    def test_f1ap_rrc_container_state(self, cmd_tshark, capture_file, test_env):
+        '''Frame 683 holds three UEContextReleaseCommand PDUs: an RRC
+        container, then SRBID 0, then SRBID 2. Before "F1AP: Do not reuse
+        RRC container state across PDUs" the SRBID handlers dissected the
+        first PDU's container (as NR RRC DL-CCCH) under the later PDUs.
+        The container is only used with an SRBID of its own PDU, so
+        neither frame has NR RRC.'''
+        stdout = self.f1ap_fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number >= 683',
+                '-Tfields', '-eframe.number', '-ef1ap.SRBID',
+                '-e_ws.col.protocol', '-enr-rrc.DL_CCCH_Message_element')
+        assert stdout.splitlines() == ['683\t0,2\tF1AP\t', '684\t\tF1AP\t']
+
+    def test_f1ap_two_rrc_containers(self, cmd_tshark, capture_file, test_env):
+        '''Frame 682 holds two ULRRCMessageTransfer PDUs on SRB 1; each
+        container is dissected as PDCP/NR RRC under its own PDU.'''
+        stdout = self.f1ap_fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number == 682',
+                '-Tfields', '-ef1ap.SRBID', '-e_ws.col.protocol')
+        assert stdout.splitlines() == ['1,1\tF1AP/F1AP/NR RRC']
+
+    def test_f1ap_plmn(self, cmd_tshark, capture_file, test_env):
+        '''PLMN identities decode as MCC 001/MNC 01 and MCC 262/MNC 012.'''
+        stdout = self.f1ap_fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number == 9',
+                '-Tfields', '-ee212.mcc', '-ee212.mnc')
+        mcc, mnc = stdout.strip().split('\t')
+        assert set(mcc.split(',')) <= {'001', '262'}
+        assert set(mnc.split(',')) <= {'01', '012'}
+        assert '001' in mcc
+
+    def test_f1ap_stats_tree(self, cmd_tshark, capture_file, test_env):
+        '''The f1ap statistics tree counts every PDU, also the bundled
+        ones: 684 frames hold 687 PDUs.'''
+        stdout = self.f1ap_fields(cmd_tshark, capture_file, test_env,
+                '-q', '-z', 'f1ap,tree')
+        rows = {l.split()[0]: l.split()[-0 + 1] for l in stdout.splitlines()
+                if l.split() and l.split()[0] in ('UEContextReleaseCommand',)}
+        assert rows == {'UEContextReleaseCommand': '8'}
+        assert [l.split()[2] for l in stdout.splitlines()
+                if l.startswith('Total Packets')] == ['687']
+
+
+class TestDissectF5ethtrailer:
+    @staticmethod
+    def _fields(cmd_tshark, capture_file, test_env, *args, name='f5ethtrailer_coverage.pcapng.gz'):
+        stdout = subprocess.check_output((cmd_tshark, '-r', capture_file(name), *args),
+                encoding='utf-8', env=test_env)
+        return [line.split('\t') for line in stdout.splitlines()]
+
+    def test_f5ethtrailer_protocols(self, cmd_tshark, capture_file, test_env):
+        '''93 frames carry an F5 trailer, none is malformed or has an error
+        expert info, in one and two passes.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('f5ethtrailer_coverage.pcapng.gz'),
+                '-Y', 'f5ethtrailer', '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=test_env)
+        assert count_output(stdout) == 93
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('f5ethtrailer_coverage.pcapng.gz'),
+                    '-Y', '_ws.malformed || _ws.expert.severity >= error',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_f5ethtrailer_two_pass(self, cmd_tshark, capture_file, test_env):
+        '''The decoded trailer fields are the same in one and two passes.'''
+        args = ('-Y', 'f5ethtrailer', '-Tfields', '-eframe.number', '-ef5ethtrailer.ingress',
+                '-ef5ethtrailer.slot', '-ef5ethtrailer.tmm', '-ef5ethtrailer.vip',
+                '-ef5ethtrailer.flowid', '-ef5ethtrailer.peerid', '-ef5ethtrailer.rstcausetxt',
+                '-ef5ethtrailer.peerremoteaddr', '-ef5ethtrailer.orig_fcs', '-e_ws.col.info')
+        one = self._fields(cmd_tshark, capture_file, test_env, *args)
+        two = self._fields(cmd_tshark, capture_file, test_env, '-2', *args)
+        assert len(one) == 93
+        assert one == two
+
+    def test_f5ethtrailer_fileinfo(self, cmd_tshark, capture_file, test_env):
+        '''The F5 file information packet at the start of the capture.'''
+        lines = self._fields(cmd_tshark, capture_file, test_env, '-Y', 'frame.number == 1',
+                '-Tfields', '-ef5fileinfo.cmdline', '-ef5fileinfo.version', '-ef5fileinfo.hostname',
+                '-ef5fileinfo.platform', '-ef5fileinfo.platformname', '-ef5fileinfo.product',
+                '-ef5fileinfo.session', '-e_ws.col.protocol')
+        assert lines == [['tcpdump -i 0.0:nnn -s0 -w /var/tmp/x.pcap', 'BIG-IP 13.1.3.4 0.0.5',
+                          'bigip1.example.com', 'C115', 'BIG-IP i4000 Series (i4600, i4800)',
+                          'BIG-IP', '1a2b3c', 'FILEINFO']]
+
+    def test_f5ethtrailer_old_format(self, cmd_tshark, capture_file, test_env):
+        '''Old format low, medium and high trailers: slot, tmm, virtual
+        server, flow IDs, RST cause and the peer addresses of a high trailer.'''
+        lines = self._fields(cmd_tshark, capture_file, test_env, '-Y', 'f5ethtrailer', '-Tfields',
+                '-eframe.number', '-ef5ethtrailer.slot', '-ef5ethtrailer.tmm',
+                '-ef5ethtrailer.vip', '-ef5ethtrailer.flowid', '-ef5ethtrailer.rstcausetxt',
+                '-ef5ethtrailer.peerremoteaddr', '-ef5ethtrailer.peerremotertdom',
+                '-ef5ethtrailer.peerremoteport', '-ef5ethtrailer.peervlan')
+        by_frame = {l[0]: l for l in lines}
+        assert by_frame['2'][1:5] == ['1', '2', 'vs_http', '']
+        assert by_frame['4'][1:5] == ['2', '4', 'vs_flow', '0x0000000000001000']
+        assert by_frame['13'][5] == 'no route to host'
+        assert by_frame['14'][5] == 'peer reset'
+        assert by_frame['22'][1:] == ['1', '3', 'vs_https', '0x0000000000000300', 'combo',
+                                      '10.1.1.1', '', '443', '100']
+        assert by_frame['23'][6:] == ['10.2.2.1', '5', '53', '200']
+
+    def test_f5ethtrailer_dpt(self, cmd_tshark, capture_file, test_env):
+        '''New format (DPT) trailers: object names, an original FCS in front
+        of the magic and the RST cause of a medium trailer.'''
+        lines = self._fields(cmd_tshark, capture_file, test_env, '-Y', 'f5ethtrailer.trailer_magic',
+                '-Tfields', '-eframe.number', '-ef5ethtrailer.vip', '-ef5ethtrailer.phys_port',
+                '-ef5ethtrailer.trunk', '-ef5ethtrailer.orig_fcs', '-ef5ethtrailer.rstcausetxt',
+                '-ef5ethtrailer.trailer_version')
+        by_frame = {l[0]: l for l in lines}
+        assert by_frame['64'][1:4] == ['vs_dpt4', '1.1', 'trk1']
+        assert by_frame['68'][1] == 'vs_a,vs_b'
+        assert by_frame['69'][5] == 'dpt reset'
+        assert by_frame['74'][4] == '0xaabbccdd'
+        assert by_frame['75'][4] == '0x0000ccdd'
+        assert by_frame['76'][4] == '0x000000dd'
+        assert by_frame['77'][6] == '2'
+        for f in ('82', '83'):
+            assert f in by_frame
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('f5ethtrailer_coverage.pcapng.gz'),
+                '-Y', 'f5ethtrailer.undecoded', '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.split() == ['66']
+
+    def test_f5ethtrailer_info_column(self, cmd_tshark, capture_file, test_env):
+        '''The Info column prefix follows the info_type preference.'''
+        for pref, prefix in (('Full', 'IN  s1/tmm2 : '), ('InOutOnly', 'IN : '),
+                             ('Brief', '>1/2 : '), ('BriefInOutOnly', '>: '), ('None', '')):
+            lines = self._fields(cmd_tshark, capture_file, test_env, '-o', 'f5ethtrailer.info_type:' + pref,
+                    '-Y', 'frame.number == 2', '-Tfields', '-e_ws.col.info')
+            assert lines[0][0].startswith(prefix)
+            assert (pref == 'None') == (not lines[0][0].startswith(('IN', '>')))
+
+    def test_f5ethtrailer_walk_trailer(self, cmd_tshark, capture_file, test_env):
+        '''Non-zero padding in front of the trailer is skipped only with
+        the pref_walk_trailer preference.'''
+        for pref, count in (('FALSE', 0), ('TRUE', 1)):
+            stdout = subprocess.check_output((cmd_tshark,
+                    '-r', capture_file('f5ethtrailer_coverage.pcapng.gz'),
+                    '-o', 'f5ethtrailer.pref_walk_trailer:' + pref,
+                    '-Y', 'frame.number == 34 && f5ethtrailer', '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == count
+
+    def test_f5ethtrailer_analysis(self, cmd_tshark, capture_file, test_env):
+        '''Flow reuse (an inbound SYN with a flow) and flow lost (an inbound
+        ACK without one) with the perform_analysis preference.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('f5ethtrailer_coverage.pcapng.gz'),
+                '-o', 'f5ethtrailer.perform_analysis:TRUE', '-V',
+                '-Y', 'f5ethtrailer.analysis',
+            ), encoding='utf-8', env=test_env)
+        found = []
+        frame = None
+        for line in stdout.splitlines():
+            if line.startswith('Frame '):
+                frame = line.split(':')[0].split()[1]
+            elif 'Expert Info' in line and 'Flow reuse' in line:
+                found.append((frame, 'reuse'))
+            elif 'Expert Info' in line and 'Flow lost' in line:
+                found.append((frame, 'lost'))
+        assert [f for f in found if f[0] in ('89', '90', '92', '49')] == [
+            ('49', 'lost'), ('89', 'reuse'), ('90', 'lost'), ('92', 'reuse')]
+        assert ('91', 'lost') not in found   # egress ACK
+
+    def test_f5ethtrailer_statistics(self, cmd_tshark, capture_file, test_env):
+        '''The tmm and virtual server distribution statistics trees.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('f5ethtrailer_coverage.pcapng.gz'), '-q',
+                '-z', 'f5_tmm_dist,tree', '-z', 'f5_virt_dist,tree',
+            ), encoding='utf-8', env=test_env)
+        assert 'tmm Packet Distribution' in stdout
+        assert 'Virtual Server Packet Distribution' in stdout
+        assert 'vs_https' in stdout
+        assert 'direction in' in stdout
+
+    def test_f5ethtrailer_fixes(self, cmd_tshark, capture_file, test_env):
+        '''Reproducers: a remainder shorter than the zero padding (frame 53),
+        RST cause lengths below 9 (55, 56) and the noise dissector called
+        from Exported PDU without data (103-105) are not malformed.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('f5ethtrailer_coverage.pcapng.gz'),
+                '-Y', '_ws.malformed || _ws.expert', '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=test_env)
+        shown = stdout.split()
+        for f in ('53', '54', '55', '56', '103', '104', '105'):
+            assert f not in shown
+
+
+class TestDissectFbzero:
+    '''FB Zero (Facebook Zero Protocol over TCP, found by the heuristic
+    dissector) from the synthetic capture fbzero_coverage.pcap.gz.'''
+
+    @staticmethod
+    def _tshark(cmd_tshark, capture, test_env, *args):
+        stdout = subprocess.check_output((cmd_tshark, '-r', capture, *args),
+                encoding='utf-8', env=test_env, timeout=120)
+        return stdout.splitlines()
+
+    def test_fbzero_frames(self, cmd_tshark, capture_file, test_env):
+        '''19 of the 23 segments are FB Zero (handshakes, then payload on
+        the conversation); a 2 octet segment, a handshake whose length is
+        larger than the segment and two non-FB-Zero segments are not.'''
+        cap = capture_file('fbzero_coverage.pcap.gz')
+        lines = self._tshark(cmd_tshark, cap, test_env, '-Y', 'fb_zero',
+                '-Tfields', '-eframe.number', '-e_ws.col.info')
+        info = [l.split('\t')[1] for l in lines]
+        assert len(lines) == 19
+        assert info.count('Client Hello') == 10
+        assert info.count('Server NOM??') == 3
+        assert info.count('Payload (Encrypted)') == 6
+        numbers = [l.split('\t')[0] for l in lines]
+        for n in ('8', '20', '22', '23'):
+            assert n not in numbers
+        for passes in ((), ('-2',)):
+            lines = self._tshark(cmd_tshark, cap, test_env, *passes, '-Y',
+                    '_ws.malformed || _ws.expert.severity >= 0x00800000',
+                    '-Tfields', '-eframe.number')
+            assert count_output('\n'.join(lines)) == 0
+
+    def test_fbzero_puflags_version(self, cmd_tshark, capture_file, test_env):
+        '''A handshake with the public flags 0x01 and with 0x03 skips the
+        version ("QTV") and shows the tags (the flags test used bit 1
+        instead of bit 0 before "FB Zero: Fix public flags handling and
+        zero total tag length").'''
+        cap = capture_file('fbzero_coverage.pcap.gz')
+        lines = self._tshark(cmd_tshark, cap, test_env, '-Y',
+                'frame.number == 1 || frame.number == 9', '-Tfields',
+                '-efb_zero.puflags', '-efb_zero.version', '-efb_zero.tag.sni',
+                '-efb_zero.tag.version')
+        assert lines == ['0x01\tQTV\twww.example.org\tQ001',
+                         '0x03\tQTV\ta.b\tQ001']
+
+    def test_fbzero_zero_total_tag_length(self, cmd_tshark, capture_file, test_env):
+        '''A message without tags, or with only empty tags, no longer
+        hides the next message of the segment.'''
+        cap = capture_file('fbzero_coverage.pcap.gz')
+        lines = self._tshark(cmd_tshark, cap, test_env, '-Y',
+                'frame.number == 10 || frame.number == 11', '-Tfields',
+                '-efb_zero.tag.sni', '-efb_zero.tag.version', '-efb_zero.tag_number')
+        assert lines == ['second.example\t\t0,1', '\tQ001\t3,1']
+
+    def test_fbzero_tags(self, cmd_tshark, capture_file, test_env):
+        '''The tags of the full Client Hello in frame 1.'''
+        cap = capture_file('fbzero_coverage.pcap.gz')
+        lines = self._tshark(cmd_tshark, cap, test_env, '-Y', 'frame.number == 1',
+                '-Tfields', '-efb_zero.tag.time', '-efb_zero.tag.alpn',
+                '-efb_zero.tag.aead', '-efb_zero.tag.kexs')
+        assert lines == ['1700000000\th2\tAESG,S20P,CC12\tC255,P256']
+
+
+class TestDissectFc00:
+    '''Fc00 CryptoAuth (cjdns) from the synthetic capture
+    fc00_coverage.pcap.gz. The dissector has no default port: the UDP
+    port 5555 of the capture is decoded with -d udp.port==5555,fc00.'''
+
+    @staticmethod
+    def _tshark(cmd_tshark, capture, test_env, *args):
+        stdout = subprocess.check_output((cmd_tshark, '-d', 'udp.port==5555,fc00',
+                '-r', capture, *args), encoding='utf-8', env=test_env, timeout=120)
+        return stdout.splitlines()
+
+    def test_fc00_frames(self, cmd_tshark, capture_file, test_env):
+        '''All 18 frames are fc00, without malformed packets or error
+        expert infos in one and two passes.'''
+        cap = capture_file('fc00_coverage.pcap.gz')
+        lines = self._tshark(cmd_tshark, cap, test_env, '-Y', 'fc00',
+                '-Tfields', '-eframe.number')
+        assert len(lines) == 18
+        for passes in ((), ('-2',)):
+            lines = self._tshark(cmd_tshark, cap, test_env, *passes, '-Y',
+                    '_ws.malformed || _ws.expert.severity >= 0x00800000',
+                    '-Tfields', '-eframe.number')
+            assert count_output('\n'.join(lines)) == 0
+
+    def test_fc00_session_state(self, cmd_tshark, capture_file, test_env):
+        '''Handshake frames show the session state; data frames (a state
+        above 3 and below 0xffffffff) show the session nonce.'''
+        cap = capture_file('fc00_coverage.pcap.gz')
+        lines = self._tshark(cmd_tshark, cap, test_env, '-Y', 'frame.number <= 5 || '
+                'frame.number >= 12 && frame.number <= 15', '-Tfields',
+                '-efc00.session_state', '-efc00.session_nonce')
+        assert lines == ['0\t', '1\t', '2\t', '3\t', '4294967295\t',
+                         '\t4', '\t305419896', '\t4294967294', '\t99']
+
+    def test_fc00_derivations(self, cmd_tshark, capture_file, test_env):
+        '''The Auth Derivations field is 15 bits wide, so values of 128
+        and above are shown correctly (mask 0x7f before "FC00: Fix the
+        derivations mask and a field description").'''
+        cap = capture_file('fc00_coverage.pcap.gz')
+        lines = self._tshark(cmd_tshark, cap, test_env, '-Y', 'frame.number >= 6 && '
+                'frame.number <= 10', '-Tfields', '-efc00.auth_challenge.derivations')
+        assert lines == ['5', '127', '128', '4660', '32767']
+
+    def test_fc00_ipv6_address(self, cmd_tshark, capture_file, test_env):
+        '''The IPv6 address derived from the (made up) public key.'''
+        cap = capture_file('fc00_coverage.pcap.gz')
+        lines = self._tshark(cmd_tshark, cap, test_env, '-Y', 'frame.number == 1',
+                '-Tfields', '-efc00.ip')
+        assert lines == ['a64b:4972:7fb1:5503:836f:5be0:b0b1:bb26']
+
+
+class TestDissectFc:
+    @staticmethod
+    def _fields(cmd_tshark, capture_file, test_env, *args):
+        stdout = subprocess.check_output((cmd_tshark, '-r', capture_file('fc_coverage.pcapng.gz'), *args),
+                encoding='utf-8', env=test_env)
+        return [line.split('\t') for line in stdout.splitlines()]
+
+    def test_fc_protocols(self, cmd_tshark, capture_file, test_env):
+        '''104 of the 105 frames are dissected by FC (FC-2, FC-2 with
+        delimiters, MDS header and Boardwalk); none is malformed or has an
+        error expert info (a bad CRC, a short header), in one and two passes.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fc_coverage.pcapng.gz'),
+                '-Y', 'fc', '-Tfields', '-eframe.number',
+            ), encoding='utf-8', env=test_env)
+        assert count_output(stdout) == 104
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('fc_coverage.pcapng.gz'),
+                    '-Y', '_ws.malformed || _ws.expert.severity >= error',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_fc_link_control_and_bls(self, cmd_tshark, capture_file, test_env):
+        '''Link control frames (with the reject parameter text), basic link
+        services (ABTS, BA_ACC, BA_RJT).'''
+        lines = self._fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number <= 7 || frame.number == 17 || (frame.number >= 19 && frame.number <= 23)',
+                '-Tfields', '-eframe.number', '-e_ws.col.info', '-efc.r_ctl', '-efc.parameter',
+                '-efc.bls_oxid', '-efc.bls_reason', '-efc.bls_rjtdetail')
+        by_frame = {l[0]: l for l in lines}
+        assert by_frame['1'][1:3] == ['Link Ctl, ACK1', '0xc0']
+        assert by_frame['3'][1:4] == ['Link Ctl, P_RJT', '0xc2', '0x01030000']
+        assert by_frame['4'][1] == 'Link Ctl, F_RJT'
+        assert by_frame['6'][1] == 'Link Ctl, F_BSY (Data frame)'
+        assert by_frame['7'][1] == 'Link Ctl, F_BSY (Link Ctl)'
+        assert by_frame['19'][1] == 'ABTS' and by_frame['19'][3] == '0x00000001'
+        assert by_frame['22'][1] == 'BA_ACC' and by_frame['22'][4] == '0x0100'
+        assert by_frame['23'][1] == 'BA_RJT' and by_frame['23'][5:] == ['0x03', '0x05']
+
+    def test_fc_vft_and_network_header(self, cmd_tshark, capture_file, test_env):
+        '''The VFT header (frame 41) and the Network_Header (frame 42).'''
+        lines = self._fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number == 41 || frame.number == 42', '-Tfields', '-eframe.number',
+                '-efc.vft.vf_id', '-efc.vft.pri', '-efc.vft.hop_ct', '-efc.nethdr.da', '-efc.nethdr.sa')
+        assert lines[0] == ['41', '291', '5', '7', '', '']
+        assert lines[1] == ['42', '', '', '', '00:01:02:03:04:05:06:07', '08:09:0a:0b:0c:0d:0e:0f']
+
+    def test_fc_exchange_and_lun_two_pass(self, cmd_tshark, capture_file, test_env):
+        '''Exchange First In / Last In. Frames 43/44 (and 91/92) are the
+        reproducers of "Keep the LUN of each frame from the first pass": a
+        non-FCP frame, then the FCP_CMND that sets LUN 5, on the same OX_ID.
+        The non-FCP frame is in the exchange without the LUN in both passes.'''
+        args = ('-Y', 'frame.number in {43,44,46,91,92,93}', '-Tfields', '-eframe.number',
+                '-efc.exchange_first_frame')
+        one = self._fields(cmd_tshark, capture_file, test_env, *args)
+        two = self._fields(cmd_tshark, capture_file, test_env, '-2', *args)
+        assert one == two
+        by_frame = {l[0]: l for l in one}
+        assert by_frame['43'][1] == '0'
+        stdout = subprocess.check_output((cmd_tshark, '-2',
+                '-r', capture_file('fc_coverage.pcapng.gz'), '-Y', 'frame.number == 43',
+                '-Tfields', '-efc.exchange_last_frame',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.strip() == '0'
+        assert by_frame['46'][1] == '45'
+        assert by_frame['93'][1] == '92'
+
+    def test_fc_exchange_time(self, cmd_tshark, capture_file, test_env):
+        '''The time from exchange first is only shown for the last frame.'''
+        lines = self._fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'fc.time', '-Tfields', '-eframe.number')
+        frames = [l[0] for l in lines]
+        assert '46' in frames and '53' in frames and '76' in frames
+        assert '45' not in frames
+
+    def test_fc_reassembly(self, cmd_tshark, capture_file, test_env):
+        '''Multi-frame sequences are reassembled, also with a streaming
+        SEQ_CNT (frames 66-68), in the responder direction (69, 70), and
+        again in the second pass.'''
+        for passes in ((), ('-2',)):
+            lines = self._fields(cmd_tshark, capture_file, test_env, *passes,
+                    '-Y', 'fc.reassembled.length', '-Tfields', '-eframe.number', '-efc.reassembled.length',
+                    '-e_ws.col.protocol')
+            assert lines == [['62', '2148', 'FC_CT'], ['65', '2148', 'FC_CT'],
+                             ['68', '2148', 'FC_CT'], ['70', '1074', 'FC_CT']]
+        lines = self._fields(cmd_tshark, capture_file, test_env, '-Y', 'frame.number in {60,61,63,66,69}',
+                '-Tfields', '-eframe.number', '-e_ws.col.info')
+        assert all('(Fragmented)' in l[1] for l in lines)
+
+    def test_fc_fcp_relative_offset(self, cmd_tshark, capture_file, test_env):
+        '''FCP data with the relative offset flag: offset 0 goes to FCP,
+        a non-zero offset is shown as relative offset and not dissected.'''
+        lines = self._fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number in {73,74}', '-Tfields', '-eframe.number',
+                '-efc.relative_offset', '-e_ws.col.protocol')
+        assert lines == [['73', '0', 'FCP'], ['74', '36', 'FC']]
+
+    def test_fc_sof_eof(self, cmd_tshark, capture_file, test_env):
+        '''Frame delimiters and the CRC of the frames with delimiters.'''
+        lines = self._fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'fc.sof', '-Tfields', '-eframe.number', '-efc.sof', '-efc.eof', '-efc.crc.status')
+        assert len(lines) == 48
+        by_frame = {l[0]: l for l in lines}
+        assert by_frame['45'][1:] == ['0xbcb55656', '0xbcb57575', '1']
+        assert by_frame['51'][2] == '0xbcb5d5d5'
+        assert by_frame['56'][2] == '0xbcaa9595'
+        assert by_frame['55'][1] == '0xbcb55858'
+        assert all(l[3] == '1' for l in lines)
+
+    def test_fc_mds_and_boardwalk(self, cmd_tshark, capture_file, test_env):
+        '''The MDS header and Boardwalk encapsulations, with the dropped
+        packet detection, the wrap of the packet count and the packet length.'''
+        lines = self._fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number >= 94', '-Tfields', '-eframe.number', '-emdshdr.vsan',
+                '-ebrdwlk.pktcnt', '-ebrdwlk.drop', '-ebrdwlk.plen')
+        by_frame = {l[0]: l for l in lines}
+        assert [by_frame[str(f)][1] for f in range(94, 99)] == ['80'] * 5
+        assert [by_frame[str(f)][3] for f in range(99, 106)] == [
+            'False', 'False', 'True', 'False', 'False', 'True', 'False']
+        assert by_frame['102'][4] == '60' and by_frame['103'][4] == '160'
+        assert by_frame['104'][2] == '65535' and by_frame['105'][2] == '0'
+
+    def test_fc_statistics(self, cmd_tshark, capture_file, test_env):
+        '''The SRT statistics by FC-4 type and the conversation table.'''
+        stdout = subprocess.check_output((cmd_tshark, '-q',
+                '-r', capture_file('fc_coverage.pcapng.gz'), '-z', 'fc,srt',
+            ), encoding='utf-8', env=test_env)
+        assert 'FC SRT Statistics' in stdout
+        assert grep_output(stdout, r'FC_CT\s+11 ') or grep_output(stdout, r'FC_CT\s+11\b')
+        stdout = subprocess.check_output((cmd_tshark, '-q',
+                '-r', capture_file('fc_coverage.pcapng.gz'), '-z', 'conv,fc',
+            ), encoding='utf-8', env=test_env)
+        assert '01.02.03             <-> 01.04.05' in stdout
+        assert '01.06.07             <-> 01.08.09' in stdout
+
+
+class TestDissectFcct:
+    @staticmethod
+    def _fields(cmd_tshark, capture_file, test_env, *args):
+        stdout = subprocess.check_output((cmd_tshark, '-r', capture_file('fcct_coverage.pcapng.gz'), *args),
+                encoding='utf-8', env=test_env)
+        return [line.split('\t') for line in stdout.splitlines()]
+
+    def test_fcct_protocols(self, cmd_tshark, capture_file, test_env):
+        '''61 of the 62 frames carry an FC-CT preamble (the first frame of the
+        multi-frame request does not); none is malformed or has an error
+        expert info, in one and two passes.'''
+        lines = self._fields(cmd_tshark, capture_file, test_env, '-Y', 'fcct', '-Tfields', '-eframe.number')
+        assert len(lines) == 61
+        for passes in ((), ('-2',)):
+            lines = self._fields(cmd_tshark, capture_file, test_env, *passes,
+                    '-Y', '_ws.malformed || _ws.expert.severity >= error', '-Tfields', '-eframe.number')
+            assert lines == []
+
+    def test_fcct_servers(self, cmd_tshark, capture_file, test_env):
+        '''The server derived from the GS type and subtype, for each type
+        (including the unknown ones and the GS type 0x09 oddity).'''
+        lines = self._fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'fcct.revision && frame.number <= 33 && frame.number % 2 == 1', '-Tfields',
+                '-eframe.number', '-efcct.revision', '-efcct.in_id', '-efcct.gstype',
+                '-efcct.gssubtype', '-efcct.server', '-efcct.options')
+        got = {l[0]: l[3:6] for l in lines}
+        assert got['1'] == ['0xf7', '0x00', '0x08']      # key server
+        assert got['3'] == ['0xf8', '0x01', '0x06']      # alias server
+        assert got['5'][2] == '0xff'                     # unknown subtype
+        assert got['7'][2] == '0x03'                     # fabric configuration server
+        assert got['9'][2] == '0x04'                     # unzoned name server
+        assert got['11'][2] == '0x05'                    # fabric zone server
+        assert got['15'][2] == '0x07'                    # time server
+        assert got['19'][2] == '0x01'                    # dNS
+        assert got['21'][2] == '0x02'                    # IP server
+        assert got['25'][2] == '0x09'                    # GS type 0xFD: fabric controller
+        assert got['27'] == ['0x09', '0x00', '0xff']     # GS type 0x09 is not mapped
+        assert got['33'][2] == '0xff'
+        assert {l[2] for l in lines} == {'01.02.03'}
+
+    def test_fcct_messages(self, cmd_tshark, capture_file, test_env):
+        '''Info column text: request, accept, every reject code, reserved
+        opcodes and the dissectors reached through the server table.'''
+        lines = self._fields(cmd_tshark, capture_file, test_env, '-Y', 'frame.number >= 35',
+                '-Tfields', '-eframe.number', '-e_ws.col.info', '-e_ws.col.protocol')
+        got = {l[0]: l[1:] for l in lines}
+        reasons = ['Invalid Cmd Code', 'Invalid Version Level', 'Logical Error', 'Invalid CT_IU Size',
+                   'Logical Busy', 'Protocol Error', 'Unable to Perform Cmd', 'Cmd Not Supported', '0x42']
+        for i, r in enumerate(reasons):
+            assert got[str(36 + 2 * i)] == ['FC_CT Reject (%s)' % r, 'FC_CT']
+        assert got['35'] == ['FC_CT Request', 'FC_CT']
+        assert got['54'][0] == 'FC_CT Reserved'
+        assert got['55'][0] == 'FC_CT Request'
+        assert got['56'][0] == 'FC_CT Reserved'
+        assert got['57'] == ['GPN_ID', 'dNS']
+        assert got['59'] == ['GID_FT', 'Unzoned NS']
+
+    def test_fcct_reassembled(self, cmd_tshark, capture_file, test_env):
+        '''The two-frame request (frames 60, 61) is reassembled before FC-CT
+        is called, in one and two passes.'''
+        for passes in ((), ('-2',)):
+            lines = self._fields(cmd_tshark, capture_file, test_env, *passes,
+                    '-Y', 'fc.reassembled.length', '-Tfields', '-eframe.number', '-efc.reassembled.length',
+                    '-efcct.gssubtype', '-e_ws.col.protocol')
+            assert len(lines) == 1 and lines[0][0] == '62' and lines[0][2] == '0x03'
+
+
+class TestDissectFcdns:
+    @staticmethod
+    def _fields(cmd_tshark, capture_file, test_env, *args):
+        stdout = subprocess.check_output((cmd_tshark, '-r', capture_file('fcdns_coverage.pcapng.gz'), *args),
+                encoding='utf-8', env=test_env)
+        return [line.split('\t') for line in stdout.splitlines()]
+
+    def test_fcdns_protocols(self, cmd_tshark, capture_file, test_env):
+        '''157 of the 158 frames are dissected by the name server dissector;
+        none is malformed or has an error expert info, in one and two passes
+        (including the RFD_ID request with a descriptor).'''
+        lines = self._fields(cmd_tshark, capture_file, test_env, '-Y', 'fcdns', '-Tfields', '-eframe.number')
+        assert len(lines) == 157
+        for passes in ((), ('-2',)):
+            lines = self._fields(cmd_tshark, capture_file, test_env, *passes,
+                    '-Y', '_ws.malformed || _ws.expert.severity >= error', '-Tfields', '-eframe.number')
+            assert lines == []
+
+    def test_fcdns_two_pass(self, cmd_tshark, capture_file, test_env):
+        '''The Info column (opcode of each ACC) is the same in both passes.'''
+        args = ('-Y', 'fcdns', '-Tfields', '-eframe.number', '-e_ws.col.info', '-e_ws.col.protocol')
+        one = self._fields(cmd_tshark, capture_file, test_env, *args)
+        two = self._fields(cmd_tshark, capture_file, test_env, '-2', *args)
+        assert one == two
+
+    def test_fcdns_opcodes(self, cmd_tshark, capture_file, test_env):
+        '''Every handled opcode appears as a request and as an accept
+        decoded with the opcode of the request.'''
+        lines = self._fields(cmd_tshark, capture_file, test_env, '-Y', 'fcdns', '-Tfields', '-e_ws.col.info')
+        infos = {l[0] for l in lines}
+        names = ('GA_NXT GPN_ID GNN_ID GCS_ID GFT_ID GSPN_ID GPT_ID GFPN_ID GFD_ID GFF_ID GID_PN GIPP_PN '
+                 'GID_NN GPN_NN GIP_NN GSNN_NN GID_FT GPN_FT GNN_FT GID_PT GID_IPP GID_FF RPN_ID RNN_ID '
+                 'RCS_ID RFT_ID RSPN_ID RPT_ID RIPP_ID RFD_ID RFF_ID RIP_NN RSNN_NN DA_ID GE_ID GE_PN '
+                 'GE_NN GE_IP GE_FT GE_PT GE_ZM GE_ZN GE_IPP GE_FF').split()
+        for n in names:
+            assert n in infos, n
+            assert 'ACC (%s)' % n in infos, n
+
+    def test_fcdns_reject_and_orphans(self, cmd_tshark, capture_file, test_env):
+        '''RJT with the failed opcode, an RJT and an ACC without a request,
+        and the unzoned name server.'''
+        lines = self._fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number in {149,150,151,152,153,154,155,156}',
+                '-Tfields', '-eframe.number', '-e_ws.col.info', '-e_ws.col.protocol')
+        got = {l[0]: l[1:] for l in lines}
+        assert got['150'] == ['RJT (GPN_ID)', 'dNS']
+        assert got['152'] == ['RJT (RPN_ID)', 'dNS']
+        assert got['155'] == ['GPN_ID', 'Unzoned NS']
+        assert got['156'] == ['ACC (GPN_ID)', 'Unzoned NS']
+        lines = self._fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'fcdns.no_record_of_exchange || fcdns.zone.mbrid.unknown_type',
+                '-Tfields', '-eframe.number')
+        assert [l[0] for l in lines] == ['141', '154', '158']
+
+    def test_fcdns_rfdid(self, cmd_tshark, capture_file, test_env):
+        '''Reproducer of "Fix RFD_ID descriptor length": the descriptor
+        length byte, not the rest of the frame, is the length of the
+        descriptor (frames 101, 103, 105).'''
+        lines = self._fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'fcdns.opcode == 0x021e && fcdns.req.fc4desclen', '-Tfields', '-eframe.number',
+                '-efcdns.req.fc4desclen', '-efcdns.req.fc4desc')
+        assert lines == [['101', '4', 'abcd'], ['103', '3,2', 'abc,zz']]
+
+    def test_fcdns_responses(self, cmd_tshark, capture_file, test_env):
+        '''Fields of some accepts: a port name, an FC-4 type bitmap, a port
+        list, name server entries.'''
+        lines = self._fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number in {34,56,118}', '-Tfields', '-eframe.number',
+                '-efcdns.fc4types.fcp', '-efcdns.rply.portid', '-efcdns.num_entries')
+        got = {l[0]: l[1:] for l in lines}
+        assert got['34'][0] == 'True'
+        assert got['56'][1] == '00.00.01,00.00.02,00.00.03'
+        assert got['118'][1:] == ['01.01.01,01.01.02', '0x00000002']
+
+
+class TestDissectFcels:
+    '''FC Extended Link Services (R_CTL 0x22/0x23, type 1) in FCoE, from
+    the synthetic capture fcels_coverage.pcap.gz: login, logout, exchange
+    management, process login, discovery, status and registration
+    commands, iFCP CBIND/UNBIND and LS_RJT with every reason.'''
+
+    @staticmethod
+    def rows(cmd_tshark, capture_file, test_env, *fields, passes=(), extra=()):
+        stdout = subprocess.check_output((cmd_tshark, *passes,
+                '-r', capture_file('fcels_coverage.pcap.gz'), *extra,
+                '-Tfields', '-eframe.number', *['-e' + f for f in fields],
+            ), encoding='utf-8', env=test_env)
+        return {l.split('\t')[0]: l.split('\t')[1:] for l in stdout.splitlines()}
+
+    def test_fcels_protocols(self, cmd_tshark, capture_file, test_env):
+        '''All 196 frames are FC ELS, with no malformed packets or expert
+        infos in one and two passes.'''
+        rows = self.rows(cmd_tshark, capture_file, test_env, '_ws.col.protocol')
+        assert len(rows) == 196
+        assert all(r[0] == 'FC ELS' for r in rows.values())
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('fcels_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_fcels_info(self, cmd_tshark, capture_file, test_env):
+        '''The accept is named after the request of its exchange (FLOGI
+        from a fabric login and from a loop port included), rejects name
+        the failed request, and CBIND/UNBIND tell request from response.'''
+        for passes in ((), ('-2',)):
+            rows = self.rows(cmd_tshark, capture_file, test_env, '_ws.col.info', passes=passes)
+            infos = [rows[str(n)][0] for n in range(1, 197)]
+            assert infos[:8] == ['PLOGI', 'ACC (PLOGI)', 'FLOGI', 'ACC (FLOGI)',
+                                 'PDISC', 'ACC (PDISC)', 'FDISC', 'ACC (FDISC)']
+            assert infos[14:16] == ['FLOGI', 'ACC (FLOGI)']          # from a loop port
+            assert infos[20:30] == ['LOGO', 'ACC (LOGO)', 'ABTX', 'ACC (ABTX)', 'RSI',
+                                    'ACC (RSI)', 'RRQ', 'ACC (RRQ)', 'REC', 'ACC (REC)']
+            assert infos[105:109] == ['CBIND Request', 'CBIND Response',
+                                      'UNBIND Request', 'UNBIND Response']
+            assert infos[109:117] == ['PLOGI', 'LS_RJT (PLOGI)', 'PRLI', 'LS_RJT (PRLI)',
+                                      'ADISC', 'LS_RJT (ADISC)', 'LOGO', 'LS_RJT (LOGO)']
+            assert infos[191:] == ['LOGO', 'ACC (LOGO)', 'SRL', 'LS_RJT (SRL)', 'LS_RJT (0x0)']
+            for op in ('RTV', 'RLS', 'ECHO', 'TEST', 'SRR', 'LINIT', 'LKA', 'FARP-REQ',
+                       'FARP-REPLY', 'FAN', 'RLIR', 'RPSC', 'LSTS', 'RNFT', 'SCR', 'RSCN'):
+                assert op in infos
+
+    def test_fcels_lirr_format_offset(self, cmd_tshark, capture_file, test_env):
+        '''The LIRR registration format item covers the second octet after
+        the function (frame offset 57), the octet it shows, not the
+        function octet (56); it was added at the function octet before
+        "fcels: Fix the LIRR registration format offset".'''
+        import json
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fcels_coverage.pcap.gz'),
+                '-Y', 'frame.number == 92', '-T', 'json', '-x',
+            ), encoding='utf-8', env=test_env)
+        els = json.loads(stdout)[0]['_source']['layers']['fcels']
+        assert els['fcels.lirr.regn_function'] == '0x01'
+        assert els['fcels.lirr.regn_function_raw'][1:3] == [56, 1]
+        assert els['fcels.lirr.regn_format'] == '0x08'
+        assert els['fcels.lirr.regn_format_raw'][0:3] == ['08', 57, 1]
+        rows = self.rows(cmd_tshark, capture_file, test_env, 'fcels.lirr.regn_function',
+                         'fcels.lirr.regn_format', extra=('-Y', 'fcels.lirr.regn_format'))
+        assert rows['94'] == ['0x02', '0x00'] and rows['96'] == ['0xfe', '0x04']
+
+    def test_fcels_login(self, cmd_tshark, capture_file, test_env):
+        '''Common features, class flags, receive size, E_D_TOV, names and
+        the service availability of the 256 octet login payload.'''
+        rows = self.rows(cmd_tshark, capture_file, test_env, 'fcels.logi.cmnfeatures',
+                         'fcels.logi.rcvsize', 'fcels.edtov', 'fcels.npname',
+                         'fcels.logi.svcavail', 'fcels.logi.clsflags',
+                         extra=('-Y', 'frame.number <= 20'))
+        assert rows['1'] == ['0xfffe', '2048', '10000', '20:00:00:de:ad:00:00:01', '',
+                             '0x8000,0xc000,0x8000,0x0000']
+        assert rows['2'][0] == '0x3800' and rows['5'][0] == '0x7f7e'
+        assert rows['9'][5] == '0x0000,0x0000,0x0000,0x0000'
+        assert rows['10'][5] == '0xffff,0xffff,0xffff,0xffff'
+        assert rows['11'][0] == '0x0001' and rows['11'][4] == '200000dead000009'
+        assert rows['15'][0] == '0x8800'
+
+    def test_fcels_reject(self, cmd_tshark, capture_file, test_env):
+        '''LS_RJT reason, detail and vendor codes.'''
+        rows = self.rows(cmd_tshark, capture_file, test_env, 'fcels.rjt.reason',
+                         'fcels.rjt.detail', 'fcels.rjt.vnduniq',
+                         extra=('-Y', 'fcels.rjt.reason'))
+        assert len(rows) == 43
+        assert rows['111'] == ['0x01', '0x00', '0x00']
+        assert rows['113'] == ['0x03', '0x01', '0x01']
+        assert rows['115'] == ['0x05', '0x03', '0x02']
+        assert rows['189'] == ['0x0d', '0x62', '0x27']
+        assert rows['191'] == ['0x0e', '0x7e', '0x28']
+        assert rows['195'] == ['0x03', '0x01', '0x00']
+        assert rows['196'] == ['0x01', '0x00', '0x00']
+        assert {r[0] for r in rows.values()} == {'0x01', '0x03', '0x05', '0x07', '0x09', '0x0b',
+                                                 '0x0d', '0x0e', '0x20', '0xff', '0x02'}
+
+    def test_fcels_prli(self, cmd_tshark, capture_file, test_env):
+        '''PRLI, PRLO and TPRLO service parameter pages: SCSI pages show
+        the FCP flags, other pages the response or third party fields.'''
+        rows = self.rows(cmd_tshark, capture_file, test_env, 'fcels.prlilo.type',
+                         'fcels.prlilo.payload_length', 'fcels.prlilo.response_code',
+                         'fcels.fcpflags', 'fcels.prlilo.3rd_party_n_port_id',
+                         'fcels.prlilo.service_parameter_response',
+                         extra=('-Y', 'frame.number >= 45 && frame.number <= 52'))
+        assert rows['45'][:2] == ['8,5,8', '52']
+        assert rows['46'][:4] == ['8,5,5,8', '68', '0x21,0x01,0x02,0x01', '0x0000003f,0x00000002']
+        assert rows['46'][5] == '0xffffffff,0x00000000'
+        assert rows['49'][4] == '01.02.03'
+        assert rows['50'][:2] == ['8', '20']
+
+    def test_fcels_lists(self, cmd_tshark, capture_file, test_env):
+        '''RSCN pages, RNFT entries, RPL port blocks, RPS counters, RNID
+        node identification data, CBIND/UNBIND fields, RPSC speeds.'''
+        rows = self.rows(cmd_tshark, capture_file, test_env, 'fcels.rscn.payload_len',
+                         'fcels.rscn.addrfmt', 'fcels.rnft.fc4type', 'fcels.rnft.fc_4_qualifier',
+                         'fcels.rpl.list_length', 'fcels.rpl.port_name', 'fcels.portstatus',
+                         'fcels.l_port_status', 'fcels.common_identification_data_length',
+                         'fcels.rnid.asstype', 'fcels.rnid.tcpport', 'fcels.cbind.status',
+                         'fcels.cbind.handle', 'fcels.unbind.status', 'fcels.rpsc.port_oper_speed')
+        assert rows['68'][:2] == ['28', '0x00,0x01,0x02,0x00,0x02,0x01']
+        assert rows['81'][2:4] == ['0x08,0x05,0x20', '0x000001,0x000002,0x000003']
+        assert rows['65'][4:6] == ['3', '20:00:00:de:ad:00:00:01,20:00:00:de:ad:00:00:02,'
+                                        '20:00:00:de:ad:00:00:03']
+        assert rows['59'][6] == '0x0300' and rows['61'][6:8] == ['0x0500', '0x0100']
+        assert rows['85'][8:11] == ['16', '0x00000003', '80']
+        assert rows['107'][11:13] == ['3', '0x7766'] and rows['109'][13] == '1'
+        assert rows['103'][14] == '0x2000,0x4000'
+
+
+class TestDissectFcfcs:
+    '''FC Fabric Configuration Server (FC-CT GS type 0xFA, subtype 1) in
+    FCoE, from the synthetic capture fcfcs_coverage.pcap.gz: every request
+    with its accept, rejects, and exchange state tracking.'''
+
+    OPS = ['GIEL', 'GIEL', 'GIET', 'GIET', 'GDID', 'GMID', 'GFN', 'GIELN', 'GMAL',
+           'GMAL', 'GIEIL', 'GIEIL', 'GPL', 'GPL', 'GPT', 'GPPN', 'GAPNL', 'GPS',
+           'GPLNL', 'GPLNL', 'GPLT', 'GPLML', 'GNPL', 'GPNL', 'RIELN', 'RPL', 'RPL',
+           'RPLN', 'RPLT', 'RPLM', 'DPL', 'DPLN', 'DPLML', 'GCAP', 'GCAP', 'GTIN',
+           'GATIN', 'GNID', '0x7777', 'GPT', 'GPS']
+
+    @staticmethod
+    def rows(cmd_tshark, capture_file, test_env, *fields, passes=()):
+        stdout = subprocess.check_output((cmd_tshark, *passes,
+                '-r', capture_file('fcfcs_coverage.pcap.gz'),
+                '-Tfields', '-eframe.number', *['-e' + f for f in fields],
+            ), encoding='utf-8', env=test_env)
+        return {l.split('\t')[0]: l.split('\t')[1:] for l in stdout.splitlines()}
+
+    def test_fcfcs_protocols(self, cmd_tshark, capture_file, test_env):
+        '''98 frames are FC-FCS and the last one is for another server
+        (Unzoned NS); no malformed packets or expert infos in one and two
+        passes.'''
+        rows = self.rows(cmd_tshark, capture_file, test_env, '_ws.col.protocol')
+        assert len(rows) == 99
+        protocols = [r[0] for r in rows.values()]
+        assert protocols.count('FC-FCS') == 98
+        assert protocols[-1] == 'Unzoned NS'
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('fcfcs_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_fcfcs_info(self, cmd_tshark, capture_file, test_env):
+        '''The accept is named after the request of its exchange (state
+        kept per OX_ID), also when the exchange is reused (frames 79-82)
+        and for rejects.'''
+        for passes in ((), ('-2',)):
+            rows = self.rows(cmd_tshark, capture_file, test_env, '_ws.col.info', passes=passes)
+            infos = [rows[str(n)][0] for n in range(1, 100)]
+            expected = []
+            for op in self.OPS:
+                expected += [op, 'MSG_ACC (%s)' % op]
+            expected += ['GIEL', 'MSG_RJT (GIEL)'] * 7
+            expected += ['FC_CT Reject (Invalid Cmd Code)', '0x8003', 'GID_A']
+            assert infos == expected
+
+    def test_fcfcs_lists(self, cmd_tshark, capture_file, test_env):
+        '''Lists: interconnect elements, element info with vendor specific
+        strings, ports, capabilities.'''
+        rows = self.rows(cmd_tshark, capture_file, test_env, 'fcs.ie.name', 'fcs.ie.type',
+                         'fcs.ie.domainid', 'fcs.ie.mgmtid', 'fcs.vendorname',
+                         'fcs.modelname', 'fcs.releasecode',
+                         'fcfcs.vendor_specific_information', 'fcs.port.type',
+                         'fcs.port.state', 'fcs.numcap', 'fcs.gssubtype')
+        r = rows['2']
+        assert r[0] == '10:00:00:aa:00:00:00:00,10:00:00:aa:00:00:00:01,' \
+                       '10:00:00:aa:00:00:00:02,10:00:00:aa:00:00:00:03'
+        assert r[1] == '0x01,0x02,0x03,0x09'
+        assert rows['10'][2] == '0x21' and rows['12'][3] == 'fc.01.0a'
+        assert rows['22'][4:8] == ['ACME', 'M-1000', '1.2.3', 'extra info,more']
+        assert rows['24'][4:8] == ['ACME', 'M-1000', '1.2.3', '']
+        assert rows['26'][8] == '0x01,0x81,0x84'
+        assert rows['36'][8:10] == ['0x81', '0x02']
+        assert rows['68'][10:12] == ['3', '0x01,0x02,0x09']
+
+    def test_fcfcs_reject(self, cmd_tshark, capture_file, test_env):
+        '''Reject reason, explanation and vendor code.'''
+        rows = self.rows(cmd_tshark, capture_file, test_env, 'fcs.reason',
+                         'fcs.reasondet', 'fcs.err.vendor')
+        assert [rows[str(n)][0] for n in range(84, 97, 2)] == \
+            ['0x01', '0x02', '0x03', '0x04', '0x05', '0x07', '0x09']
+        assert [rows[str(n)][1] for n in range(84, 97, 2)] == \
+            ['0x00', '0x01', '0x02', '0x03', '0x04', '0x7f', '0x10']
+        assert [rows[str(n)][2] for n in range(84, 97, 2)] == \
+            ['0x00', '0x00', '0x44', '0x00', '0x00', '0x01', '0xff']
+
+
+class TestDissectFcfzs:
+    '''FC Zone Server (FC-CT GS type 0xFA, subtype 3) in FCoE, from the
+    synthetic capture fcfzs_coverage.pcap.gz: every request with its
+    accept, zone sets with every member type, rejects and exchange state
+    tracking.'''
+
+    OPS = ['Get Capabilities'] * 5 + ['Get Enforcement State'] * 4 + \
+        ['Get Zone Set List'] * 2 + ['Get Zone List'] * 2 + ['Get Zone Member List'] * 2 + \
+        ['Get Active Zone Set'] * 2 + ['Get Zone Set'] * 2 + ['Add Zone Set', 'Activate Zone Set Direct',
+        'Activate Zone Set', 'Deactivate Zone Set', 'Add Zone Members', 'Remove Zone Members',
+        'Add Zone Members', 'Remove Zone Members', 'Add Zone', 'Remove Zone', 'Remove Zone Set',
+        '0x7777', 'Get Capabilities', 'Get Enforcement State']
+
+    @staticmethod
+    def rows(cmd_tshark, capture_file, test_env, *fields, passes=()):
+        stdout = subprocess.check_output((cmd_tshark, *passes,
+                '-r', capture_file('fcfzs_coverage.pcap.gz'),
+                '-Tfields', '-eframe.number', *['-e' + f for f in fields],
+            ), encoding='utf-8', env=test_env)
+        return {l.split('\t')[0]: l.split('\t')[1:] for l in stdout.splitlines()}
+
+    def test_fcfzs_protocols(self, cmd_tshark, capture_file, test_env):
+        '''All 100 frames are Zone Server frames, with no malformed
+        packets or expert infos in one and two passes.'''
+        rows = self.rows(cmd_tshark, capture_file, test_env, '_ws.col.protocol')
+        assert len(rows) == 100
+        assert all(r[0] == 'Zone Server' for r in rows.values())
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('fcfzs_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_fcfzs_info(self, cmd_tshark, capture_file, test_env):
+        '''The accept is named after the request of its exchange, also
+        when the exchange is reused (frames 63-66), and for rejects.'''
+        for passes in ((), ('-2',)):
+            rows = self.rows(cmd_tshark, capture_file, test_env, '_ws.col.info', passes=passes)
+            infos = [rows[str(n)][0] for n in range(1, 101)]
+            expected = []
+            for op in self.OPS:
+                expected += [op, 'MSG_ACC (%s)' % op]
+            expected += ['Get Zone Set', 'MSG_RJT (Get Zone Set)'] * 16
+            expected += ['FC_CT Reject (Invalid Cmd Code)', '0x8003']
+            assert infos == expected
+
+    def test_fcfzs_zoneset(self, cmd_tshark, capture_file, test_env):
+        '''The active zone set with every member type (frame 32), a zone
+        set list and capability and state flags.'''
+        rows = self.rows(cmd_tshark, capture_file, test_env, 'fcfzs.zoneset.name',
+                         'fcfzs.zone.name', 'fcfzs.zonembr.idtype', 'fcfzs.zone.mbrid.fcwwn',
+                         'fcfzs.zone.mbrid.uint', 'fcfzs.zone.mbrid.fc', 'fcfzs.zone.lun')
+        r = rows['32']
+        assert r[0] == 'ZSET_ONE'
+        assert r[1] == 'zone_a,zb,zone_empty'
+        assert r[2] == '0x01,0x04,0x02,0x03,0xe1,0xe2,0xe3,0x01'
+        assert r[3] == '10:00:00:aa:00:00:00:01,10:00:00:aa:00:00:00:04,' \
+                       '10:00:00:aa:00:00:00:07,10:00:00:aa:00:00:00:01'
+        assert r[4] == '0x001234,0x100000'
+        assert r[5] == '01.02.03,10.00.00'
+        assert r[6] == '00000007e2000000,100000aa00000008,100000aa00000009'
+        assert rows['34'][0] == 'ZS'
+        # requests with the zone set definition
+        assert rows['39'][0] == 'ZSET_ONE' and rows['41'][0] == 'ZS'
+
+    def test_fcfzs_flags(self, cmd_tshark, capture_file, test_env):
+        '''Capabilities and enforcement state bits and vendor flags.'''
+        rows = self.rows(cmd_tshark, capture_file, test_env, 'fcfzs.gzc.flags',
+                         'fcfzs.gzc.flags.hard_zones', 'fcfzs.gzc.flags.soft_zones',
+                         'fcfzs.gzc.flags.zoneset_db', 'fcfzs.gzc.vendor',
+                         'fcfzs.zone.state', 'fcfzs.gest.vendor')
+        assert rows['2'] == ['0xe0', 'True', 'True', 'False', '0x00070000', '', '']
+        assert rows['10'] == ['0x00', 'False', 'False', 'False', '0x00000000', '', '']
+        assert rows['12'][5:] == ['0xc0', '0xcafe00c0']
+        assert rows['18'][5:] == ['0x00', '0xcafe0000']
+
+    def test_fcfzs_reject(self, cmd_tshark, capture_file, test_env):
+        '''Reject reason, explanation and vendor codes.'''
+        rows = self.rows(cmd_tshark, capture_file, test_env, 'fcfzs.reason',
+                         'fcfzs.rjtdetail', 'fcfzs.rjtvendor')
+        details = [rows[str(n)][1] for n in range(68, 99, 2)]
+        assert details == ['0x00', '0x00', '0x01', '0x10', '0x11', '0x12', '0x13', '0x14',
+                           '0x15', '0x16', '0x17', '0x18', '0x19', '0x1a', '0x7f', '0xff']
+        assert [rows[str(n)][0] for n in range(68, 99, 2)] == \
+            ['0x01', '0x01', '0x02'] + ['0x03'] * 11 + ['0x04', '0x09']
+        assert [rows[str(n)][2] for n in range(68, 99, 2)] == details
+
+
+class TestDissectFcgi:
+    '''FastCGI over TCP port 9000 (FCGI has no default port, so the tests
+    use -d tcp.port==9000,fcgi), from the synthetic capture
+    fcgi_coverage.pcap.gz.'''
+
+    @staticmethod
+    def fcgi_opts():
+        return ('-d', 'tcp.port==9000,fcgi')
+
+    def test_fcgi_protocols(self, cmd_tshark, capture_file, test_env):
+        '''Frames are FCGI (frames 23, 24 and 28 are TCP segments that hold
+        the start of a record reassembled in frames 25 and 29), with
+        no malformed packets or expert infos in one and two passes.'''
+        stdout = subprocess.check_output((cmd_tshark, *self.fcgi_opts(),
+                '-r', capture_file('fcgi_coverage.pcap.gz'),
+                '-Tfields', '-e_ws.col.protocol',
+            ), encoding='utf-8', env=test_env)
+        protocols = stdout.split()
+        assert len(protocols) == 34
+        assert protocols.count('FCGI') == 31
+        assert protocols.count('TCP') == 3
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes, *self.fcgi_opts(),
+                    '-r', capture_file('fcgi_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_fcgi_end_request_status(self, cmd_tshark, capture_file, test_env):
+        '''The protocol status of END_REQUEST is a one octet field (it was
+        registered as FT_UINT32 before "FCGI: Make the end request
+        protocol status a one byte field").'''
+        stdout = subprocess.check_output((cmd_tshark, *self.fcgi_opts(),
+                '-r', capture_file('fcgi_coverage.pcap.gz'),
+                '-Y', 'fcgi.end_request.protocol_status',
+                '-Tfields', '-eframe.number', '-efcgi.end_request.app_status',
+                '-efcgi.end_request.protocol_status',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.splitlines() == [
+            '11\t0\t0', '15\t1\t1', '16\t4294967295\t2',
+            '17\t16909060\t3', '18\t7\t119', '34\t0\t0']
+        stdout = subprocess.check_output((cmd_tshark, *self.fcgi_opts(),
+                '-r', capture_file('fcgi_coverage.pcap.gz'),
+                '-Y', 'frame.number == 16', '-V', '-O', 'fcgi',
+            ), encoding='utf-8', env=test_env)
+        assert '        Protocol Status: FCGI_OVERLOADED (2)' in stdout.splitlines()
+
+    def test_fcgi_records(self, cmd_tshark, capture_file, test_env):
+        '''Record types, request ids, name/value pairs with one and four
+        octet lengths, records sharing a segment and records split over
+        segments.'''
+        stdout = subprocess.check_output((cmd_tshark, *self.fcgi_opts(),
+                '-r', capture_file('fcgi_coverage.pcap.gz'),
+                '-Y', 'fcgi',
+                '-Tfields', '-eframe.number', '-efcgi.type', '-efcgi.id',
+                '-efcgi.content.length', '-efcgi.nv_name',
+            ), encoding='utf-8', env=test_env)
+        rows = {l.split('\t')[0]: l.split('\t')[1:] for l in stdout.splitlines()}
+        assert rows['1'] == ['9', '0', '48', 'FCGI_MAX_CONNS,FCGI_MAX_REQS,FCGI_MPXS_CONNS']
+        assert rows['2'][0] == '10'
+        assert rows['4'] == ['4', '1', '282', 'REQUEST_METHOD,SCRIPT_NAME,HTTP_COOKIE,QUERY_STRING']
+        assert rows['22'] == ['1,4,4,5', '5,5,5,5', '8,4,0,2', 'A']
+        assert rows['25'] == ['4', '5', '43', 'SPLIT_NAME']
+        assert rows['29'] == ['6', '5', '300', '']
+        assert rows['30'][0] == '11'
+        assert rows['32'][0] == '99'
+        assert rows['2'][3] == 'FCGI_MAX_CONNS,FCGI_MAX_REQS,FCGI_MPXS_CONNS'
+
+    def test_fcgi_values(self, cmd_tshark, capture_file, test_env):
+        '''GET_VALUES shows the names alone and the result shows
+        "name = value"; roles and the keep connection flag.'''
+        stdout = subprocess.check_output((cmd_tshark, *self.fcgi_opts(),
+                '-r', capture_file('fcgi_coverage.pcap.gz'),
+                '-Y', 'frame.number <= 3', '-V', '-O', 'fcgi',
+            ), encoding='utf-8', env=test_env)
+        lines = [l.strip() for l in stdout.splitlines()]
+        assert 'FCGI_MAX_CONNS' in lines
+        assert 'FCGI_MAX_CONNS = 10' in lines
+        assert 'FCGI_MPXS_CONNS = 0' in lines
+        assert 'Role: FCGI_RESPONDER (1)' in lines
+        assert 'Role: FCGI_RESPONDER (1)' in lines
+        stdout = subprocess.check_output((cmd_tshark, *self.fcgi_opts(),
+                '-r', capture_file('fcgi_coverage.pcap.gz'),
+                '-Y', 'fcgi.begin_request.keep_conn == 1',
+                '-Tfields', '-eframe.number', '-efcgi.begin_request.role',
+                '-efcgi.begin_request.flags',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.splitlines() == ['3\t1\t0x01', '21\t9\t0x81']
+
+
+class TestDissectFcip:
+    '''FCIP (Fibre Channel over IP) found by the TCP heuristic on port
+    3225, from the synthetic capture fcip_coverage.pcap.gz. FCIP frames
+    carry FC frames, so FCP, BLS, FC ELS and FC link control appear as the
+    protocol of the FC frame.'''
+
+    @staticmethod
+    def fields(cmd_tshark, capture_file, test_env, *fields, passes=()):
+        stdout = subprocess.check_output((cmd_tshark, *passes,
+                '-r', capture_file('fcip_coverage.pcap.gz'),
+                '-Tfields', '-eframe.number', *['-e' + f for f in fields],
+            ), encoding='utf-8', env=test_env)
+        return {l.split('\t')[0]: l.split('\t')[1:] for l in stdout.splitlines()}
+
+    def test_fcip_protocols(self, cmd_tshark, capture_file, test_env):
+        '''49 frames; the TCP segments that start a reassembled frame are
+        TCP; no malformed packets or expert infos in one and two passes,
+        and both passes show the same.'''
+        rows = self.fields(cmd_tshark, capture_file, test_env, '_ws.col.protocol')
+        assert len(rows) == 49
+        protocols = [r[0] for r in rows.values()]
+        assert protocols.count('TCP') == 7
+        assert protocols.count('FCIP') == 3
+        assert protocols.count('FCP') == 34
+        assert protocols.count('FC') == 2
+        assert protocols.count('FC ELS') == 2
+        assert protocols.count('BLS') == 1
+        assert rows['20'] == ['FCIP'] and rows['21'] == ['FCIP']
+        assert rows == self.fields(cmd_tshark, capture_file, test_env,
+                                   '_ws.col.protocol', passes=('-2',))
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('fcip_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_fcip_multiple_frames(self, cmd_tshark, capture_file, test_env):
+        '''Every FCIP frame of a segment is decoded from its own start:
+        its own SOF, EOF and FC payload (the FCP_DATA_RO and the OX_ID).
+        Before "FCIP: Decode every frame in a segment and fix the EOF
+        check" every frame showed the first one.'''
+        rows = self.fields(cmd_tshark, capture_file, test_env,
+                           'fcip.sof', 'fcip.eof', 'fcp.data_ro', 'fc.ox_id')
+        assert rows['23'] == ['0x2e,0x2d', '0x41,0x42', '286331153,572662306', '0x0010,0x0020']
+        assert rows['24'] == ['0x2e,0x2e,0x2e,0x2e,0x2e', '0x41,0x42,0x41,0x42,0x41',
+                              '858993456,858993457,858993458,858993459,858993460',
+                              '0x0030,0x0031,0x0032,0x0033,0x0034']
+        assert rows['44'][2:] == ['28674,28675', '0x0703,0x0704']
+        # a frame after four octets of garbage
+        assert rows['26'] == ['0x2e', '0x42', '1145324612', '0x0040']
+
+    def test_fcip_eof_check(self, cmd_tshark, capture_file, test_env):
+        '''Frames with a bad length, bad complement, illegal EOF, bad
+        EOF complement or replica and bad reserved octets in front of a
+        good frame are skipped (frames 27-36 hold only the good frame).
+        The EOF is checked at the end of the frame (the old code looked
+        four times too far).'''
+        rows = self.fields(cmd_tshark, capture_file, test_env,
+                           'fcip.sof', 'fcip.eof', 'fcp.data_ro', 'fc.ox_id')
+        for n in range(10):
+            row = rows[str(27 + n)]
+            assert row[0] == '0x2e' and row[1] == '0x42' and row[3] == '0x0600'
+        assert [rows[str(27 + n)][2] for n in range(9)] == [str(0x6000 + n) for n in range(9)]
+        assert rows['36'][2] == str(0x6100)
+
+    def test_fcip_sof_eof(self, cmd_tshark, capture_file, test_env):
+        '''Every SOF and EOF value is named.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fcip_coverage.pcap.gz'),
+                '-Y', 'frame.number <= 16', '-V', '-O', 'fcip',
+            ), encoding='utf-8', env=test_env)
+        lines = [l.strip() for l in stdout.splitlines()]
+        for name, val in (('SOFf', 0x28), ('SOFi4', 0x29), ('SOFi2', 0x2d), ('SOFi3', 0x2e),
+                          ('SOFn4', 0x31), ('SOFn2', 0x35), ('SOFn3', 0x36), ('SOFc4', 0x39)):
+            assert 'SOF: %s (0x%02x)' % (name, val) in lines
+        for name, val in (('EOFn', 0x41), ('EOFt', 0x42), ('EOFrt', 0x44), ('EOFdt', 0x46),
+                          ('EOFni', 0x49), ('EOFdti', 0x4e), ('EOFrti', 0x4f), ('EOFa', 0x50)):
+            assert 'EOF: %s (0x%02x)' % (name, val) in lines
+        assert 'FCIP (SOFf/EOFn)' in lines
+
+    def test_fcip_special_frame(self, cmd_tshark, capture_file, test_env):
+        '''Special frames show the connection fields; the changed flag is
+        appended to the Info column.'''
+        rows = self.fields(cmd_tshark, capture_file, test_env,
+                           '_ws.col.info', 'fcip.pflags.sf', 'fcip.pflags.ch',
+                           'fcip.srcwwn', 'fcip.dstwwn', 'fcip.katov',
+                           'fcip.conncode', 'fcip.connflags')
+        assert rows['20'] == ['Special Frame', 'True', 'False',
+            '20:00:00:de:ad:be:ef:01', '20:00:00:ca:fe:ba:be:02', '7000', '0x0002', '0x40']
+        assert rows['21'] == ['Special Frame(Changed)', 'True', 'True',
+            '20:00:00:ca:fe:ba:be:02', '20:00:00:de:ad:be:ef:01', '0', '0x0102', '0xc0']
+
+    def test_fcip_reassembly(self, cmd_tshark, capture_file, test_env):
+        '''Frames split over TCP segments are reassembled in the last
+        segment: a frame split at 40 octets (37-38), in four (39-42), the
+        second of two frames (43-44), a special frame (45-46) and two
+        frames over three segments (47-49).'''
+        rows = self.fields(cmd_tshark, capture_file, test_env,
+                           '_ws.col.protocol', 'fcp.data_ro', 'fc.ox_id')
+        assert rows['37'][0] == 'TCP'
+        assert rows['38'][:3] == ['FCP', '28673', '0x0701']
+        assert rows['42'][0] == 'FC ELS' and rows['42'][2] == '0x0702'
+        assert rows['39'][0] == rows['40'][0] == rows['41'][0] == 'TCP'
+        assert rows['44'][:3] == ['FCP', '28674,28675', '0x0703,0x0704']
+        assert rows['46'][0] == 'FCIP'
+        assert rows['48'][1:3] == ['28676', '0x0705'] and rows['49'][1:3] == ['28677', '0x0706']
+
+
+class TestDissectFclctl:
+    '''FC Link Control frames (R_CTL 0xC0-0xCF) carried in FCoE, from the
+    synthetic capture fclctl_coverage.pcap.gz: ACK, P_RJT, F_RJT with
+    every reject reason, P_BSY, F_BSY and reserved codes.'''
+
+    def test_fclctl_protocols(self, cmd_tshark, capture_file, test_env):
+        '''All 57 frames are FC link control frames, with no malformed
+        packets or expert infos in one and two passes.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fclctl_coverage.pcap.gz'),
+                '-Tfields', '-e_ws.col.protocol', '-e_ws.col.info',
+            ), encoding='utf-8', env=test_env)
+        infos = [l.split('\t')[1] for l in stdout.splitlines()]
+        assert len(infos) == 57
+        assert all(l.startswith('FC\t') for l in stdout.splitlines())
+        assert infos.count('Link Ctl, P_RJT') == 19
+        assert infos.count('Link Ctl, F_RJT') == 19
+        assert infos.count('Link Ctl, P_BSY') == 6
+        assert infos.count('Link Ctl, F_BSY (Data frame)') == 3
+        assert infos.count('Link Ctl, F_BSY (Link Ctl)') == 3
+        assert infos[0:5] == ['Link Ctl, ACK1', 'Link Ctl, ACK0',
+            'Link Ctl, LCR', 'Link Ctl, NTY', 'Link Ctl, END']
+        assert infos[-2:] == ['Link Ctl, LCTL 0xa', 'Link Ctl, LCTL 0xf']
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('fclctl_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_fclctl_reject_reasons(self, cmd_tshark, capture_file, test_env):
+        '''The parameter of P_RJT and F_RJT names the action code and the
+        reason; unknown values are shown in hex.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fclctl_coverage.pcap.gz'),
+                '-V', '-Y', 'fc.r_ctl == 0xc2 || fc.r_ctl == 0xc3',
+            ), encoding='utf-8', env=test_env)
+        params = [l.strip() for l in stdout.splitlines() if l.strip().startswith('Parameter:')]
+        assert len(params) == 38
+        assert params[0] == 'Parameter: 0x1010000(Retryable Error, Invalid D_ID)'
+        assert params[1] == 'Parameter: 0x2020000(Non-retryable Error, Invalid S_ID)'
+        assert 'Parameter: 0x1030000(Retryable Error, N_Port Not Avail (Temporary))' in params
+        assert 'Parameter: 0x55240000(0x55, PRLI Required)' in params
+        assert 'Parameter: 0x1ff0000(Retryable Error, Vendor Unique Error)' in params
+        assert 'Parameter: 0x21e0000(Non-retryable Error, 1e)' in params
+        assert 'Parameter: 0x1770000(Retryable Error, 77)' in params
+
+    def test_fclctl_busy(self, cmd_tshark, capture_file, test_env):
+        '''P_BSY names the action code and the reason.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fclctl_coverage.pcap.gz'),
+                '-V', '-Y', 'fc.r_ctl == 0xc4',
+            ), encoding='utf-8', env=test_env)
+        params = [l.strip() for l in stdout.splitlines() if l.strip().startswith('Parameter:')]
+        assert params == [
+            'Parameter: 0x1010000(Sequence Marked Busy, Physical N_Port Busy)',
+            'Parameter: 0x2030000(Class 2 Frame Busy, N_Port Resource Busy)',
+            'Parameter: 0x1070000(Sequence Marked Busy, Partial Multicast Busy)',
+            'Parameter: 0x2ff0000(Class 2 Frame Busy, Vendor unique Busy)',
+            'Parameter: 0x9010000(0x9, Physical N_Port Busy)',
+            'Parameter: 0x1550000(Sequence Marked Busy, 0x55)',
+        ]
+
+
+class TestDissectFcoe:
+    '''FCoE (ethertype 0x8906) from the synthetic capture
+    fcoe_coverage.pcap.gz: T11 and pre-T11 headers, every SOF and EOF,
+    versions, a trailing Ethernet FCS, unexpected and missing EOFs.'''
+
+    @staticmethod
+    def _fields(cmd_tshark, capture_file, test_env, *fields, extra=()):
+        stdout = subprocess.check_output((cmd_tshark, *extra,
+                '-r', capture_file('fcoe_coverage.pcap.gz'),
+                '-Tfields', '-eframe.number', *('-e' + f for f in fields),
+            ), encoding='utf-8', env=test_env)
+        return [l.split('\t') for l in stdout.splitlines()]
+
+    def test_fcoe_protocols(self, cmd_tshark, capture_file, test_env):
+        '''All 21 frames are FCoE carrying Basic Link Services and none is
+        malformed or has an expert info, in one and two passes.'''
+        rows = self._fields(cmd_tshark, capture_file, test_env, '_ws.col.protocol', 'fcoe.sof')
+        assert len(rows) == 21
+        assert all(r[1] == 'BLS' and r[2] for r in rows)
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('fcoe_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_fcoe_sof_eof(self, cmd_tshark, capture_file, test_env):
+        '''Frames 1-8 carry each SOF and each EOF of the T11 format.'''
+        rows = self._fields(cmd_tshark, capture_file, test_env, 'fcoe.sof', 'fcoe.eof', 'fcoe.crc.status')
+        assert [r[1:] for r in rows[:8]] == [
+            ['0x28', '0x41', '1'], ['0x29', '0x42', '1'],
+            ['0x2d', '0x44', '1'], ['0x2e', '0x46', '1'],
+            ['0x31', '0x49', '1'], ['0x35', '0x4e', '1'],
+            ['0x36', '0x4f', '1'], ['0x39', '0x50', '1']]
+
+    def test_fcoe_version_in_tree(self, cmd_tshark, capture_file, test_env):
+        '''The version is shown in the protocol line, as in "FCoE: Do not
+        let the frame length go negative" (it was dropped before): frame 9
+        has version 1 in the T11 format, frame 20 in the pre-T11 format.'''
+        for frame, text in ((9, 'FCoE ver 1 (SOFi3/EOFt) 24 bytes'),
+                            (20, 'FCoE pre-T11 ver 1 (SOFn4/EOFt) 24 bytes')):
+            stdout = subprocess.check_output((cmd_tshark,
+                    '-r', capture_file('fcoe_coverage.pcap.gz'),
+                    '-Y', f'frame.number == {frame}', '-V', '-O', 'fcoe',
+                ), encoding='utf-8', env=test_env)
+            assert text in stdout.splitlines()
+            assert '    Version: 1' in stdout.splitlines()
+
+    def test_fcoe_eof_variants(self, cmd_tshark, capture_file, test_env):
+        '''An unexpected EOF value is shown as it is (frame 12), a frame
+        cut off in the trailer has no EOF (13, 14), the pre-T11 format
+        has a frame length field (15-21), and a trailing Ethernet FCS
+        is skipped (frame 11).'''
+        rows = self._fields(cmd_tshark, capture_file, test_env, 'fcoe.len', 'fcoe.eof', 'fcoe.crc.status')
+        assert rows[11][1:] == ['', '0x77', '1']
+        assert rows[12][1:] == ['', '', '3']
+        assert rows[13][1:] == ['', '', '3']
+        assert rows[10][1:] == ['', '0x42', '1']
+        assert [r[1] for r in rows[14:]] == ['24'] * 7
+        assert rows[20][2] == ''
+
+    def test_fcoe_bad_crc_and_short(self, cmd_tshark, capture_file, test_env):
+        '''Frame lengths that are not a multiple of 4 are marked in the
+        tree; a bad FC CRC is an error expert info (not in this capture).'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fcoe_coverage.pcap.gz'),
+                '-Y', 'frame.number == 10', '-V', '-O', 'fcoe',
+            ), encoding='utf-8', env=test_env)
+        assert 'FCoE (SOFi3/EOFt) 26 bytes [invalid length]' in stdout.splitlines()
+
+
+class TestDissectFcoib:
+    '''FCoIB from the synthetic capture fcoib_coverage.pcap.gz. The frames
+    are RoCE v2 (UDP 4791) UD sends; the Infiniband payload heuristic
+    "fc_infiniband" is on by default and selects FCoIB for frames 1-9.'''
+
+    @staticmethod
+    def _tshark(cmd_tshark, capture_file, test_env, *args):
+        return subprocess.check_output((cmd_tshark, *args,
+                '-r', capture_file('fcoib_coverage.pcap.gz'),
+            ), encoding='utf-8', env=test_env)
+
+    def test_fcoib_frames(self, cmd_tshark, capture_file, test_env):
+        '''Frames 1-9 are FCoIB carrying ABTS; frames 10-15 are not
+        accepted by the heuristic and stay RRoCE (frame 10 has padding
+        behind the trailer, 11-14 a wrong signature, non-zero reserved
+        octets, an unknown SOF and an unknown EOF, 15 is too short).'''
+        stdout = self._tshark(cmd_tshark, capture_file, test_env,
+                '-Tfields', '-eframe.number', '-e_ws.col.protocol', '-efcoib.sof')
+        rows = [l.split('\t') for l in stdout.splitlines()]
+        assert len(rows) == 15
+        assert [r[1] for r in rows] == ['BLS'] * 9 + ['RRoCE'] * 6
+        assert [r[2] for r in rows] == ['0x28', '0x29', '0x2d', '0x2e', '0x31',
+                '0x35', '0x36', '0x39', '0x2e'] + [''] * 6
+        for passes in ((), ('-2',)):
+            stdout = self._tshark(cmd_tshark, capture_file, test_env, *passes,
+                    '-Y', '_ws.malformed || _ws.expert', '-Tfields', '-eframe.number')
+            assert count_output(stdout) == 0
+
+    def test_fcoib_sof_eof(self, cmd_tshark, capture_file, test_env):
+        '''Every SOF and EOF value, with a good CRC.'''
+        stdout = self._tshark(cmd_tshark, capture_file, test_env,
+                '-Y', 'fcoib', '-Tfields', '-efcoib.sof', '-efcoib.eof',
+                '-efcoib.ver', '-efcoib.sig', '-efcoib.crc.status')
+        assert stdout.splitlines() == [
+            '0x28\t0x41\t0\t0x01\t1', '0x29\t0x42\t0\t0x01\t1',
+            '0x2d\t0x44\t0\t0x01\t1', '0x2e\t0x46\t0\t0x01\t1',
+            '0x31\t0x49\t0\t0x01\t1', '0x35\t0x4e\t0\t0x01\t1',
+            '0x36\t0x4f\t0\t0x01\t1', '0x39\t0x50\t0\t0x01\t1',
+            '0x2e\t0x42\t1\t0x01\t1']
+
+    def test_fcoib_version_in_tree(self, cmd_tshark, capture_file, test_env):
+        '''Version 1 is shown in the protocol line (it was dropped before
+        "FCoIB: Fix the version string format").'''
+        stdout = self._tshark(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number == 9', '-V', '-O', 'fcoib')
+        assert 'FCoIB ver 1 (SOFi3/EOFt) 24 bytes' in stdout.splitlines()
+
+    def test_fcoib_decode_as(self, cmd_tshark, capture_file, test_env):
+        '''With the heuristic off and Decode As, FCoIB decodes the frames
+        the heuristic rejected (frames 10-14).'''
+        stdout = self._tshark(cmd_tshark, capture_file, test_env,
+                '-o', 'infiniband.try_heuristic_first:FALSE',
+                '-d', 'infiniband,fcoib',
+                '-Y', 'frame.number >= 10 && frame.number <= 14',
+                '-Tfields', '-eframe.number', '-e_ws.col.protocol')
+        assert stdout.splitlines() == [
+            '10\tBLS', '11\tBLS', '12\tBLS', '13\tBLS', '14\tBLS']
+
+
+class TestDissectFcp:
+    '''FCP (FC type 0x08) over FCoE from the synthetic capture
+    fcp_coverage.pcap.gz: SCSI exchanges with data, XFER_RDY and response
+    variants, interleaved exchanges on one LUN, task management flags,
+    and FC-4 link services.'''
+
+    INFOS = [
+        'SCSI Read(10) LUN: 0x00 512 bytes (1 blocks) at LBA: 0x00000010 ',
+        'FCP_DATA',
+        'SCSI Response LUN: 0x00 Read(10), 512 bytes (1 blocks) (Good) ',
+        'SCSI Write(10) LUN: 0x00 512 bytes (1 blocks) at LBA: 0x00000020 ',
+        'FCP_DATA',
+        'SCSI Response LUN: 0x00 Write(10), 512 bytes (1 blocks) (Good) ',
+        'SCSI Inquiry LUN: 0x00 ',
+        'FCP_DATA[SCSI transfer limited due to allocation_length too small]',
+        'SCSI Response LUN: 0x00 Inquiry, 36 bytes (0 blocks) (Good) ',
+        'SCSI Test Unit Ready LUN: 0x00 ',
+        'SCSI Response LUN: 0x00 Test Unit Ready, 0 bytes (0 blocks) (Good) ',
+        'SCSI Write(10) LUN: 0x00 1024 bytes (1 blocks) at LBA: 0x00000020 ',
+        'XFER_RDY',
+        'FCP_DATA',
+        'SCSI Response LUN: 0x00 Write(10), 1024 bytes (2 blocks) (Good) ',
+        'SCSI Read(10) LUN: 0x105 512 bytes (1 blocks) at LBA: 0x00000010 ',
+        'FCP_DATA',
+        'SCSI Response LUN: 0x105 Read(10), 512 bytes (1 blocks) (Good) ',
+        'SCSI Test Unit Ready LUN: 0x05 ',
+        'SCSI Response LUN: 0x05 Test Unit Ready, 0 bytes (0 blocks) (Good) ',
+        'SCSI Test Unit Ready LUN: 0x00 ',
+        'SCSI Response LUN: 0x00 Test Unit Ready, 0 bytes (0 blocks) (Check Condition)  LUN:0x00 ',
+        'SCSI Test Unit Ready LUN: 0x00 ',
+        'SCSI Response LUN: 0x00 Test Unit Ready, 0 bytes (0 blocks) (Good) ',
+        'SCSI Test Unit Ready LUN: 0x00 ',
+        'SCSI Response LUN: 0x00 Test Unit Ready, 0 bytes (0 blocks) (Check Condition)  LUN:0x00 ',
+        'SCSI Test Unit Ready LUN: 0x00 ',
+        'SCSI Response LUN: 0x00 Test Unit Ready, 0 bytes (0 blocks) (Busy) ',
+        'SCSI Test Unit Ready LUN: 0x00 ',
+        'SCSI Response LUN: 0x00 Test Unit Ready, 0 bytes (0 blocks) (Reservation Conflict) ',
+        'SCSI Test Unit Ready LUN: 0x00 ',
+        'SCSI Response LUN: 0x00 Test Unit Ready, 0 bytes (0 blocks) (Task Set Full) ',
+        'SCSI Test Unit Ready LUN: 0x00 ',
+        'SCSI Response LUN: 0x00 Test Unit Ready, 0 bytes (0 blocks) (ACA Active) ',
+        'SCSI Read(10) LUN: 0x01 512 bytes (1 blocks) at LBA: 0x00000010 ',
+        'SCSI Response LUN: 0x01 Read(10), 512 bytes (1 blocks) (Good) ',
+        'SCSI Read(10) LUN: 0x00 512 bytes (1 blocks) at LBA: 0x00000010 ',
+        'FCP_DATA',
+        'SCSI Response LUN: 0x00 Read(10), 512 bytes (1 blocks) (Good) ',
+        '[FCP OBSOLETE] SCSI Test Unit Ready LUN: 0x02 ',
+        'SCSI Response LUN: 0x02 Test Unit Ready, 0 bytes (0 blocks) (Good) ',
+        '[FCP CLEAR_ACA] SCSI Test Unit Ready LUN: 0x02 ',
+        'SCSI Response LUN: 0x02 Test Unit Ready, 0 bytes (0 blocks) (Good) ',
+        '[FCP TARGET_RESET] SCSI Test Unit Ready LUN: 0x02 ',
+        'SCSI Response LUN: 0x02 Test Unit Ready, 0 bytes (0 blocks) (Good) ',
+        '[FCP LU_RESET] SCSI Test Unit Ready LUN: 0x02 ',
+        'SCSI Response LUN: 0x02 Test Unit Ready, 0 bytes (0 blocks) (Good) ',
+        '[FCP RSVD] SCSI Test Unit Ready LUN: 0x02 ',
+        'SCSI Response LUN: 0x02 Test Unit Ready, 0 bytes (0 blocks) (Good) ',
+        '[FCP CLEAR_TASK_SET] SCSI Test Unit Ready LUN: 0x02 ',
+        'SCSI Response LUN: 0x02 Test Unit Ready, 0 bytes (0 blocks) (Good) ',
+        '[FCP ABORT_TASK_SET] SCSI Test Unit Ready LUN: 0x02 ',
+        'SCSI Response LUN: 0x02 Test Unit Ready, 0 bytes (0 blocks) (Good) ',
+        '[FCP ABORT_TASK_SET] [FCP CLEAR_TASK_SET] SCSI Test Unit Ready LUN: 0x02 ',
+        'SCSI Response LUN: 0x02 Test Unit Ready, 0 bytes (0 blocks) (Good) ',
+        'SCSI Test Unit Ready LUN: 0x04 ',
+        'SCSI Response LUN: 0x04 Test Unit Ready, 0 bytes (0 blocks) (Good) ',
+        'SCSI Read(10) LUN: 0x09 64 bytes (1 blocks) at LBA: 0x00000010 ',
+        'SCSI Read(10) LUN: 0x09 64 bytes (1 blocks) at LBA: 0x00000010 ',
+        'SCSI Read(10) LUN: 0x09 64 bytes (1 blocks) at LBA: 0x00000010 ',
+        'SCSI Read(10) LUN: 0x09 64 bytes (1 blocks) at LBA: 0x00000010 ',
+        'FCP_DATA',
+        'FCP_DATA',
+        'FCP_DATA',
+        'FCP_DATA',
+        'SCSI Response LUN: 0x09 Read(10), 64 bytes (0 blocks) (Good) ',
+        'SCSI Response LUN: 0x09 Read(10), 64 bytes (0 blocks) (Good) ',
+        'SCSI Response LUN: 0x09 Read(10), 64 bytes (0 blocks) (Good) ',
+        'SCSI Response LUN: 0x09 Read(10), 64 bytes (0 blocks) (Good) ',
+        'SCSI Read(10) LUN: 0x09 64 bytes (1 blocks) at LBA: 0x00000010 ',
+        'FCP_DATA',
+        'SCSI Response LUN: 0x09 Read(10), 64 bytes (0 blocks) (Good) ',
+        'FCP_DATA',
+        'FCP_RSP:Good<missing request>',
+        'FCP',
+        'Control',
+        'Confirm',
+        '0x4',
+        'SRR',
+        'ACC',
+        '0x77',
+    ]
+
+    REQUEST_IN = {2: 1, 3: 1, 5: 4, 6: 4, 8: 7, 9: 7, 11: 10, 13: 12, 14: 12, 15: 12, 17: 16, 18: 16, 20: 19, 22: 21, 24: 23, 26: 25, 28: 27, 30: 29, 32: 31, 34: 33, 36: 35, 38: 37, 39: 37, 41: 40, 43: 42, 45: 44, 47: 46, 49: 48, 51: 50, 53: 52, 55: 54, 57: 56, 62: 60, 63: 58, 64: 61, 65: 59, 66: 61, 67: 59, 68: 60, 69: 58, 71: 70, 72: 70}
+    # command (first frame of each exchange) and data frames -> response
+    RESPONSE_IN = {1: 3, 2: 3, 4: 6, 5: 6, 7: 9, 8: 9, 10: 11, 12: 15, 13: 15,
+                   14: 15, 16: 18, 17: 18, 19: 20, 21: 22, 23: 24, 25: 26,
+                   27: 28, 29: 30, 31: 32, 33: 34, 35: 36, 37: 39, 38: 39,
+                   40: 41, 42: 43, 44: 45, 46: 47, 48: 49, 50: 51, 52: 53,
+                   54: 55, 56: 57, 58: 69, 59: 67, 60: 68, 61: 66, 62: 68,
+                   63: 69, 64: 66, 65: 67, 70: 72, 71: 72}
+
+    def test_fcp_protocols(self, cmd_tshark, capture_file, test_env):
+        '''80 frames are FCP; frame 75 (FCP data with the relative offset
+        bit set) is left to the FC dissector. None is malformed or has an
+        expert info, in one and two passes.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fcp_coverage.pcap.gz'),
+                '-Tfields', '-e_ws.col.protocol',
+            ), encoding='utf-8', env=test_env)
+        protocols = stdout.split('\n')[:-1]
+        assert len(protocols) == 81
+        assert [i + 1 for i, p in enumerate(protocols) if p != 'FCP'] == [75]
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('fcp_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_fcp_info(self, cmd_tshark, capture_file, test_env):
+        '''The Info column of every frame (second pass, so that responses
+        also show their request).'''
+        stdout = subprocess.check_output((cmd_tshark, '-2',
+                '-r', capture_file('fcp_coverage.pcap.gz'),
+                '-Tfields', '-e_ws.col.info',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.split('\n')[:-1] == self.INFOS
+
+    def test_fcp_request_matching(self, cmd_tshark, capture_file, test_env):
+        '''Data and response frames find their command by OX_ID and LUN
+        ("Request In") and, in the second pass, the command finds the
+        response ("Response In"). Before "FCP: Fix response length checks
+        and request matching" nothing was matched, and an exchange reused
+        the data of an earlier one on the same LUN (interleaved
+        on LUN 9 in frames 58-69, and a reused OX_ID in 70-72).'''
+        stdout = subprocess.check_output((cmd_tshark, '-2',
+                '-r', capture_file('fcp_coverage.pcap.gz'),
+                '-Tfields', '-eframe.number', '-efcp.request_in', '-efcp.response_in',
+            ), encoding='utf-8', env=test_env)
+        req = {}
+        resp = {}
+        for line in stdout.split('\n')[:-1]:
+            n, a, b = (line.split('\t') + ['', ''])[:3]
+            if a:
+                req[int(n)] = int(a)
+            if b:
+                resp[int(n)] = int(b)
+        assert req == self.REQUEST_IN
+        assert resp == self.RESPONSE_IN
+
+    def test_fcp_request_in_first_pass(self, cmd_tshark, capture_file, test_env):
+        '''In one pass the command frames have no "Response In" yet but the
+        data and responses already link back to their command.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fcp_coverage.pcap.gz'),
+                '-Y', 'frame.number <= 6',
+                '-Tfields', '-eframe.number', '-efcp.request_in', '-efcp.response_in',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.split('\n')[:-1] == ['1\t\t', '2\t1\t', '3\t1\t', '4\t\t', '5\t4\t', '6\t4\t']
+
+    def test_fcp_luns(self, cmd_tshark, capture_file, test_env):
+        '''Single level LUNs and the multi-level LUN of frame 16 (the task
+        management flags are in the Info column).'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fcp_coverage.pcap.gz'),
+                '-Tfields', '-eframe.number', '-efcp.lun', '-efcp.multilun',
+            ), encoding='utf-8', env=test_env)
+        rows = {int(l.split('\t')[0]): l.split('\t')[1:] for l in stdout.split('\n')[:-1]}
+        assert rows[16][0:2] == ['', '4105000000000000']
+        assert rows[17][0] == '0x05'
+        assert rows[58][0] == '0x09'
+
+
+class TestDissectFcsb3:
+    '''FC-SB3 (FICON, FC types 0x1B and 0x1C) over FCoE from the synthetic
+    capture fcsb3_coverage.pcap.gz: command headers, data, status,
+    control and link control IUs.'''
+
+    INFOS = [
+        'Command Header: Write',
+        'Command Header: Read',
+        'Command Header: Control',
+        'Command Header: Sense',
+        'Command Header: Write (Modifier)',
+        'Command Header: Read Backward',
+        'Command Header: Control (Modifier)',
+        'Command Header: Reserved',
+        'Command Header & Data: Write',
+        'Data',
+        'Data',
+        'Status',
+        'Status  Attention',
+        'Status  Status Modifier',
+        'Status  Control-Unit End',
+        'Status  Busy',
+        'Status  Channel End',
+        'Status  Device End',
+        'Status  Unit Check',
+        'Status  Unit Exception',
+        'Status  Attention  Status Modifier  Control-Unit End  Busy  Channel End  Device End  Unit Check  Unit Exception',
+        'Status  Channel End  Device End',
+        'Control: Control End',
+        'Control: Command Response',
+        'Control: Stack Status',
+        'Control: Cancel',
+        'Control: System Reset',
+        'Control: Selective Reset',
+        'Control: Selective Reset',
+        'Control: Request Status',
+        'Control: Device Level Exception',
+        'Control: Device Level Exception',
+        'Control: Status Accepted',
+        'Control: Device-Level Ack',
+        'Control: Purge Path',
+        'Control: Purge Path',
+        'Control: 0x77',
+        'Control: Purge Path Response',
+        'Control: Purge Path Response',
+        'Control: Purge Path Response',
+        'Control: Purge Path Response',
+        'Link Control: ELP',
+        'Link Control: RLP',
+        'Link Control: TIN',
+        'Link Control: LPE',
+        'Link Control: LPR',
+        'Link Control: LPR',
+        'Link Control: LRJ',
+        'Link Control: LRJ',
+        'Link Control: LBY',
+        'Link Control: LACK',
+        'Link Control: 0xff',
+        'Link Control: TIR',
+        'Link Control: TIR',
+        'Link Control: TIR',
+        'Reserved',
+        'Reserved',
+        'Command Header: Read',
+        'Status  Channel End  Device End',
+        'Command Header: Read',
+        'Status  Channel End  Device End',
+        'Command Header: Read',
+        'Status  Channel End  Device End',
+        'Command Header: Read',
+        'Status  Channel End  Device End',
+        'Command Header: Read',
+        'Status  Channel End  Device End',
+    ]
+
+    def test_fcsb3_protocols(self, cmd_tshark, capture_file, test_env):
+        '''All 67 frames are FC-SB3, none is malformed or has an expert
+        info, in one and two passes.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fcsb3_coverage.pcap.gz'),
+                '-Tfields', '-e_ws.col.protocol',
+            ), encoding='utf-8', env=test_env)
+        protocols = stdout.split()
+        assert len(protocols) == 67
+        assert protocols.count('FC-SB3') == 67
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('fcsb3_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_fcsb3_info(self, cmd_tshark, capture_file, test_env):
+        '''The Info column of every frame: IU type, CCW command or
+        function, and the status bits.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fcsb3_coverage.pcap.gz'),
+                '-Tfields', '-e_ws.col.info',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.splitlines() == self.INFOS
+
+    def test_fcsb3_fields(self, cmd_tshark, capture_file, test_env):
+        '''Image IDs and device addresses, and the codes of device level
+        exception, purge path, purge path response (60 octets into the
+        DIB), LPR and LRJ, and the logical path maps of TIR.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fcsb3_coverage.pcap.gz'),
+                '-Tfields', '-eframe.number', '-efcsb3.chid', '-efcsb3.cuid',
+                '-efcsb3.devaddr', '-efcsb3.dip.xcpcode',
+                '-efcsb3.purgepathcode', '-efcsb3.purgepathrspcode',
+                '-efcsb3.lprcode', '-efcsb3.lrjcode', '-efcsb3.logical_path',
+            ), encoding='utf-8', env=test_env)
+        rows = {int(l.split('\t')[0]): l.split('\t')[1:] for l in stdout.splitlines()}
+        assert rows[1][0:3] == ['1', '2', '256']
+        assert rows[66][0:3] == ['255', '255', '65535']
+        assert rows[60][0:3] == ['3', '2', '258']
+        assert rows[31][3] == '1' and rows[32][3] == '7'
+        assert rows[35][4] == '13' and rows[36][4] == '1'
+        assert [rows[n][5] for n in range(38, 42)] == ['0', '3', '16', '99']
+        assert rows[46][6] == '3' and rows[47][6] == '0'
+        assert rows[48][7] == '0x06' and rows[49][7] == '0x09'
+        assert rows[53][8] == '00:01:02:03,04:05:06:07'
+        assert rows[54][8] == '00:00:00:00'
+
+    def test_fcsb3_flags(self, cmd_tshark, capture_file, test_env):
+        '''The CCW and command flag bits of the command header (frame 2).'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fcsb3_coverage.pcap.gz'),
+                '-Y', 'frame.number == 2', '-V', '-O', 'fcsb3',
+            ), encoding='utf-8', env=test_env)
+        lines = [l.strip() for l in stdout.splitlines()]
+        assert '1... .... = CD: Set' in lines
+        assert '.... ...1 = SSS: Set' in lines
+
+
+class TestDissectFcsp:
+    '''FC-SP (authentication) in ELS AUTH_ELS and SW_ILS AUTH_ILS requests
+    over FCoE, from the synthetic capture fcsp_coverage.pcap.gz.'''
+
+    @staticmethod
+    def _fields(cmd_tshark, capture_file, test_env, *fields, extra=()):
+        stdout = subprocess.check_output((cmd_tshark, *extra,
+                '-r', capture_file('fcsp_coverage.pcap.gz'),
+                '-Tfields', '-eframe.number', *('-e' + f for f in fields),
+            ), encoding='utf-8', env=test_env)
+        return [l.split('\t') for l in stdout.splitlines()]
+
+    def test_fcsp_no_errors(self, cmd_tshark, capture_file, test_env):
+        '''28 of the 29 frames are FC-SP messages (the response in frame 27
+        belongs to the ELS dissector); no frame is malformed or has an
+        error expert info, in one and two passes. Frames 20-25 (FCAP and
+        FCPAP) have the "not supported" warning.'''
+        rows = self._fields(cmd_tshark, capture_file, test_env, 'fcsp.opcode')
+        assert len(rows) == 29
+        assert [r[0] for r in rows if len(r) > 1 and r[1]] == [str(n) for n in range(1, 30) if n != 27]
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('fcsp_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert.severity == "error"',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+        rows = self._fields(cmd_tshark, capture_file, test_env, 'fcsp.fcap_undecoded',
+                            extra=('-Y', 'fcsp.fcap_undecoded'))
+        assert [r[0] for r in rows] == ['20', '21', '22', '23', '24', '25']
+
+    def test_fcsp_info(self, cmd_tshark, capture_file, test_env):
+        '''The Info column names the message code, ELS or SW_ILS.'''
+        rows = self._fields(cmd_tshark, capture_file, test_env, '_ws.col.protocol', '_ws.col.info')
+        assert [r[1:] for r in rows] == (
+            [['FC ELS', 'AUTH_Negotiate']] * 5 + [['SW_ILS', 'AUTH_Negotiate']] +
+            [['FC ELS', 'AUTH_Reject']] * 5 + [['SW_ILS', 'AUTH_Reject']] +
+            [['FC ELS', 'AUTH_Done'], ['FC ELS', 'DHCHAP_Challenge'], ['FC ELS', 'DHCHAP_Challenge'],
+             ['FC ELS', 'DHCHAP_Reply'], ['FC ELS', 'DHCHAP_Reply'],
+             ['FC ELS', 'DHCHAP_Success'], ['FC ELS', 'DHCHAP_Success'],
+             ['FC ELS', 'FCAP_Request'], ['FC ELS', 'FCAP_Acknowledge'], ['FC ELS', 'FCAP_Confirm'],
+             ['FC ELS', 'FCPAP_Init'], ['FC ELS', 'FCPAP_Accept'], ['FC ELS', 'FCPAP_Complete'],
+             ['FC ELS', '0x99'], ['FC ELS', 'ACC (AUTH)'], ['FC ELS', 'AUTH_Done'],
+             ['FC ELS', 'AUTH_Negotiate']])
+
+    def test_fcsp_negotiate_params(self, cmd_tshark, capture_file, test_env):
+        '''Protocols, hash and DH group lists of the AUTH_Negotiate frames.'''
+        rows = self._fields(cmd_tshark, capture_file, test_env, 'fcsp.usableproto', 'fcsp.proto',
+                            'fcsp.dhchap.hashtype', 'fcsp.dhchap.dhgid', 'fcsp.dhchap.paramtype',
+                            extra=('-Y', 'fcsp.opcode == 0x0b'))
+        assert rows[0][1:] == ['3', '1,2,9', '5,6', '0,1,2,3,4', '0x0001,0x0002']
+        assert rows[1][1:] == ['1', '1', '5', '', '0x0001,0x0007']
+        assert rows[4][1:] == ['0', '', '', '', '']
+        assert rows[5][1:] == ['2', '1,2', '5,6', '1,2', '0x0001,0x0002']
+
+    def test_fcsp_reject_codes(self, cmd_tshark, capture_file, test_env):
+        rows = self._fields(cmd_tshark, capture_file, test_env, 'fcsp.rjtcode', 'fcsp.rjtcodet',
+                            extra=('-Y', 'fcsp.opcode == 0x0a'))
+        assert rows == [['7', '1', '1'], ['8', '1', '5'], ['9', '2', '6'],
+                        ['10', '2', '8'], ['11', '9', '66'], ['12', '1', '3']]
+
+    def test_fcsp_in_fcsp_tree(self, cmd_tshark, capture_file, test_env):
+        '''The items of the per-message handlers are inside the FC-SP
+        subtree (they were added to the parent tree before "FCSP: Fix
+        negotiate loop and subtree placement").'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fcsp_coverage.pcap.gz'),
+                '-Y', 'frame.number == 7', '-V', '-O', 'fcsp',
+            ), encoding='utf-8', env=test_env)
+        lines = stdout.splitlines()
+        start = lines.index('FC-SP')
+        assert lines[start + 1:start + 8] == [
+            '    Flags: 0x00',
+            '    Message Code: AUTH_Reject (0x0a)',
+            '    Protocol Version: 0x01',
+            '    Packet Length: 16',
+            '    Transaction Identifier: 0x00000007',
+            '    Reason Code: Authentication Failure (1)',
+            '    Reason Code Explanation: Authentication Mechanism Not Usable (1)']
+
+
+class TestDissectFcswils:
+    '''Fibre Channel SW_ILS (FC type 0x22, R_CTL 0x02/0x03) over FCoE from
+    the synthetic capture fcswils_coverage.pcap.gz: every handled ILS
+    with its accept, rejects, zoning with all member types, ESS capability
+    objects, AUTH_ILS (FC-SP) and unhandled opcodes.'''
+
+    INFOS = [
+        'ELP',
+        'SW_ACC (ELP)',
+        'ELP',
+        'SW_ACC (ELP)',
+        'ELP',
+        'SW_ACC (ELP)',
+        'EFP',
+        'SW_ACC (EFP)',
+        'EFP',
+        'EFP',
+        'DIA',
+        'SW_ACC (DIA)',
+        'RDI',
+        'SW_ACC (RDI)',
+        'RDI',
+        'SW_ACC (RDI)',
+        'HLO',
+        'SW_ACC (HLO)',
+        'LSU',
+        'SW_ACC (LSU)',
+        'LSA',
+        'BF',
+        'SW_ACC (BF)',
+        'RCF',
+        'SW_ACC (RCF)',
+        'SW_RSCN',
+        'SW_ACC (SW_RSCN)',
+        'SW_RSCN',
+        'DRLIR',
+        'SW_ACC (DRLIR)',
+        '0x19',
+        '0x1a',
+        '0x1c',
+        '0x1d',
+        'DSCN',
+        'LOOPD',
+        '0x27',
+        '0x32',
+        '0x33',
+        '0x35',
+        '0x7f',
+        'ELP',
+        'SW_RJT (ELP)',
+        'RDI',
+        'SW_RJT (RDI)',
+        'RDI',
+        'SW_RJT (RDI)',
+        'RDI',
+        'SW_RJT (RDI)',
+        'RDI',
+        'SW_RJT (RDI)',
+        'RDI',
+        'SW_RJT (RDI)',
+        'RDI',
+        'SW_RJT (RDI)',
+        'RDI',
+        'SW_RJT (RDI)',
+        'RDI',
+        'SW_RJT (RDI)',
+        'MR',
+        'SW_ACC (MR)',
+        'MR',
+        'SW_ACC (MR)',
+        'MR',
+        'SW_ACC (MR)',
+        'ACA',
+        'SW_ACC (ACA)',
+        'RCA',
+        'SW_ACC (RCA)',
+        'SFC',
+        'SW_ACC (SFC)',
+        'SFC',
+        'SW_ACC (SFC)',
+        'UFC',
+        'SW_ACC (UFC)',
+        'ESC',
+        'SW_ACC (ESC)',
+        'ESS',
+        'SW_ACC (ESS)',
+        'ESS',
+        'MRRA',
+        'SW_ACC (MRRA)',
+        'AUTH_Done',
+    ]
+
+    def test_fcswils_protocols(self, cmd_tshark, capture_file, test_env):
+        '''All 83 frames are SW_ILS (frame 83 is FC-SP data within it) and
+        none is malformed or has an error expert info, in one and two
+        passes. Frame 10 has the "Record length is zero" note.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fcswils_coverage.pcap.gz'),
+                '-Tfields', '-e_ws.col.protocol',
+            ), encoding='utf-8', env=test_env)
+        protocols = stdout.split('\n')[:-1]
+        assert len(protocols) == 83
+        assert protocols.count('SW_ILS') == 83
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('fcswils_coverage.pcap.gz'),
+                    '-Y', '_ws.malformed || _ws.expert.severity == "error" || _ws.expert.severity == "warning"',
+                    '-Tfields', '-eframe.number',
+                ), encoding='utf-8', env=test_env)
+            assert count_output(stdout) == 0
+
+    def test_fcswils_info(self, cmd_tshark, capture_file, test_env):
+        '''The Info column of every frame: the ILS name, and for accepts
+        and rejects the name of the request found through the exchange.'''
+        for passes in ((), ('-2',)):
+            stdout = subprocess.check_output((cmd_tshark, *passes,
+                    '-r', capture_file('fcswils_coverage.pcap.gz'),
+                    '-Tfields', '-e_ws.col.info',
+                ), encoding='utf-8', env=test_env)
+            assert stdout.split('\n')[:-1] == self.INFOS
+
+    def test_fcswils_ess_vendor_objects(self, cmd_tshark, capture_file, test_env):
+        '''A vendor capability object with three vendor entries is followed by
+        a Directory Service capability object in frame 80. The offset of
+        the next object advanced by 12 per vendor entry instead of 8
+        before "fcswils: Fix nested zone set handling and small errors".'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fcswils_coverage.pcap.gz'),
+                '-Y', 'frame.number == 80', '-V', '-O', 'swils',
+            ), encoding='utf-8', env=test_env)
+        lines = [l.strip() for l in stdout.splitlines()]
+        objs = [l for l in lines if l.startswith('Capability Object')]
+        assert objs == ['Capability Object (Vendor-specific 0xe0)',
+                        'Capability Object (Directory Service)']
+
+    def test_fcswils_zoning(self, cmd_tshark, capture_file, test_env):
+        '''The merge request of frame 60 has zones with every member type
+        and a zone set with a nested zone list.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fcswils_coverage.pcap.gz'),
+                '-Y', 'frame.number == 60', '-Tfields',
+                '-eswils.zone.mbrtype', '-eswils.zone.zoneobjname',
+            ), encoding='utf-8', env=test_env)
+        types, names = stdout.rstrip('\n').split('\t')
+        assert names.split(',') == ['zset1', 'zoneA', 'zoneB', 'zone1', 'z2', 'aliasobj']
+        assert set(types.split(',')) == {'0x01', '0x02', '0x03', '0x04', '0xe1', '0xe2', '0xe3'}
+
+    def test_fcswils_exchange_opcode(self, cmd_tshark, capture_file, test_env):
+        '''Accepts name the request of their exchange; a reject of an RDI
+        exchange (frames 44-58) carries the reason code. The exchange
+        opcode is only stored on the first pass ("fcswils: Fix nested zone
+        set handling and small errors").'''
+        stdout = subprocess.check_output((cmd_tshark, '-2',
+                '-r', capture_file('fcswils_coverage.pcap.gz'),
+                '-Y', 'swils.rjt.reason', '-Tfields', '-eframe.number', '-eswils.rjt.reason',
+            ), encoding='utf-8', env=test_env)
+        rows = [l.split('\t') for l in stdout.split('\n')[:-1]]
+        assert [r[0] for r in rows] == ['43'] + [str(n) for n in range(45, 60, 2)]
+
+
+class TestDissectFddi:
+    @staticmethod
+    def fields(cmd_tshark, capture_file, test_env, *args):
+        return subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fddi_coverage.pcapng.gz'), *args,
+            ), encoding='utf-8', env=test_env).splitlines()
+
+    def test_fddi_protocols(self, cmd_tshark, capture_file, test_env):
+        '''All 31 frames contain FDDI (29 directly, 2 inside sFlow) and none
+        is malformed or has an expert info, in one and two passes.'''
+        lines = self.fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'fddi', '-Tfields', '-e_ws.col.protocol')
+        assert len(lines) == 31
+        assert lines.count('FDDI') == 24
+        assert lines.count('ARP') == 5
+        assert lines.count('sFlow') == 2
+        for passes in ((), ('-2',)):
+            lines = self.fields(cmd_tshark, capture_file, test_env, *passes,
+                    '-Y', '_ws.malformed || _ws.expert', '-Tfields', '-eframe.number')
+            assert lines == []
+
+    def test_fddi_frame_control(self, cmd_tshark, capture_file, test_env):
+        '''Every class of frame control byte gets its own description.'''
+        lines = self.fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'fddi.fc', '-Tfields', '-efddi.fc', '-efddi.fc.clf',
+                '-efddi.fc.prio', '-efddi.fc.smt_subtype', '-efddi.fc.mac_subtype')
+        assert lines[0:12] == [
+            '0x00\t0x00\t\t\t',
+            '0x80\t0x08\t\t\t',
+            '0xc0\t0x0c\t\t\t',
+            '0x41\t0x04\t\t1\t',
+            '0x4f\t0x04\t\t15\t',
+            '0x40\t0x04\t\t0\t',
+            '0x42\t0x04\t\t2\t',
+            '0xc1\t0x0c\t\t\t1',
+            '0xc2\t0x0c\t\t\t2',
+            '0xc3\t0x0c\t\t\t3',
+            '0xc5\t0x0c\t\t\t5',
+            '0xcf\t0x0c\t\t\t15',
+        ]
+        assert lines[12:17] == [
+            '0x50\t0x05\t0\t\t',
+            '0x54\t0x05\t4\t\t',
+            '0x57\t0x05\t7\t\t',
+            '0x58\t0x05\t\t\t',
+            '0x5f\t0x05\t\t\t',
+        ]
+        info = self.fields(cmd_tshark, capture_file, test_env, '-Y', 'fddi',
+                '-Tfields', '-e_ws.col.info')
+        assert info[0] == 'Void frame'
+        assert info[1] == 'Nonrestricted token'
+        assert info[2] == 'Restricted token'
+        assert info[5] == 'SMT frame, control 0'
+        assert info[10] == 'MAC frame, control 5'
+        assert info[17] == 'Sync LLC frame'
+        assert info[18] == 'Sync LLC frame, control 1'
+        assert info[20] == 'Implementor async frame, control 0'
+        assert info[22] == 'Implementor sync frame, control 0'
+        assert info[24:29] == ['Unknown frame type'] * 5
+
+    def test_fddi_addresses(self, cmd_tshark, capture_file, test_env):
+        '''Link type 10 has bit-swapped MAC addresses, which the dissector
+        swaps back; FDDI inside sFlow is not swapped.'''
+        lines = self.fields(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number in {1,29,30,31}',
+                '-Tfields', '-Eoccurrence=f', '-eframe.number', '-efddi.src', '-efddi.dst')
+        assert lines[0] == '1\t02:00:00:00:00:aa\t02:00:00:00:00:bb'
+        assert lines[1] == '29\t02:00:00:00:00:aa\t02:00:00:00:00:bb'
+        assert lines[2] == '30\t02:00:00:00:00:aa\t02:00:00:00:00:bb'
+        assert lines[3] == '31\t02:00:00:00:00:aa\t02:00:00:00:00:bb'
+
+
+class TestDissectFefd:
+    @staticmethod
+    def run(cmd_tshark, capture_file, test_env, *args):
+        return subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fefd_coverage.pcap.gz'), *args,
+            ), encoding='utf-8', env=test_env).splitlines()
+
+    def test_fefd_protocols(self, cmd_tshark, capture_file, test_env):
+        '''All 10 frames are FEFD, none is malformed or has an expert info,
+        in one and two passes.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Tfields', '-e_ws.col.protocol')
+        assert lines == ['FEFD'] * 10
+        for passes in ((), ('-2',)):
+            lines = self.run(cmd_tshark, capture_file, test_env, *passes,
+                    '-Y', '_ws.malformed || _ws.expert', '-Tfields', '-eframe.number')
+            assert lines == []
+
+    def test_fefd_header(self, cmd_tshark, capture_file, test_env):
+        '''Version, opcode, flags and checksum.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Tfields', '-efefd.version', '-efefd.opcode', '-efefd.flags',
+                '-efefd.flags.rt', '-efefd.flags.rsy', '-efefd.checksum')
+        assert lines[0:6] == [
+            '1\t1\t0xc0\tTrue\tTrue\t0x1234',
+            '1\t1\t0x80\tTrue\tFalse\t0x0000',
+            '1\t2\t0x40\tFalse\tTrue\t0x0000',
+            '2\t3\t0x00\tFalse\tFalse\t0x0000',
+            '0\t0\t0x00\tFalse\tFalse\t0x0000',
+            '7\t4\t0x3f\tFalse\tFalse\t0x0000',
+        ]
+
+    def test_fefd_tlvs(self, cmd_tshark, capture_file, test_env):
+        '''Device ID and Port ID strings (a Port ID whose length does not
+        cover the string is extended by 3), and the generic TLVs.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Tfields', '-e_ws.col.info', '-efefd.device_id',
+                '-efefd.sent_through_interface', '-efefd.tlv.type',
+                '-efefd.tlv.len', '-efefd.data')
+        assert lines[0] == 'Device ID: switch-1, Port ID: Gi1/1\tswitch-1\tGi1/1\t0x0001,0x0002,0x0004,0x0005\t13,6,6,6\t000f,003c'
+        assert lines[1] == 'Device ID: switch-1, Port ID: Te0/1\tswitch-1\tTe0/1\t0x0001,0x0002,0x0003,0x0007\t13,9,8,8\t01020304,00000007'
+        assert lines[2].startswith('Device ID: sw2, Port ID: Fa0/2\tsw2\tFa0/2\t0x0001,0x0002,0x0006,0x1234\t')
+        assert lines[5] == '\t\t\t0x00ff\t24\t' + 'aa' * 20
+        # TLV with length < 4: the rest goes to the data dissector
+        assert lines[6].startswith('Device ID: switch-1\tswitch-1\t\t0x0001,0x0006\t13,2\t')
+
+
+class TestDissectFf:
+    @staticmethod
+    def run(cmd_tshark, capture_file, test_env, *args):
+        return subprocess.check_output((cmd_tshark,
+                '-r', capture_file('ff_coverage.pcap.gz'), *args,
+            ), encoding='utf-8', env=test_env).splitlines()
+
+    def test_ff_protocols(self, cmd_tshark, capture_file, test_env):
+        '''Every message of the capture is dissected as FF (UDP and TCP)
+        without malformed packets or warnings, in one and two passes.'''
+        lines = self.run(cmd_tshark, capture_file, test_env, '-Y', 'ff',
+                '-Tfields', '-eframe.number')
+        assert len(lines) == 1092
+        for passes in ((), ('-2',)):
+            lines = self.run(cmd_tshark, capture_file, test_env, *passes,
+                    '-Y', '_ws.malformed || _ws.expert.severity >= 0x600000',
+                    '-Tfields', '-eframe.number')
+            assert lines == []
+
+    def test_ff_header_only_messages(self, cmd_tshark, capture_file, test_env):
+        '''A 12 octet message (an empty body, such as an SM Identify
+        Request) is dissected in the middle and at the end of a datagram
+        (the last one was skipped before the fix).'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number in {921,922,923,924}', '-Tfields',
+                '-eframe.number', '-eff.hdr.len')
+        assert lines == ['921\t12', '922\t12,12', '923\t12,12,20,12', '924\t64,12,12']
+
+    def test_ff_trailer(self, cmd_tshark, capture_file, test_env):
+        '''The trailer selected by the Options (message number, invoke id,
+        time stamp, extended control field) follows the body.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number == 990', '-Tfields', '-eff.hdr.len',
+                '-eff.trailer.msg_num', '-eff.trailer.invoke_id',
+                '-eff.trailer.time_stamp', '-eff.trailer.extended_control_field')
+        assert lines == ['32\t286331153\t286331153\t1229782938247303441\t286331153']
+
+    def test_ff_error_codes(self, cmd_tshark, capture_file, test_env):
+        '''Error codes are named by error class.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number in {1106,1126}', '-V', '-O', 'ff')
+        text = '\n'.join(lines)
+        assert 'Error Code: max-fms-pdu-size-insufficient (1)' in text
+
+    def test_ff_tcp(self, cmd_tshark, capture_file, test_env):
+        '''FMS over TCP: messages split over segments are reassembled,
+        several messages per segment are all dissected.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'ff && tcp', '-Tfields', '-eframe.number',
+                '-e_ws.col.info', '-eff.hdr.len')
+        assert lines == [
+            '947\tFMS Initiate Response\t52,16',
+            '953\tFMS Read Request\t20',
+            '955\tFMS Read ResponseFMS Status Request\t56,12',
+            '957\tFMS Status Response\t60',
+            '961\tFMS Abort Request\t32',
+        ]
+
+    def test_ff_lists(self, cmd_tshark, capture_file, test_env):
+        '''Lists with entries: cross cable statistics and FDA address
+        selectors.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'ff.lr.get_statistics.rsp.num_x_cable_stat > 0',
+                '-Tfields', '-eframe.number',
+                '-eff.lr.get_statistics.rsp.num_x_cable_stat')
+        assert lines == ['1001\t1', '1006\t2', '1011\t3']
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'ff.sm.find_tag_reply.req.num_of_fda_addr_selectors > 0',
+                '-Tfields', '-eframe.number',
+                '-eff.sm.find_tag_reply.req.num_of_fda_addr_selectors')
+        assert lines == ['1004\t1', '1009\t2', '1014\t3']
+
+
+class TestDissectFinger:
+    @staticmethod
+    def run(cmd_tshark, capture_file, test_env, *args):
+        return subprocess.check_output((cmd_tshark, *args[0],
+                '-r', capture_file('finger_coverage.pcap.gz'), *args[1:],
+            ), encoding='utf-8', env=test_env).splitlines()
+
+    def test_finger_protocols(self, cmd_tshark, capture_file, test_env):
+        '''6 queries and 5 (reassembled) responses, no malformed packets or
+        warnings, in one and two passes.'''
+        lines = self.run(cmd_tshark, capture_file, test_env, (),
+                '-Y', 'finger', '-Tfields', '-eframe.number', '-efinger.query')
+        assert [l.split('\t')[0] for l in lines] == [
+            '4', '12', '20', '22', '28', '32', '37', '43', '51', '55', '57']
+        assert [l.split('\t')[1] for l in lines].count('') == 5
+        for passes in ((), ('-2',)):
+            lines = self.run(cmd_tshark, capture_file, test_env, passes,
+                    '-Y', '_ws.malformed || _ws.expert.severity >= 0x600000',
+                    '-Tfields', '-eframe.number')
+            assert lines == []
+
+    def test_finger_transactions(self, cmd_tshark, capture_file, test_env):
+        '''Request/response matching in the second pass: queries point to
+        the reassembled response, responses to their query.'''
+        lines = self.run(cmd_tshark, capture_file, test_env, ('-2',),
+                '-Y', 'finger', '-Tfields', '-eframe.number',
+                '-efinger.response_in', '-efinger.response_to')
+        assert lines == [
+            '4\t12\t', '12\t\t4', '20\t22\t', '22\t\t20', '28\t32\t',
+            '32\t\t28', '37\t\t', '43\t\t', '51\t57\t', '55\t57\t',
+            '57\t\t55',
+        ]
+        lines = self.run(cmd_tshark, capture_file, test_env, ('-2',),
+                '-Y', 'frame.number == 12', '-Tfields', '-efinger.response')
+        assert lines == ['Login: alice           Name: Alice Example\\r\\n'
+                         'Directory: /home/alice  Shell: /bin/sh\\r\\n'
+                         'No mail.\\r\\nNo Plan.\\r\\n']
+        lines = self.run(cmd_tshark, capture_file, test_env, ('-2',),
+                '-Y', 'frame.number == 12', '-Tfields', '-efinger.response_time')
+        assert len(lines) == 1 and lines[0].replace(',', '.').startswith('8.008')
+
+    def test_finger_request_without_reassembly(self, cmd_tshark, capture_file, test_env):
+        '''Without TCP reassembly the request is recorded in the first pass:
+        responses link back to their query in a single pass (the request
+        frame was not recorded before the fix), and a query that is not
+        terminated by CR LF gets an expert info.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                ('-o', 'tcp.desegment_tcp_streams:FALSE'),
+                '-Y', 'finger.response_to', '-Tfields', '-eframe.number',
+                '-efinger.response_to')
+        assert lines == ['6\t4', '8\t4', '10\t4', '22\t20', '30\t28', '53\t51', '57\t55']
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                ('-o', 'tcp.desegment_tcp_streams:FALSE'),
+                '-Y', 'finger.nocrlf', '-Tfields', '-eframe.number',
+                '-efinger.query')
+        assert lines == ['18\t/W bo']
+
+
+class TestDissectFip:
+    @staticmethod
+    def run(cmd_tshark, capture_file, test_env, *args):
+        return subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fip_coverage.pcap.gz'), *args,
+            ), encoding='utf-8', env=test_env).splitlines()
+
+    def test_fip_protocols(self, cmd_tshark, capture_file, test_env):
+        '''22 FIP frames and 6 with FC ELS (FLOGI, FDISC, LOGO and ELP)
+        encapsulations; none malformed or with an expert info.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Tfields', '-e_ws.col.protocol')
+        assert len(lines) == 28
+        assert lines.count('FIP') == 22
+        assert lines.count('FC ELS') == 6
+        for passes in ((), ('-2',)):
+            lines = self.run(cmd_tshark, capture_file, test_env, *passes,
+                    '-Y', '_ws.malformed || _ws.expert', '-Tfields', '-eframe.number')
+            assert lines == []
+
+    def test_fip_info(self, cmd_tshark, capture_file, test_env):
+        '''Opcode and subcode names, including unknown ones.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Tfields', '-e_ws.col.info')
+        assert lines == [
+            'Solicitation', 'Advertisement', 'Advertisement', 'FLOGI',
+            'ACC (FLOGI)', 'FDISC', 'LOGO', 'ACC (LOGO)', 'ECHO',
+            'Keep-Alive', 'Clear Virtual Link', 'VLAN Request',
+            'VLAN Response', 'Probe Request', 'Probe Reply',
+            'Claim Notification', 'Claim Response', 'Beacon',
+            'Solicitation', 'Solicitation', 'Discovery 0x7f',
+            'Link Service 0x7f', 'Control 0x7f', 'VLAN 0x7f',
+            'VN2VN 0x7f', 'Unknown op 0x9', 'Keep-Alive', 'Solicitation',
+        ]
+
+    def test_fip_vendor_data(self, cmd_tshark, capture_file, test_env):
+        '''The vendor specific data starts after the 8 octet Vendor ID
+        (it started at offset 9 before the fix).'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number == 19', '-Tfields', '-efip.vendor',
+                '-efip.vendor.data')
+        assert lines == ['41434d452d464950,41434d452d464950\tdeadbeef01020304']
+
+    def test_fip_descriptors(self, cmd_tshark, capture_file, test_env):
+        '''Descriptor fields of the discovery advertisement and the
+        keep-alive with a VN_Port descriptor, and the FC-4 features.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number == 2', '-Tfields', '-efip.pri', '-efip.mac',
+                '-efip.name', '-efip.fab.vfid', '-efip.fab.map', '-efip.fab.name',
+                '-efip.fka', '-efip.flags.available', '-efip.flags.sol',
+                '-efip.flags.fport')
+        assert lines == ['128\t0e:fc:00:00:00:02\t20:00:00:00:00:00:00:01\t1\t'
+                         '0e.fc.00\t20:00:00:00:00:00:00:99\t8000\tTrue\tTrue\tTrue']
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number == 10', '-Tfields', '-efip.vn.mac',
+                '-efip.vn.fc_id', '-efip.vn.pwwn')
+        assert lines == ['0e:fc:00:00:00:02\t0x00010203\t10:00:00:00:00:00:00:02']
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number == 19', '-Tfields', '-efip.fc4f.ip',
+                '-efip.fc4f.fcp', '-efip.fc4f.gs3', '-efip.fc4f.feat.fcp.target',
+                '-efip.fc4f.feat.fcp.initiator')
+        assert len(lines) == 1
+
+
+class TestDissectFix:
+    # high-bit bytes that expand when converted to a string, as in the
+    # capture (the next message follows the SOH)
+    JUNK = (b'\xc3\xa9\xff\xfe\x80\x81 garbage text with bytes '
+            b'\xe2\x82\xac\xf0\x9f\x98\x80\x01')
+
+    @staticmethod
+    def run(cmd_tshark, capture_file, test_env, *args):
+        return subprocess.check_output((cmd_tshark,
+                '-r', capture_file('fix_coverage.pcap.gz'), *args,
+            ), encoding='utf-8', env=test_env).splitlines()
+
+    def test_fix_protocols(self, cmd_tshark, capture_file, test_env):
+        '''32 frames contain FIX (found by the heuristic, no port); none is
+        malformed or has an error, in one and two passes.'''
+        lines = self.run(cmd_tshark, capture_file, test_env, '-Y', 'fix',
+                '-Tfields', '-eframe.number')
+        assert len(lines) == 32
+        for passes in ((), ('-2',)):
+            lines = self.run(cmd_tshark, capture_file, test_env, *passes,
+                    '-Y', '_ws.malformed || _ws.expert.severity >= 0x600000',
+                    '-Tfields', '-eframe.number')
+            assert lines == []
+
+    def test_fix_message_types(self, cmd_tshark, capture_file, test_env):
+        '''Message types, body lengths and the table driven values.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number <= 26 && fix', '-Tfields', '-eframe.number',
+                '-e_ws.col.info', '-efix.BodyLength')
+        assert lines == [
+            '4\tLogon\t76', '6\tHeartbeat\t58', '8\tTestRequest\t68',
+            '10\tNewOrderSingle\t172', '12\tExecutionReport\t140',
+            '14\tResendRequest\t67', '16\tReject\t91', '18\tSequenceReset\t70',
+            '20\tOrderCancelReject\t75', '22\tBusinessMessageReject\t70',
+            '24\tQuoteCancel\t85', '26\tLogout\t59',
+        ]
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number == 10', '-V', '-O', 'fix')
+        for expected in ('    MsgType (35): D (ORDER SINGLE)',
+                         '    Side (54): 1 (BUY)',
+                         '    OrdType (40): 2 (LIMIT)',
+                         '    Price (44): 123.45',
+                         '    Symbol (55): IBM'):
+            assert expected in lines
+
+    def test_fix_unknown_fields(self, cmd_tshark, capture_file, test_env):
+        '''Tags that are not in the dictionary and fields without value.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number == 24', '-V', '-O', 'fix')
+        assert '    9999: private field' in lines
+        assert '    5000: x' in lines
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number == 50', '-V', '-O', 'fix')
+        assert '    55: <missing value>' in lines
+
+    def test_fix_reassembly(self, cmd_tshark, capture_file, test_env):
+        '''Messages split over TCP segments, several messages per segment
+        and a message that grows beyond one segment.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number in {38,40,42,44,106}', '-Tfields',
+                '-eframe.number', '-efix.MsgType', '-efix.BodyLength')
+        assert lines == ['38\tD\t90', '40\t0,0\t58,58', '42\t1\t68',
+                         '44\t0,0\t10,58', '106\tD\t362']
+
+    def test_fix_negative_bodylength(self, cmd_tshark, capture_file, test_env):
+        '''A BodyLength of -23 no longer holds the rest of the stream: the
+        valid messages that follow are dissected (before the fix they were
+        held back waiting for more data).'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number in {66,68,70}', '-Tfields',
+                '-eframe.number', '-efix.MsgType', '-efix.BodyLength')
+        assert lines == ['66\t0\t-23', '68\t0\t25', '70\t0\t25']
+
+    def test_fix_resync_high_bytes(self, cmd_tshark, capture_file, test_env):
+        '''Resynchronising on the next 8=FIX uses tvb offsets, also when
+        the skipped bytes are 0x80 or above; the skipped bytes are shown
+        as continuation data of exactly their length.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number in {52,54,56}', '-Tfields',
+                '-eframe.number', '-efix.MsgType', '-efix.data')
+        assert lines == [
+            '52\t0\t' + self.JUNK.hex(),
+            '54\t0\t' + (self.JUNK * 2).hex(),
+            '56\t\t' + b'tail of something earlier\x01'.hex(),
+        ]
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number in {86,88,90,92,96}', '-Tfields',
+                '-eframe.number', '-e_ws.col.info')
+        assert lines == ['86\tHeartbeat', '88\t[FIX continuation]',
+                         '90\tTestRequest', '92\tHeartbeat',
+                         '96\tHeartbeat, Heartbeat']
+
+
+class TestDissectFlexnet:
+    @staticmethod
+    def run(cmd_tshark, capture_file, test_env, *args):
+        return subprocess.check_output((cmd_tshark,
+                '-r', capture_file('flexnet_coverage.pcap.gz'), *args,
+            ), encoding='utf-8', env=test_env).splitlines()
+
+    def test_flexnet_protocols(self, cmd_tshark, capture_file, test_env):
+        '''5 of 6 AX.25 frames carry FlexNet (PID 0xce), none malformed
+        or with a warning or error (AX.25 itself may add a note, for
+        example that it assumes modulo 8).'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Tfields', '-e_ws.col.protocol')
+        assert lines == ['Flexnet'] * 4 + ['AX.25-NoL3', 'Flexnet']
+        for passes in ((), ('-2',)):
+            lines = self.run(cmd_tshark, capture_file, test_env, *passes,
+                    '-Y', '_ws.malformed || _ws.expert.severity >= warning',
+                    '-Tfields', '-eframe.number')
+            assert lines == []
+
+    def test_flexnet_header(self, cmd_tshark, capture_file, test_env):
+        '''Destination, source and control are 15 octets each.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'flexnet', '-Tfields', '-eframe.number', '-eflexnet.dst',
+                '-eflexnet.src', '-eflexnet.ctl')
+        assert lines == [
+            '1\t4442304142432d3100000000000000\t444c3158595a2d3200000000000000\t010203000000000000000000000000',
+            '2\t410000000000000000000000000000\t420000000000000000000000000000\t000000000000000000000000000000',
+            '3\t4442304142432d3100000000000000\t444c3158595a2d3200000000000000\t010203000000000000000000000000',
+            '4\t4442304142432d3100000000000000\t444c3158595a2d3200000000000000\t010203000000000000000000000000',
+            '6\t0102030405060708090a0b0c0d0e0f\t101112131415161718191a1b1c1d1e\tf0f1f2f3f4f5f6f7f8f9fafbfcfdfe',
+        ]
+
+    def test_flexnet_payload(self, cmd_tshark, capture_file, test_env):
+        '''The data after the 45 octet header goes to the data dissector.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'flexnet', '-Tfields', '-eframe.number', '-edata.data')
+        assert lines[0] == '1\t' + b'Hello FlexNet'.hex()
+        assert lines[1] == '2\t'
+        assert lines[4] == '6\tffffffff'
+
+
+class TestDissectFlexray:
+    @staticmethod
+    def run(cmd_tshark, capture_file, test_env, *args):
+        return subprocess.check_output((cmd_tshark,
+                '-r', capture_file('flexray_coverage.pcap.gz'), *args,
+            ), encoding='utf-8', env=test_env).splitlines()
+
+    def test_flexray_protocols(self, cmd_tshark, capture_file, test_env):
+        '''All 27 frames are FlexRay, none malformed or with an error.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Tfields', '-e_ws.col.protocol')
+        assert lines == ['FLEXRAY'] * 27
+        for passes in ((), ('-2',)):
+            lines = self.run(cmd_tshark, capture_file, test_env, *passes,
+                    '-Y', '_ws.malformed || _ws.expert.severity >= 0x800000',
+                    '-Tfields', '-eframe.number')
+            assert lines == []
+
+    def test_flexray_warnings(self, cmd_tshark, capture_file, test_env):
+        '''Error flags and a startup frame that is not a sync frame.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'flexray.error_flag', '-Tfields', '-eframe.number',
+                '-eflexray.eff')
+        assert lines == ['16\t0x10', '17\t0x08', '18\t0x04', '19\t0x02',
+                         '20\t0x01', '21\t0x1f']
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'flexray.stfi_flag', '-Tfields', '-eframe.number')
+        assert lines == ['13']
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'flexray.symbol_frame', '-Tfields', '-eframe.number',
+                '-eflexray.sl')
+        assert lines == ['24\t12', '25\t127', '27\t5']
+
+    def test_flexray_frames(self, cmd_tshark, capture_file, test_env):
+        '''Channel, frame id, cycle, payload length and indicators.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'flexray.fid', '-Tfields', '-eframe.number', '-eflexray.ch',
+                '-eflexray.fid', '-eflexray.cc', '-eflexray.pl', '-eflexray.nfi',
+                '-eflexray.sfi', '-eflexray.stfi')
+        assert lines[0:3] == [
+            '1\tFalse\t1\t0\t2\tTrue\tTrue\tTrue',
+            '2\tTrue\t2\t1\t8\tTrue\tFalse\tFalse',
+            '3\tFalse\t17\t2\t4\tTrue\tFalse\tFalse',
+        ]
+        assert lines[4] == '5\tTrue\t2047\t63\t127\tTrue\tFalse\tFalse'
+        assert lines[6] == '7\tFalse\t4\t5\t2\tFalse\tFalse\tFalse'
+        assert len(lines) == 23
+
+    def test_flexray_info_and_trailer(self, cmd_tshark, capture_file, test_env):
+        '''Info column, the null frame text and the frame CRC trailer.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Tfields', '-e_ws.col.info')
+        assert lines[0] == 'FRAME: ID    1 CC  0   01 02 03 04'
+        assert lines[6] == 'FRAME: ID    4 CC  5   NF'
+        assert lines[23] == 'SYMB: SL  12'
+        assert lines[25] == 'Unknown (0x03):'
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'flexray.crc', '-Tfields', '-eframe.number', '-eflexray.crc')
+        assert lines == ['14\t0x123456', '15\t0xabcdef', '23\t0x112233']
+
+
+class TestDissectFlip:
+    @staticmethod
+    def run(cmd_tshark, capture_file, test_env, *args):
+        return subprocess.check_output((cmd_tshark,
+                '-r', capture_file('flip_coverage.pcap.gz'), *args,
+            ), encoding='utf-8', env=test_env).splitlines()
+
+    def test_flip_protocols(self, cmd_tshark, capture_file, test_env):
+        '''15 of 17 frames are FLIP (two are too short to be), none is
+        malformed or has an expert info, in one and two passes.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Tfields', '-e_ws.col.protocol')
+        assert len(lines) == 17
+        assert lines.count('FLIP') == 15
+        for passes in ((), ('-2',)):
+            lines = self.run(cmd_tshark, capture_file, test_env, *passes,
+                    '-Y', '_ws.malformed || _ws.expert', '-Tfields', '-eframe.number')
+            assert lines == []
+
+    def test_flip_info(self, cmd_tshark, capture_file, test_env):
+        '''Flow ID, checksum, and the descriptions of the invalid frames.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'flip', '-Tfields', '-e_ws.col.info')
+        assert lines[0] == 'FlowID 0x00000100'
+        assert lines[1] == 'FlowID 0x0fffffff'
+        assert lines[3] == 'FlowID 0x00000200'
+        assert lines[4] == 'Checksum 0xbcef [Incorrect] (computed 0xbcee)'
+        assert lines[8] == 'Extension header indicated, but not enough data'
+        assert lines[9] == 'Invalid extension header type 0x7f'
+        assert lines[10] == 'Checksum 0xffff [Incorrect] (computed 0x7b3c)'
+        assert lines[11] == 'Length mismatch: frame 46 bytes, hdr 500 bytes'
+        assert lines[12] == 'Invalid length in basic header: 4 bytes'
+        assert lines[13] == 'Invalid length in basic header: 0 bytes'
+
+    def test_flip_headers(self, cmd_tshark, capture_file, test_env):
+        '''Basic header fields, chained checksum headers.'''
+        lines = self.run(cmd_tshark, capture_file, test_env,
+                '-Y', 'flip', '-Tfields', '-eframe.number', '-eflip.basic.e',
+                '-eflip.basic.reserved', '-eflip.basic.flowid',
+                '-eflip.basic.seqnum', '-eflip.basic.len', '-eflip.chksum.chksum',
+                '-eflip.chksum.e', '-eflip.chksum.spare')
+        assert lines[0] == '1\tFalse\t0\t0x00000100\t1\t8\t\t\t'
+        assert lines[2] == '3\tFalse\t7\t0x07000123\t3\t14\t\t\t'
+        assert lines[3] == '4\tTrue\t0\t0x00000200\t4\t31\t0x0000447a\tFalse\t0'
+        assert lines[5] == '6\tTrue\t0\t0x00000201\t6\t35\t0x00004c74,0x00001234\tTrue,False\t0,0'
+        assert lines[6].split('\t')[6] == '0x00000aa5,0x00001234,0x00001234'
+        assert lines[10] == '11\tTrue\t0\t0x00000302\t11\t12\t0x0000ffff\tFalse\t85'

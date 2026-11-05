@@ -9,8 +9,8 @@
 
 /**
  * @file
- * Code editor stack: editor view, gutter, syntax highlighter, theme
- * palette, font policy and the script-tabs controller.
+ * Code editor stack: editor view, gutter, theme palette, font policy
+ * and the script-tabs controller.
  */
 
 #include <lua_debugger_code_editor.h>
@@ -60,6 +60,7 @@
 #include <ui/qt/utils/font_manager.h>
 #include "utils/color_utils.h"
 #include <ui/qt/utils/theme_manager.h>
+#include <ui/qt/utils/themes/contrast_adapt_icon.h>
 
 /* ===== code_palette ===== */
 
@@ -75,228 +76,6 @@ LuaDebuggerEditorPalette luaDebuggerEditorPalette()
     p.gutterText = theme->color(ThemeManager::CodeGutterText);
     p.pausedLine = theme->color(ThemeManager::CodePausedLine);
     return p;
-}
-
-/* ===== lua_highlighter ===== */
-
-
-namespace
-{
-
-constexpr qint32 kStringStateBase = 0x1000;  // Unique positive range for long strings
-constexpr qint32 kCommentStateBase = 0x2000; // Distinct positive range for block comments
-
-} // namespace
-
-LuaSyntaxHighlighter::LuaSyntaxHighlighter(QTextDocument *parent) : QSyntaxHighlighter(parent)
-{
-    singleLineComment_ = QRegularExpression(QStringLiteral(R"(--(?!\[).*)"));
-    buildRules();
-}
-
-void LuaSyntaxHighlighter::updateColors()
-{
-    buildRules();
-    rehighlight();
-}
-
-void LuaSyntaxHighlighter::buildRules()
-{
-    const ThemeManager *theme = ThemeManager::instance();
-    rules_.clear();
-
-    stringFormat_.setForeground(theme->color(ThemeManager::CodeString));
-    rules_.append({QRegularExpression(QStringLiteral("\"(?:\\\\.|[^\"\\\\])*\"")), stringFormat_});
-    rules_.append({QRegularExpression(QStringLiteral("'(?:\\\\.|[^'\\\\])*'")), stringFormat_});
-
-    QTextCharFormat keywordFormat;
-    keywordFormat.setForeground(theme->color(ThemeManager::CodeKeyword));
-    keywordFormat.setFontWeight(QFont::Bold);
-    const QStringList keywords = {
-        QStringLiteral("and"),      QStringLiteral("break"),  QStringLiteral("do"),    QStringLiteral("else"),
-        QStringLiteral("elseif"),   QStringLiteral("end"),    QStringLiteral("false"), QStringLiteral("for"),
-        QStringLiteral("function"), QStringLiteral("goto"),   QStringLiteral("if"),    QStringLiteral("in"),
-        QStringLiteral("local"),    QStringLiteral("nil"),    QStringLiteral("not"),   QStringLiteral("or"),
-        QStringLiteral("repeat"),   QStringLiteral("return"), QStringLiteral("then"),  QStringLiteral("true"),
-        QStringLiteral("until"),    QStringLiteral("while")};
-    for (const QString &keyword : keywords)
-    {
-        Rule rule;
-        rule.pattern = QRegularExpression(QStringLiteral("\\b%1\\b").arg(keyword));
-        rule.format = keywordFormat;
-        rules_.append(rule);
-    }
-
-    QTextCharFormat numberFormat;
-    numberFormat.setForeground(theme->color(ThemeManager::CodeNumber));
-    rules_.append({QRegularExpression(QStringLiteral("\\b0[xX][0-9a-fA-F]+\\b")), numberFormat});
-    rules_.append({QRegularExpression(QStringLiteral("\\b\\d+(?:\\.\\d+)?\\b")), numberFormat});
-
-    QTextCharFormat builtInFormat;
-    builtInFormat.setForeground(theme->color(ThemeManager::CodeBuiltIn));
-    rules_.append({QRegularExpression(QStringLiteral("\\bself\\b")), builtInFormat});
-
-    QTextCharFormat functionCallFormat;
-    functionCallFormat.setForeground(theme->color(ThemeManager::CodeFunctionCall));
-    Rule functionCallRule;
-    functionCallRule.pattern = QRegularExpression(QStringLiteral("\\b(?!function\\b)([A-Za-z_]\\w*)\\s*(?=\\()"));
-    functionCallRule.format = functionCallFormat;
-    rules_.append(functionCallRule);
-
-    commentFormat_.setForeground(theme->color(ThemeManager::CodeComment));
-}
-
-void LuaSyntaxHighlighter::highlightBlock(const QString &text)
-{
-    for (const Rule &rule : rules_)
-    {
-        QRegularExpressionMatchIterator iterator = rule.pattern.globalMatch(text);
-        while (iterator.hasNext())
-        {
-            const QRegularExpressionMatch match = iterator.next();
-            setFormat(static_cast<int>(match.capturedStart()), static_cast<int>(match.capturedLength()), rule.format);
-        }
-    }
-
-    QRegularExpressionMatchIterator commentMatches = singleLineComment_.globalMatch(text);
-    while (commentMatches.hasNext())
-    {
-        const QRegularExpressionMatch match = commentMatches.next();
-        setFormat(static_cast<int>(match.capturedStart()), static_cast<int>(match.capturedLength()), commentFormat_);
-    }
-
-    const qint32 previousState = previousBlockState();
-    const bool continuingString = (previousState >= kStringStateBase) && (previousState < kCommentStateBase);
-    const bool continuingComment = previousState >= kCommentStateBase;
-    const qint32 stringEqCount = continuingString ? (previousState - kStringStateBase) : 0;
-    const qint32 commentEqCount = continuingComment ? (previousState - kCommentStateBase) : 0;
-
-    qint32 nextStringEqCount = 0;
-    const bool stringStillOpen = highlightLongBlock(text, false, continuingString, stringEqCount, nextStringEqCount);
-
-    qint32 nextCommentEqCount = 0;
-    const bool commentStillOpen = highlightLongBlock(text, true, continuingComment, commentEqCount, nextCommentEqCount);
-
-    if (commentStillOpen)
-    {
-        setCurrentBlockState(kCommentStateBase + nextCommentEqCount);
-    }
-    else if (stringStillOpen)
-    {
-        setCurrentBlockState(kStringStateBase + nextStringEqCount);
-    }
-    else
-    {
-        setCurrentBlockState(0);
-    }
-}
-
-bool LuaSyntaxHighlighter::highlightLongBlock(const QString &text, bool isComment, bool continuingPrevious,
-                                              qint32 eqCountFromState, qint32 &nextStateEqCount)
-{
-    QTextCharFormat format = isComment ? commentFormat_ : stringFormat_;
-    qint32 eqCount = eqCountFromState;
-    qint32 tokenLength = 0;
-    bool continuing = continuingPrevious;
-    qint32 startIndex = continuing ? 0 : findLongBlockStart(text, 0, isComment, eqCount, tokenLength);
-
-    while (startIndex >= 0)
-    {
-        const qint32 searchFrom = continuing ? 0 : startIndex + tokenLength;
-        const qint32 endIndex = findLongBlockEnd(text, searchFrom, eqCount);
-        if (endIndex == -1)
-        {
-            setFormat(startIndex, static_cast<int>(text.length()) - startIndex, format);
-            nextStateEqCount = eqCount;
-            return true;
-        }
-
-        setFormat(startIndex, endIndex - startIndex + 1, format);
-        continuing = false;
-        startIndex = findLongBlockStart(text, endIndex + 1, isComment, eqCount, tokenLength);
-    }
-
-    nextStateEqCount = 0;
-    return false;
-}
-
-qint32 LuaSyntaxHighlighter::findLongBlockStart(const QString &text, qint32 from, bool isComment, qint32 &eqCount,
-                                                qint32 &tokenLength) const
-{
-    const qint32 len = static_cast<qint32>(text.length());
-    for (qint32 i = from; i < len; ++i)
-    {
-        if (isComment)
-        {
-            if (i + 3 >= len)
-            {
-                break;
-            }
-            if (text[i] == '-' && text[i + 1] == '-' && text[i + 2] == '[')
-            {
-                qint32 j = i + 3;
-                qint32 equals = 0;
-                while (j < len && text[j] == '=')
-                {
-                    ++equals;
-                    ++j;
-                }
-                if (j < len && text[j] == '[')
-                {
-                    eqCount = equals;
-                    tokenLength = (j - i) + 1;
-                    return i;
-                }
-            }
-        }
-        else
-        {
-            if (text[i] == '[')
-            {
-                if (i >= 2 && text[i - 2] == '-' && text[i - 1] == '-')
-                {
-                    continue; // Part of comment start, skip
-                }
-                qint32 j = i + 1;
-                qint32 equals = 0;
-                while (j < len && text[j] == '=')
-                {
-                    ++equals;
-                    ++j;
-                }
-                if (j < len && text[j] == '[')
-                {
-                    eqCount = equals;
-                    tokenLength = (j - i) + 1;
-                    return i;
-                }
-            }
-        }
-    }
-    return -1;
-}
-
-qint32 LuaSyntaxHighlighter::findLongBlockEnd(const QString &text, qint32 from, qint32 eqCount) const
-{
-    const qint32 len = static_cast<qint32>(text.length());
-    for (qint32 i = from; i < len; ++i)
-    {
-        if (text[i] == ']')
-        {
-            qint32 j = i + 1;
-            qint32 equals = 0;
-            while (j < len && text[j] == '=')
-            {
-                ++equals;
-                ++j;
-            }
-            if (equals == eqCount && j < len && text[j] == ']')
-            {
-                return j;
-            }
-        }
-    }
-    return -1;
 }
 
 /* ===== code_view ===== */
@@ -489,7 +268,7 @@ void LuaDebuggerCodeView::setCurrentLine(qint32 line)
 {
     /* The gutter repaints on cursor movement via the updateRequest
      * signal, but the early-return branches below do not move the
-     * cursor, and we need the paused-line yellow arrow (and the
+     * cursor, and we need the paused-line arrow (and the
      * accompanying dimmed breakpoint circle, if any) to appear /
      * disappear whenever pausedExecutionLine_ changes. Request a
      * line-number-area repaint explicitly in every branch. */
@@ -540,7 +319,7 @@ void LuaDebuggerCodeView::clearCurrentLineHighlight()
 {
     pausedExecutionLine_ = -1;
     rebuildLineHighlights();
-    /* Force the gutter to repaint so the paused-line yellow arrow
+    /* Force the gutter to repaint so the paused-line arrow
      * is cleared and any dimmed breakpoint circle returns to full
      * brightness on resume, even when no cursor movement triggers
      * updateRequest. */
@@ -655,12 +434,8 @@ void LuaDebuggerCodeView::lineNumberAreaPaintEvent(QPaintEvent *event)
             const qint32 lineNo = static_cast<qint32>(blockNumber + 1);
             const bool pausedHere = (pausedExecutionLine_ == lineNo);
 
-            /* Breakpoint circle. On the paused line the red (enabled)
-             * circle is drawn dimmed (reduced alpha) so the overlaid
-             * yellow right-pointing triangle is visually dominant while
-             * the breakpoint itself stays recognizable underneath.
-             * Gray (disabled) circles are not dimmed — the yellow
-             * arrow is the only indicator that is never dimmed.
+            /* Breakpoint circle. On the paused line the continue icon is
+             * drawn on top of it.
              * During a breakpoint drag, skip drawing the source line's
              * breakpoint so the preview at the target is visually distinct. */
             const bool isDragSource = (gutter && gutter->isDraggingBreakpoint() && lineNo == gutter->dragSourceLine());
@@ -670,32 +445,35 @@ void LuaDebuggerCodeView::lineNumberAreaPaintEvent(QPaintEvent *event)
                 const int32_t state = wslua_debugger_get_breakpoint_state_canonical(canonical, lineNo, &hasExtras);
                 if (state != -1)
                 {
-                    const qint32 radius = fontMetrics().height() / 2 - 2;
-                    const qint32 cx = lineNumberArea->width() - 15;
-                    const qint32 cy = top + 3;
-                    luaDbgDrawBreakpointDot(painter, cx, cy, radius, (state == 1), hasExtras);
+                    const qint32 radius = fontMetrics().height() / 2 - 1;
+                    const qint32 cx = lineNumberArea->width() - 16;
+                    const qint32 cy = top + 2;
+                    luaDbgDrawBreakpointDot(painter, cx, cy, radius, (state == 1), colors.gutterText, hasExtras);
                 }
             }
 
-            /* Yellow right-pointing triangle marks the line the
-             * debugger is paused at. Drawn after (and therefore on
-             * top of) the breakpoint circle, which is dimmed on this
-             * line so the triangle dominates while the breakpoint is
-             * still visible. */
+            /* The continue icon in the theme's warning colour, outlined in
+             * the gutter text colour, marks the line the debugger is paused
+             * at. Drawn after (and therefore on top of) the breakpoint
+             * circle. */
             if (pausedHere)
             {
                 const qint32 radius = fontMetrics().height() / 2 - 2;
                 const qint32 diameter = radius * 2;
-                const qreal x = lineNumberArea->width() - 15;
-                const qreal y = top + 2;
-                QPolygonF triangle;
-                triangle << QPointF(x, y) << QPointF(x, y + diameter) << QPointF(x + diameter, y + diameter / 2.0);
-                const QColor triangleColor("#FFC107");
-                painter.setBrush(triangleColor);
-                /* Same 1px darker rim as the toolbar state indicator
-                 * (see updateEnabledCheckboxIcon()). */
-                painter.setPen(QPen(triangleColor.darker(140), 1));
-                painter.drawPolygon(triangle);
+                const qint32 x = lineNumberArea->width() - 15;
+                const qint32 y = top + 2;
+                /* The play shape covers about 18/24 of the icon box. Draw
+                 * the box at a whole-pixel size, unscaled, centred on the
+                 * diameter-sized square the marker occupies. */
+                const qint32 box = qRound(diameter * 24.0 / 18.0);
+                const QPoint boxTopLeft(x + (diameter - box) / 2, y + (diameter - box) / 2);
+                const qreal dpr = painter.device() ? painter.device()->devicePixelRatioF() : 1.0;
+                static ContrastAdaptIcon icon("lua-debug-paused-line");
+                icon.setTokenColors({
+                    {ThemeManager::AccentWarning, ThemeManager::instance()->color(ThemeManager::AccentWarning)},
+                    {ThemeManager::PaletteText, colors.gutterText},
+                });
+                painter.drawPixmap(boxTopLeft, icon.pixmap(QSize(box, box), dpr));
             }
         }
 
@@ -706,7 +484,7 @@ void LuaDebuggerCodeView::lineNumberAreaPaintEvent(QPaintEvent *event)
     }
 
     /* Draw semi-transparent preview breakpoint at the drag target line.
-     * Uses the same color and indicators (white core for extras) as the
+     * Uses the same icon (concentric for extras) and colour as the
      * source breakpoint, with reduced alpha for visual distinction. */
     if (gutter && gutter->isDraggingBreakpoint() && gutter->dragTargetLine() > 0)
     {
@@ -725,10 +503,11 @@ void LuaDebuggerCodeView::lineNumberAreaPaintEvent(QPaintEvent *event)
 
                 if (targetTop <= event->rect().bottom() && targetBottom >= event->rect().top())
                 {
-                    const qint32 radius = fontMetrics().height() / 2 - 2;
-                    const qint32 cx = lineNumberArea->width() - 15;
-                    const qint32 cy = targetTop + 3;
-                    luaDbgDrawBreakpointDot(painter, cx, cy, radius, (state == 1), hasExtras, 120);
+                    const qint32 radius = fontMetrics().height() / 2 - 1;
+                    const qint32 cx = lineNumberArea->width() - 16;
+                    const qint32 cy = targetTop + 2;
+                    luaDbgDrawBreakpointDot(painter, cx, cy, radius, (state == 1), colors.gutterText, hasExtras,
+                                            120);
                 }
             }
         }

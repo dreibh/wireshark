@@ -111,7 +111,7 @@ class CollapsibleSection : public QWidget
   private slots:
     /**
      * @brief Toggle the content area visibility and emit the toggled signal.
-     * @param checked True if the toggle button is checked (expanded), false otherwise.
+     * @param checked True to expand, false to collapse.
      */
     void onToggle(bool checked);
 
@@ -131,19 +131,18 @@ class CollapsibleSection : public QWidget
     QToolButton *toggleButton;
     QFrame *headerLine;
     QHBoxLayout *headerLayout_ = nullptr;
-    /** Wraps headerLayout_ with a fixed height so the row cannot grow when
-     *  toggleButton->sizeHint() fluctuates by 1-2px on arrowType change. */
+    /** Wraps headerLayout_ with a fixed height so the row size is set by
+     *  titleH_ rather than by the tallest child sizeHint. */
     QWidget *headerContainer_ = nullptr;
     QWidget *contentArea;
     QVBoxLayout *mainLayout;
     /** Non-null if setHeaderTrailingWidget; owned as child, cleared on replace. */
     QWidget *headerTrailingWidget_ = nullptr;
     int savedHeight;
+    /** Expanded state; the toggle button is deliberately not checkable. */
+    bool expanded_ = false;
     /** Cached header row height, measured from toggleButton->sizeHint()
-     *  with RightArrow by applyTitleMetrics(). The platform style's sizeFromContents(CT_ToolButton)
-     *  consults opt.arrowType, so a live sizeHint() varies by 1-2px between
-     *  RightArrow and DownArrow; using a cached value keeps headerHeight()
-     *  and titleButtonHeight() stable across toggles. */
+     *  by applyTitleMetrics() when the font or zoom changes. */
     int titleH_ = 0;
 };
 
