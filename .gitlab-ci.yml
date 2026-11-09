@@ -44,6 +44,16 @@ variables:
     --non-interactive --obscure"
   # --no-output
   WS_AQTINSTALL_LOCATION: "aqtinstall@git+https://github.com/miurahr/aqtinstall.git@5be32a75a81513792d95f13065b72cac3381c612"
+  # The ccache release that the Windows jobs download if their image
+  # doesn't have ccache.
+  WS_CCACHE_VERSION: "4.14.2"
+  WS_CCACHE_WINDOWS_X64_SHA256: "6993ce645e53192cec592ee23186200b574ac4c59097ecde8d9cfd681b47ae84"
+  WS_CCACHE_WINDOWS_ARM64_SHA256: "47ea5a0ed661bea53962d8fb8ee9a1769092d979a6f7c73d3081499b3305b2ab"
+  # The Ninja release that the Windows jobs download if their image
+  # doesn't have Ninja.
+  WS_NINJA_VERSION: "1.13.2"
+  WS_NINJA_WINDOWS_X64_SHA256: "07fc8261b42b20e71d1720b39068c2e14ffcee6396b76fb7a795fb460b78dc65"
+  WS_NINJA_WINDOWS_ARM64_SHA256: "e52f0bdef9dfb1003229dbd6508a508c4073fd017247002adc66e5e806cb0391"
 
 workflow:
   auto_cancel:
@@ -192,6 +202,12 @@ workflow:
 
 .build-windows:
   variables:
+    # Keep the ccache cache in the runner's persistent builds directory,
+    # next to the libraries, instead of uploading and downloading it.
+    # The runners run jobs concurrently, and each slot has its own
+    # directory and so its own cache.
+    CCACHE_DIR: "$CI_PROJECT_DIR\\..\\ccache"
+    CCACHE_MAXSIZE: "5G"
     AQT_HOST: "windows"
     AQT_ARCH: "msvc2022_64"
     VCVARS_ARCH: "64"
@@ -224,6 +240,69 @@ workflow:
     - mkdir build
     - cd build
   needs: []
+
+# Put Ninja on the path in a Windows job: the one in the image if it has
+# one, otherwise the WS_NINJA_VERSION release, which we download once into
+# the runner's persistent builds directory, next to wireshark-x64-libs.
+# XXX Remove this when the image has Ninja (wireshark-containers!100).
+.windows-ninja:
+  script:
+    - |
+      if (-Not (Get-Command ninja -ErrorAction SilentlyContinue)) {
+        if ($env:VCVARS_ARCH -eq "arm64") {
+          $ninjaAsset = "ninja-winarm64"
+          $ninjaDir = "$env:CI_PROJECT_DIR\..\ninja-$($env:WS_NINJA_VERSION)-arm64"
+          $ninjaSha256 = $env:WS_NINJA_WINDOWS_ARM64_SHA256
+        } else {
+          $ninjaAsset = "ninja-win"
+          $ninjaDir = "$env:CI_PROJECT_DIR\..\ninja-$($env:WS_NINJA_VERSION)"
+          $ninjaSha256 = $env:WS_NINJA_WINDOWS_X64_SHA256
+        }
+        if (-Not (Test-Path "$ninjaDir\ninja.exe")) {
+          Write-Host "Downloading Ninja $($env:WS_NINJA_VERSION) to $ninjaDir"
+          $ninjaZip = "$env:TEMP\$ninjaAsset-$($env:WS_NINJA_VERSION).zip"
+          Invoke-WebRequest -UseBasicParsing -OutFile $ninjaZip -Uri "https://github.com/ninja-build/ninja/releases/download/v$($env:WS_NINJA_VERSION)/$ninjaAsset.zip"
+          if ((Get-FileHash $ninjaZip -Algorithm SHA256).Hash -ne $ninjaSha256) {
+            Write-Host "$ninjaZip doesn't have the expected SHA-256 hash"
+            Exit 1
+          }
+          Expand-Archive -Force $ninjaZip -DestinationPath $ninjaDir
+          Remove-Item $ninjaZip
+        }
+        $env:Path = "$ninjaDir;$env:Path"
+      }
+    - Write-Host "Ninja $(ninja --version) from $((Get-Command ninja).Source)"
+
+# Put ccache on the path in a Windows job: the one in the image if it
+# has one, otherwise the WS_CCACHE_VERSION release, which we download
+# once into the runner's persistent builds directory, next to
+# wireshark-x64-libs.
+.windows-ccache:
+  script:
+    - |
+      if (-Not (Get-Command ccache -ErrorAction SilentlyContinue)) {
+        if ($env:VCVARS_ARCH -eq "arm64") {
+          $ccacheName = "ccache-$($env:WS_CCACHE_VERSION)-windows-aarch64"
+          $ccacheSha256 = $env:WS_CCACHE_WINDOWS_ARM64_SHA256
+        } else {
+          $ccacheName = "ccache-$($env:WS_CCACHE_VERSION)-windows-x86_64"
+          $ccacheSha256 = $env:WS_CCACHE_WINDOWS_X64_SHA256
+        }
+        $ccacheDir = "$env:CI_PROJECT_DIR\..\$ccacheName"
+        if (-Not (Test-Path "$ccacheDir\ccache.exe")) {
+          Write-Host "Downloading ccache $($env:WS_CCACHE_VERSION) to $ccacheDir"
+          $ccacheZip = "$env:TEMP\$ccacheName.zip"
+          Invoke-WebRequest -UseBasicParsing -OutFile $ccacheZip -Uri "https://github.com/ccache/ccache/releases/download/v$($env:WS_CCACHE_VERSION)/$ccacheName.zip"
+          if ((Get-FileHash $ccacheZip -Algorithm SHA256).Hash -ne $ccacheSha256) {
+            Write-Host "$ccacheZip doesn't have the expected SHA-256 hash"
+            Exit 1
+          }
+          Expand-Archive -Force $ccacheZip -DestinationPath "$env:CI_PROJECT_DIR\.."
+          Remove-Item $ccacheZip
+        }
+        $env:Path = "$ccacheDir;$env:Path"
+      }
+    - Write-Host "$(ccache --version | Select-Object -First 1) from $((Get-Command ccache).Source)"
 
 # macOS runners are still beta:
 # https://about.gitlab.com/blog/2021/08/23/build-cloud-for-macos-beta/
@@ -285,7 +364,8 @@ workflow:
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
     - ninja
     - ninja test-programs
-    - pytest --enable-stratoshark --disable-capture --junitxml=../macos_tests.xml
+    - !reference [.changed-since, script]
+    - pytest --enable-stratoshark --disable-capture --junitxml=../macos_tests.xml $CHANGED_SINCE
   needs: []
 
 .build-mingw:
@@ -627,27 +707,33 @@ Windows x64 Package:
     name: windows-package
   script:
     - C:\Windows\py.exe ..\tools\make-version.py --set-release --wireshark-version-file=wireshark_version.txt --stratoshark-version-file=stratoshark_version.txt ..
-    - cmake -G "Visual Studio 18 2026" -A x64
+    - !reference [.windows-ninja, script]
+    - !reference [.windows-ccache, script]
+    # Show whether the cache from earlier jobs is there.
+    - ccache --show-stats --verbose | Select-String -Pattern '^(Cache directory:|\s*Cache size|\s*Files:)'
+    - ccache --zero-stats
+    - cmake -G "Ninja Multi-Config"
+      -DENABLE_CCACHE=ON
       -DENABLE_LTO=off
       -DBUILD_stratoshark=on
       -DFALCO_PLUGIN_DIR="$FALCO_PLUGIN_DIR"
       -DFALCO_PLUGINS="cloudtrail.dll;gcpaudit.dll;k8saudit.dll"
       -DFALCO_PLUGIN_DLLS="libunwind.dll"
       -DENABLE_SIGNED_NSIS=on ..
-    - msbuild "/consoleloggerparameters:PerformanceSummary;NoSummary" Wireshark.slnx
-    - msbuild test-programs.vcxproj
-    - msbuild wireshark_nsis_prep.vcxproj
-    - msbuild stratoshark_nsis_prep.vcxproj
-    - msbuild wireshark_wix_prep.vcxproj
+    - cmake --build . --config RelWithDebInfo
+    - cmake --build . --config RelWithDebInfo --target test-programs
+    - cmake --build . --config RelWithDebInfo --target wireshark_nsis_prep
+    - cmake --build . --config RelWithDebInfo --target stratoshark_nsis_prep
+    - cmake --build . --config RelWithDebInfo --target wireshark_wix_prep
     - C:\gitlab-builds\bin\sign-files.ps1 -Recurse -Path run\RelWithDebInfo
-    - msbuild wireshark_nsis.vcxproj
-    - msbuild stratoshark_nsis.vcxproj
-    - msbuild wireshark_wix.vcxproj
+    - cmake --build . --config RelWithDebInfo --target wireshark_nsis
+    - cmake --build . --config RelWithDebInfo --target stratoshark_nsis
+    - cmake --build . --config RelWithDebInfo --target wireshark_wix
     - C:\gitlab-builds\bin\sign-files.ps1 -Path packaging\wix\Wireshark-*.msi
-    - msbuild wireshark_portableapps.vcxproj
+    - cmake --build . --config RelWithDebInfo --target wireshark_portableapps
     - C:\gitlab-builds\bin\sign-files.ps1 -Path packaging\portableapps\WiresharkPortable*.exe
     - $plugins = Get-ChildItem run\RelWithDebInfo\plugins\*\*.dll ; signtool verify /q /pa /all run\RelWithDebInfo\*.exe run\RelWithDebInfo\extcap\wireshark\*.exe $plugins run\RelWithDebInfo\libwireshark.dll run\RelWithDebInfo\libwiretap.dll run\RelWithDebInfo\libwsutil.dll packaging\nsis\Wireshark-*-x64.exe packaging\nsis\Stratoshark-*-x64.exe packaging\wix\Wireshark-*-x64.msi packaging\portableapps\WiresharkPortable??_*.paf.exe
-    - msbuild pdb_zip_package.vcxproj
+    - cmake --build . --config RelWithDebInfo --target pdb_zip_package
     - C:\gitlab-builds\bin\mse-scan.ps1
     - run\RelWithDebInfo\tshark --version
     - rclone config create wireshark @(-split $env:WS_RCLONE_REMOTE_OPTS) --no-output
@@ -662,7 +748,11 @@ Windows x64 Package:
     - $stratosharkNsisSha256 = (Get-FileHash -Algorithm SHA256 .\packaging\nsis\Stratoshark-*-x64.exe).Hash.ToLower()
     - Set-Content -Path stratoshark-release-info-$($stratosharkVersion)-windows-x64.ini -Value ("[DEFAULT]`nminimum_system_version = 10.0-19044`nnsis_sha256 = $stratosharkNsisSha256")
     - if (Test-Path env:S3_DESTINATION_RELEASE) { rclone copy . "wireshark:$env:S3_DESTINATION_RELEASE" --include "*shark-release-info-*-windows-*.ini" --missing-on-dst - }
-    - C:\Windows\py.exe -m pytest --enable-stratoshark --enable-release
+    - !reference [.changed-since-windows, script]
+    - C:\Windows\py.exe -m pytest --enable-stratoshark --enable-release @ChangedSince
+  after_script:
+    - !reference [.windows-ccache, script]
+    - ccache --show-stats --verbose
   artifacts:
     paths:
       - build/*shark-release-info-*-windows-*.ini
@@ -681,22 +771,28 @@ Windows Arm64 Package:
     name: windows-package
   script:
     - C:\Windows\py.exe ..\tools\make-version.py --set-release --wireshark-version-file=wireshark_version.txt --stratoshark-version-file=stratoshark_version.txt ..
-    - cmake -G "Visual Studio 18 2026" -A arm64
+    - !reference [.windows-ninja, script]
+    - !reference [.windows-ccache, script]
+    # Show whether the cache from earlier jobs is there.
+    - ccache --show-stats --verbose | Select-String -Pattern '^(Cache directory:|\s*Cache size|\s*Files:)'
+    - ccache --zero-stats
+    - cmake -G "Ninja Multi-Config"
+      -DENABLE_CCACHE=ON
       -DENABLE_LTO=off
       -DBUILD_stratoshark=on
       -DFALCO_PLUGIN_DIR="$FALCO_PLUGIN_DIR"
       -DFALCO_PLUGINS="cloudtrail.dll;gcpaudit.dll;k8saudit.dll"
       -DFALCO_PLUGIN_DLLS="libunwind.dll"
       -DENABLE_SIGNED_NSIS=on ..
-    - msbuild "/consoleloggerparameters:PerformanceSummary;NoSummary" Wireshark.slnx
-    - msbuild test-programs.vcxproj
-    - msbuild wireshark_nsis_prep.vcxproj
-    - msbuild stratoshark_nsis_prep.vcxproj
+    - cmake --build . --config RelWithDebInfo
+    - cmake --build . --config RelWithDebInfo --target test-programs
+    - cmake --build . --config RelWithDebInfo --target wireshark_nsis_prep
+    - cmake --build . --config RelWithDebInfo --target stratoshark_nsis_prep
     - C:\gitlab-builds\bin\sign-files.ps1 -Recurse -Path run\RelWithDebInfo
-    - msbuild wireshark_nsis.vcxproj
-    - msbuild stratoshark_nsis.vcxproj
+    - cmake --build . --config RelWithDebInfo --target wireshark_nsis
+    - cmake --build . --config RelWithDebInfo --target stratoshark_nsis
     - $plugins = Get-ChildItem run\RelWithDebInfo\plugins\*\*.dll ; signtool verify /q /pa /all run\RelWithDebInfo\*.exe run\RelWithDebInfo\extcap\wireshark\*.exe $plugins run\RelWithDebInfo\libwireshark.dll run\RelWithDebInfo\libwiretap.dll run\RelWithDebInfo\libwsutil.dll packaging\nsis\Wireshark-*-arm64.exe packaging\nsis\Stratoshark-*-arm64.exe
-    - msbuild pdb_zip_package.vcxproj
+    - cmake --build . --config RelWithDebInfo --target pdb_zip_package
     - C:\gitlab-builds\bin\mse-scan.ps1
     - run\RelWithDebInfo\tshark --version
     - rclone config create wireshark @(-split $env:WS_RCLONE_REMOTE_OPTS) --no-output
@@ -710,7 +806,11 @@ Windows Arm64 Package:
     - $stratosharkNsisSha256 = (Get-FileHash -Algorithm SHA256 .\packaging\nsis\Stratoshark-*-arm64.exe).Hash.ToLower()
     - Set-Content -Path stratoshark-release-info-$($stratosharkVersion)-windows-arm64.ini -Value ("[DEFAULT]`nminimum_system_version = 10.0-19044`nnsis_sha256 = $stratosharkNsisSha256")
     - if (Test-Path env:S3_DESTINATION_RELEASE) { rclone copy . "wireshark:$env:S3_DESTINATION_RELEASE" --include "*shark-release-info-*-windows-*.ini" --missing-on-dst - }
-    - C:\Windows\py.exe -m pytest --enable-stratoshark --enable-release
+    - !reference [.changed-since-windows, script]
+    - C:\Windows\py.exe -m pytest --enable-stratoshark --enable-release @ChangedSince
+  after_script:
+    - !reference [.windows-ccache, script]
+    - ccache --show-stats --verbose
   artifacts:
     paths:
       - build/*shark-release-info-*-windows-*.ini
@@ -815,7 +915,8 @@ macOS Universal Package:
         aws s3 cp stratoshark-release-info-*-macos-intel64.ini "s3://$S3_DESTINATION_RELEASE/" ;
       fi
     - cd ..
-    - ninja test
+    - !reference [.changed-since, script]
+    - PYTEST_ADDOPTS="$CHANGED_SINCE" ninja test
   artifacts:
     paths:
       - build/run/*shark-release-info-*-macos-*.ini
@@ -955,9 +1056,96 @@ Commit Check:
     reports:
       junit: commit_checks.xml
 
+# Run only the coverage tests of suite_dissection.py that the changes can
+# affect (see test/dissection_select.py); every other test still runs. In
+# a merged results pipeline, including merge trains, the changes are those
+# since the head of the target branch, so that what the target branch
+# gained after the MR branched off does not count; in other merge request
+# pipelines they are those since the MR's diff base. After a merge (a push
+# to the default branch) they are those since the previous tip of the
+# branch. It sets CHANGED_SINCE, which the test jobs pass to pytest. Other
+# pipelines, and any pipeline whose base is not available, run everything.
+.changed-since:
+  script:
+    - |
+      CHANGED_SINCE=""
+      bases=""
+      if [ "$CI_PIPELINE_SOURCE" = "merge_request_event" ]; then
+        bases="${CI_MERGE_REQUEST_TARGET_BRANCH_SHA:-} ${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}"
+      elif [ "$CI_PIPELINE_SOURCE" = "push" ] && [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
+        bases="${CI_COMMIT_BEFORE_SHA:-}"
+      fi
+      if [ -n "$(echo $bases)" ]; then
+        # The clone is shallow; fetch enough history to find the base, both
+        # of the MR and of the checked-out commit (in a merge train that is
+        # a new commit on top of the target branch and the MRs before it).
+        if [ -n "${CI_MERGE_REQUEST_IID:-}" ]; then
+          git -C "$CI_PROJECT_DIR" fetch --quiet --depth 200 origin "refs/merge-requests/$CI_MERGE_REQUEST_IID/head" || true
+        fi
+        git -C "$CI_PROJECT_DIR" fetch --quiet --depth 200 origin "refs/pipelines/$CI_PIPELINE_ID" || true
+        base=""
+        for b in $bases; do
+          [ "$b" = "0000000000000000000000000000000000000000" ] && continue
+          if git -C "$CI_PROJECT_DIR" merge-base --is-ancestor "$b" HEAD 2>/dev/null; then
+            base=$b
+            break
+          fi
+        done
+        if [ -n "$base" ]; then
+          CHANGED_SINCE="--changed-since=$base"
+          # The tests run git as "user" in a checkout owned by root. Git
+          # ignores safe.directory in the repository's own config and "user"
+          # has no home directory, so set it in the environment, which su
+          # passes on.
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$CI_PROJECT_DIR"
+        fi
+      fi
+      echo "CHANGED_SINCE=$CHANGED_SINCE"
+
+# PowerShell version of .changed-since for the Windows jobs. It sets
+# $ChangedSince, the extra pytest arguments (empty: run everything).
+.changed-since-windows:
+  script:
+    - |
+      $ChangedSince = @()
+      $bases = @()
+      if ($env:CI_PIPELINE_SOURCE -eq "merge_request_event") {
+        $bases = @("$env:CI_MERGE_REQUEST_TARGET_BRANCH_SHA", "$env:CI_MERGE_REQUEST_DIFF_BASE_SHA")
+      } elseif ($env:CI_PIPELINE_SOURCE -eq "push" -and $env:CI_COMMIT_BRANCH -eq $env:CI_DEFAULT_BRANCH) {
+        $bases = @("$env:CI_COMMIT_BEFORE_SHA")
+      }
+      $bases = @($bases | Where-Object { $_ -and $_ -ne "0000000000000000000000000000000000000000" })
+      if ($bases.Count -gt 0) {
+        # A failing git command must not stop the job; it only means
+        # that everything runs.
+        $savedPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        # The checkout may belong to another user than the one running
+        # git; Git ignores safe.directory in the repository's own config.
+        $env:GIT_CONFIG_COUNT = "1"
+        $env:GIT_CONFIG_KEY_0 = "safe.directory"
+        $env:GIT_CONFIG_VALUE_0 = "*"
+        if ($env:CI_MERGE_REQUEST_IID) {
+          $null = git -C "$env:CI_PROJECT_DIR" fetch --quiet --depth 200 origin "refs/merge-requests/$($env:CI_MERGE_REQUEST_IID)/head" 2>&1
+        }
+        $null = git -C "$env:CI_PROJECT_DIR" fetch --quiet --depth 200 origin "refs/pipelines/$($env:CI_PIPELINE_ID)" 2>&1
+        foreach ($base in $bases) {
+          $null = git -C "$env:CI_PROJECT_DIR" merge-base --is-ancestor $base HEAD 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            $ChangedSince = @("--changed-since=$base")
+            break
+          }
+        }
+        $ErrorActionPreference = $savedPreference
+      }
+      $global:LASTEXITCODE = 0
+      Write-Output "CHANGED_SINCE=$ChangedSince"
+
 Ubuntu GCC Build:
   extends: .build-ubuntu
-  rules: !reference [.if-merge-request]
+  rules:
+    - !reference [.if-merge-request]
+    - !reference [.if-daily-schedule]
   variables:
     CC: "gcc"
     CXX: "g++"
@@ -983,7 +1171,8 @@ Ubuntu GCC Build:
     - chown -R user .
     - if [ -f run/dumpcap ]; then setcap cap_net_raw,cap_net_admin+eip run/dumpcap; fi
     - if [ -f run/dumpcap ]; then su user -c "run/dumpcap -D" ; fi
-    - PYTEST_ADDOPTS=--skip-missing-programs=dumpcap,falcodump,rawshark,sshdig su user -c "pytest --junitxml=../ubuntu_tests.xml"
+    - !reference [.changed-since, script]
+    - PYTEST_ADDOPTS="--skip-missing-programs=dumpcap,falcodump,rawshark,sshdig $CHANGED_SINCE" su user -c "pytest --junitxml=../ubuntu_tests.xml"
     # Test CMake install code and CPack config code. Select any one of the archive generators.
     - ninja user_guide_html
     - ninja developer_guide_html
@@ -1015,6 +1204,9 @@ Clang + Code Checks:
     - source /clang-latest.env
     - export PYTHON_MINOR_VERSION="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
     - apt-get update && apt-get --yes install python3-venv "python${PYTHON_MINOR_VERSION}-venv"
+    # This job builds Stratoshark, so install its dependencies explicitly. The ubuntu-dev image
+    # only has them after it is rebuilt from master, and this also tests MR changes to the list.
+    - DEBIAN_FRONTEND=noninteractive ../tools/os_setup/debian-setup.sh --install-stratoshark --yes --no-install-recommends
     - python3 -m venv $CI_PROJECT_DIR/.venv
     - source $CI_PROJECT_DIR/.venv/bin/activate
     # build-ubuntu puts us in `build`.
@@ -1097,12 +1289,17 @@ Clang ASAN Build:
   extends: .build-ubuntu
   tags:
     - saas-linux-medium-amd64
-  rules: !reference [.if-plain-merge-request]
+  rules:
+    - !reference [.if-plain-merge-request]
+    - !reference [.if-daily-schedule]
   needs:
     - job: "Commit Check"
       optional: true
   script:
     - source /clang-latest.env
+    # This job builds Stratoshark, so install its dependencies explicitly. The ubuntu-dev image
+    # only has them after it is rebuilt from master, and this also tests MR changes to the list.
+    - DEBIAN_FRONTEND=noninteractive ../tools/os_setup/debian-setup.sh --install-stratoshark --yes --no-install-recommends
     - printf "\e[0Ksection_start:%s:cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
     - cmake --preset=ninja_ccache -DCMAKE_BUILD_TYPE=Debug -DENABLE_ASAN=ON -DENABLE_WERROR=ON -DBUILD_stratoshark=ON ..
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
@@ -1111,7 +1308,8 @@ Clang ASAN Build:
     - chown -R user .
     - if [ -f run/dumpcap ]; then setcap cap_net_raw,cap_net_admin+eip run/dumpcap; fi
     - if [ -f run/dumpcap ]; then su user -c "run/dumpcap -D" ; fi
-    - WIRESHARK_DEBUG_WMEM_OVERRIDE=simple PYTEST_ADDOPTS="--skip-missing-programs=dumpcap,rawshark,falcodump --enable-stratoshark" su user -c "pytest --junitxml=../clang_asan_tests.xml"
+    - !reference [.changed-since, script]
+    - WIRESHARK_DEBUG_WMEM_OVERRIDE=simple PYTEST_ADDOPTS="--skip-missing-programs=dumpcap,rawshark --enable-stratoshark $CHANGED_SINCE" su user -c "pytest --junitxml=../clang_asan_tests.xml"
   artifacts:
     when: always
     reports:
@@ -1128,21 +1326,32 @@ Windows Build:
     - job: "Commit Check"
       optional: true
   script:
-    - cmake -G "Visual Studio 18 2026" -A x64
+    - !reference [.windows-ninja, script]
+    - !reference [.windows-ccache, script]
+    # Show whether the cache from earlier jobs is there. The runner runs
+    # jobs concurrently, and each of its slots has its own cache.
+    - ccache --show-stats --verbose | Select-String -Pattern '^(Cache directory:|\s*Cache size|\s*Files:)'
+    - ccache --zero-stats
+    - cmake -G "Ninja Multi-Config"
+      -DENABLE_CCACHE=ON
       -DENABLE_LTO=off
       -DBUILD_stratoshark=on
       -DFALCO_PLUGIN_DIR="$FALCO_PLUGIN_DIR"
       -DFALCO_PLUGINS="cloudtrail.dll;gcpaudit.dll;k8saudit.dll"
       -DFALCO_PLUGIN_DLLS="libunwind.dll"
       ..
-    - msbuild -property:Configuration=Debug Wireshark.slnx
-    - msbuild -property:Configuration=Debug test-programs.vcxproj
+    - cmake --build . --config Debug
+    - cmake --build . --config Debug --target test-programs
     - C:\Windows\py.exe -m pip install --quiet jsonschema
-    - C:\Windows\py.exe -m pytest --build-type=Debug --disable-gui --enable-stratoshark --junitxml=../windows_tests.xml
+    - !reference [.changed-since-windows, script]
+    - C:\Windows\py.exe -m pytest --build-type=Debug --disable-gui --enable-stratoshark --junitxml=../windows_tests.xml @ChangedSince
     # Test CMake install code. The installation is tested in "Windows Install Test".
     # Run the cpack next to the cmake in use. Chocolatey also has a "cpack" command.
     - $cpack = Join-Path (Split-Path (Get-Command cmake).Source) cpack.exe
     - '& $cpack -G ZIP -C Debug -D CPACK_COMPONENTS_ALL=Unspecified'
+  after_script:
+    - !reference [.windows-ccache, script]
+    - ccache --show-stats --verbose
   artifacts:
     when: always
     paths:

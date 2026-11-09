@@ -20,6 +20,12 @@ cmake_minimum_required(VERSION 3.22)
 if(POLICY CMP0135)
 	cmake_policy(SET CMP0135 NEW)
 endif()
+# Select the MSVC debug information format with
+# CMAKE_MSVC_DEBUG_INFORMATION_FORMAT, which ENABLE_CCACHE uses. The
+# default is still /Zi.
+if(POLICY CMP0141)
+	cmake_policy(SET CMP0141 NEW)
+endif()
 
 if(WIN32 AND NOT DEFINED ENV{MSYSTEM})
 	set(_project_name Wireshark)
@@ -230,6 +236,11 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 	# Set the possible values of build type for cmake-gui
 	set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
+
+# Multi-config generators (Visual Studio, Ninja Multi-Config, Xcode) put the
+# build output in a per-configuration subdirectory, e.g. run/Debug, which
+# build-time paths refer to as $<CONFIG>.
+get_property(GENERATOR_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 
 # Build type is ignored by multi-config generators.
 if (NOT CMAKE_CONFIGURATION_TYPES)
@@ -741,10 +752,7 @@ if( CMAKE_C_COMPILER_ID MATCHES "MSVC")
 		add_definitions("/D_BIND_TO_CURRENT_CRT_VERSION=1")
 	endif()
 
-	# TODO: Re-enable /W3. It was disabled for a year and some warnings crept
-	# in that will fail with /Wx.
 	set(LOCAL_CFLAGS
-		/MP
 		/W3
 
 		# Some of our code requires object files with
@@ -754,8 +762,14 @@ if( CMAKE_C_COMPILER_ID MATCHES "MSVC")
 		# the files, but those are too old anyway.
 		/bigobj
 	)
+	# Compile the sources of each target in parallel. Other generators,
+	# e.g. Ninja, already run a compiler for each source, and ccache
+	# can't cache a compile with more than one source.
+	if(CMAKE_GENERATOR MATCHES "^Visual Studio")
+		list(APPEND LOCAL_CFLAGS /MP)
+	endif()
 
-	set(WS_LINK_FLAGS "/LARGEADDRESSAWARE /MANIFEST:NO /INCREMENTAL:NO /RELEASE")
+	set(WS_LINK_FLAGS "/LARGEADDRESSAWARE /MANIFEST:NO /RELEASE")
 
 	# To do: Add /external:... See https://devblogs.microsoft.com/cppblog/broken-warnings-theory/
 	#
@@ -771,8 +785,11 @@ if( CMAKE_C_COMPILER_ID MATCHES "MSVC")
 	# /Qspectre                         Speculative execution attack mitigation
 	#                                   See https://devblogs.microsoft.com/cppblog/spectre-mitigations-in-msvc/
 	list(APPEND LOCAL_CFLAGS /diagnostics:caret /Zo /utf-8 /guard:cf)
-	set(WS_LINK_FLAGS "${WS_LINK_FLAGS} /guard:cf")
 	set(WS_LINK_FLAGS "${WS_LINK_FLAGS} /STACK:0x800000")
+	# Link every target with Control Flow Guard, including those that don't
+	# use WS_LINK_FLAGS, such as the test programs. CFG turns off incremental
+	# linking, so say so to avoid warning LNK4075.
+	add_link_options(/guard:cf /INCREMENTAL:NO)
 	# /Qspectre depends on the optional "Microsoft.VisualStudio.Component...Spectre" components,
 	# so we need to test for its availability.
 	set(WIRESHARK_COMMON_FLAGS /Qspectre)
@@ -945,23 +962,29 @@ else() # ! MSVC
 	# Note the distribution might use a GCC spec file or Clang configuration
 	# file, which takes place before our options, so we have to undefine it
 	# first too.
-	if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT "${CMAKE_C_FLAGS}" MATCHES "-D_FORTIFY_SOURCE" AND NOT ENABLE_ASAN AND NOT ENABLE_TSAN)
-		# _FORTIFY_SOURCE requires -O1 or higher, and the Debug
-		# build type has no optimization
+	if(NOT "${CMAKE_C_FLAGS}" MATCHES "-D_FORTIFY_SOURCE" AND NOT ENABLE_ASAN AND NOT ENABLE_TSAN)
 		if((CMAKE_C_COMPILER_ID STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL "12.0") OR
 		   (CMAKE_C_COMPILER_ID MATCHES "Clang" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL "9.0"))
 			# On some gcc < 12.0, test_compiler_flag will report that
 			# -D_FORTIFY_SOURCE=3 is valid, but actually trying to compile
 			# with it will give a warning that it has the same effect as
 			# -D_FORTIFY_SOURCE=2
-			list(APPEND WIRESHARK_COMMON_FLAGS
-			-U_FORTIFY_SOURCE	# For dist like Ubuntu, U_FORTIFY_SOURCE must be input before D_FORTIFY_SOURCE
-			-D_FORTIFY_SOURCE=3				# Fortify sources with compile- and run-time checks for unsafe libc usage and buffer overflows. Requires -O1 or higher
-			)
+			set(_fortify_source_level 3)
 		elseif(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID MATCHES "Clang")
-			list(APPEND WIRESHARK_COMMON_FLAGS
-			-U_FORTIFY_SOURCE	# For dist like Ubuntu, U_FORTIFY_SOURCE must be input before D_FORTIFY_SOURCE
-			-D_FORTIFY_SOURCE=2				# Fortify sources with compile- and run-time checks for unsafe libc usage and buffer overflows. Requires -O1 or higher
+			set(_fortify_source_level 2)
+		endif()
+		if(_fortify_source_level)
+			# Fortify sources with compile- and run-time checks for unsafe
+			# libc usage and buffer overflows. This requires -O1 or higher,
+			# and the Debug configuration has no optimization. Leave it out
+			# of Debug with a generator expression, as CMAKE_BUILD_TYPE is
+			# not set with multi-config generators.
+			# For dist like Ubuntu, -U_FORTIFY_SOURCE must be input before
+			# -D_FORTIFY_SOURCE.
+			set(_fortify_source_condition "$<AND:$<COMPILE_LANGUAGE:C,CXX>,$<NOT:$<CONFIG:Debug>>>")
+			add_compile_options(
+				"$<${_fortify_source_condition}:-U_FORTIFY_SOURCE>"
+				"$<${_fortify_source_condition}:-D_FORTIFY_SOURCE=${_fortify_source_level}>"
 			)
 		endif()
 	endif()
@@ -1661,6 +1684,10 @@ ws_find_package(ZLIBNG ENABLE_ZLIBNG HAVE_ZLIBNG)
     ws_find_package(ZLIB ENABLE_ZLIB HAVE_ZLIB)
 #endif()
 
+# zstd compression. Find it before minizip-ng, which has its own copy of
+# the zstd DLL in our Windows vcpkg bundle.
+ws_find_package(ZSTD ENABLE_ZSTD HAVE_ZSTD "1.0.0")
+
 # Minizip-ng compression
 ws_find_package(Minizipng ENABLE_MINIZIPNG HAVE_MINIZIPNG)
 
@@ -1677,9 +1704,6 @@ ws_find_package(LZ4 ENABLE_LZ4 HAVE_LZ4 "1.8.0")
 
 # Snappy compression
 ws_find_package(SNAPPY ENABLE_SNAPPY HAVE_SNAPPY)
-
-# zstd compression
-ws_find_package(ZSTD ENABLE_ZSTD HAVE_ZSTD "1.0.0")
 
 # Enhanced HTTP/2 dissection
 ws_find_package(NGHTTP2 ENABLE_NGHTTP2 HAVE_NGHTTP2 "1.11.0")
@@ -1715,6 +1739,9 @@ ws_find_package(OPUS ENABLE_OPUS HAVE_OPUS)
 if (BUILD_stratoshark)
 	# libsinsp+libscap, required for falco-events
 	ws_find_package(Sinsp ENABLE_SINSP HAVE_SINSP "0.17.1")
+	if (NOT SINSP_FOUND)
+		message(FATAL_ERROR "libsinsp is required when BUILD_stratoshark is enabled")
+	endif()
 endif()
 
 # Capabilities to run dumpcap as non-root user.
@@ -1866,17 +1893,34 @@ include(ConfigureChecks.cmake)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 if(ENABLE_CCACHE)
-	if(NOT (CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang"))
-		# https://ccache.dev/platform-compiler-language-support.html
+	# https://ccache.dev/platform-compiler-language-support.html
+	if(NOT (CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang" OR MSVC))
 		message(WARNING "Ccache is enabled, but your compiler is ${CMAKE_C_COMPILER_ID}."
 		" We wish you the best of luck.")
+	endif()
+	if(CMAKE_GENERATOR MATCHES "^Visual Studio")
+		message(WARNING "Ccache is enabled, but the ${CMAKE_GENERATOR} generator"
+		" doesn't support compiler launchers. Use Ninja instead.")
 	endif()
 	find_program(CCACHE_EXECUTABLE ccache)
 	if(CCACHE_EXECUTABLE)
 		set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_EXECUTABLE}")
 		set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_EXECUTABLE}")
-		set(CMAKE_C_LINKER_LAUNCHER "${CCACHE_EXECUTABLE}")
-		set(CMAKE_CXX_LINKER_LAUNCHER "${CCACHE_EXECUTABLE}")
+		if(MSVC)
+			# Ccache can cache MSVC compiles only if the debug
+			# information is in each object file (/Z7) instead
+			# of a PDB file shared by the target's objects (/Zi).
+			# The linker still writes the target's PDB file.
+			if(POLICY CMP0141)
+				set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>")
+			else()
+				message(WARNING "Ccache can't cache MSVC compiles that use /Zi."
+				" Use CMake 3.25 or later, which can select /Z7 instead.")
+			endif()
+		else()
+			set(CMAKE_C_LINKER_LAUNCHER "${CCACHE_EXECUTABLE}")
+			set(CMAKE_CXX_LINKER_LAUNCHER "${CCACHE_EXECUTABLE}")
+		endif()
 	endif()
 endif()
 
@@ -1976,15 +2020,15 @@ add_subdirectory( writecap )
 # application bundle, and on UNIX in general if
 # WIRESHARK_RUN_FROM_BUILD_DIRECTORY is set.
 if(ENABLE_APPLICATION_BUNDLE)
-	if(CMAKE_CFG_INTDIR STREQUAL ".")
+	if(NOT GENERATOR_IS_MULTI_CONFIG)
 		set(_datafile_dir "${CMAKE_BINARY_DIR}/run/Wireshark.app/Contents/Resources/share/wireshark")
 	else()
 		# Xcode
-		set(_datafile_dir "${CMAKE_BINARY_DIR}/run/${CMAKE_CFG_INTDIR}/Wireshark.app/Contents/Resources/share/wireshark")
+		set(_datafile_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>/Wireshark.app/Contents/Resources/share/wireshark")
 	endif()
-elseif(NOT CMAKE_CFG_INTDIR STREQUAL ".")
-	# Visual Studio, Xcode, etc.
-	set(_datafile_dir "${CMAKE_BINARY_DIR}/run/${CMAKE_CFG_INTDIR}")
+elseif(GENERATOR_IS_MULTI_CONFIG)
+	# Visual Studio, Ninja Multi-Config, Xcode, etc.
+	set(_datafile_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>")
 else()
 	# Makefile, Ninja, etc.
 	set(_datafile_dir "${CMAKE_BINARY_DIR}/run")
@@ -1999,11 +2043,11 @@ set(DATAFILE_DIR ${_datafile_dir} CACHE INTERNAL "Build time data file location.
 # there. This matches the layout of the macOS application bundles.
 # XXX This must match get_datafile_dir() in wsutil/filesystem.c.
 if(ENABLE_APPLICATION_BUNDLE)
-	if(CMAKE_CFG_INTDIR STREQUAL ".")
+	if(NOT GENERATOR_IS_MULTI_CONFIG)
 		set(_bundle_run_dir "${CMAKE_BINARY_DIR}/run")
 	else()
 		# Xcode
-		set(_bundle_run_dir "${CMAKE_BINARY_DIR}/run/${CMAKE_CFG_INTDIR}")
+		set(_bundle_run_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>")
 	endif()
 	set(_wireshark_datafile_dir "${_bundle_run_dir}/Wireshark.app/Contents/Resources/share/wireshark")
 	set(_stratoshark_datafile_dir "${_bundle_run_dir}/Stratoshark.app/Contents/Resources/share/stratoshark")
@@ -2050,7 +2094,7 @@ endif()
 # Windows: $DESTDIR/wireshark/plugins/$VERSION
 # macOS app bundle: Wireshark.app/Contents/PlugIns/wireshark
 if(ENABLE_APPLICATION_BUNDLE)
-	if(CMAKE_CFG_INTDIR STREQUAL ".")
+	if(NOT GENERATOR_IS_MULTI_CONFIG)
 		set(_wireshark_plugin_dir "${CMAKE_BINARY_DIR}/run/Wireshark.app/Contents/PlugIns/wireshark/${PLUGIN_PATH_ID}")
 		set(_stratoshark_plugin_dir "${CMAKE_BINARY_DIR}/run/Stratoshark.app/Contents/PlugIns/stratoshark/${PLUGIN_PATH_ID}")
 	else()
@@ -2058,7 +2102,7 @@ if(ENABLE_APPLICATION_BUNDLE)
 		set(_wireshark_plugin_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>/Wireshark.app/Contents/PlugIns/wireshark/${PLUGIN_PATH_ID}")
 		set(_stratoshark_plugin_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>/Stratoshark.app/Contents/PlugIns/stratoshark/${PLUGIN_PATH_ID}")
 	endif()
-elseif(MSVC AND NOT CMAKE_CFG_INTDIR STREQUAL ".")
+elseif(MSVC AND GENERATOR_IS_MULTI_CONFIG)
 	set(_wireshark_plugin_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>/${WIRESHARK_PLUGIN_VERSION_DIR}")
 	set(_stratoshark_plugin_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>/${STRATOSHARK_PLUGIN_VERSION_DIR}")
 else()
@@ -2980,7 +3024,7 @@ if(ENABLE_APPLICATION_BUNDLE)
 
 	# Add files to the Wireshark application bundle
 	# Wireshark.app/Contents
-	if(CMAKE_CFG_INTDIR STREQUAL ".")
+	if(NOT GENERATOR_IS_MULTI_CONFIG)
 		# Not Xcode
 		file(WRITE ${CMAKE_BINARY_DIR}/packaging/macosx/wireshark/PkgInfo "APPLWshk\n")
 		set(WIRESHARK_BUNDLE_CONTENTS_FILES
@@ -3095,7 +3139,7 @@ if(ENABLE_APPLICATION_BUNDLE)
 
 	# Add files to the Stratoshark application bundle
 	# Stratoshark.app/Contents
-	if(CMAKE_CFG_INTDIR STREQUAL ".")
+	if(NOT GENERATOR_IS_MULTI_CONFIG)
 		# Not Xcode
 		file(WRITE ${CMAKE_BINARY_DIR}/packaging/macosx/stratoshark/PkgInfo "APPLLgry\n")
 		set(STRATOSHARK_BUNDLE_CONTENTS_FILES
@@ -3246,7 +3290,6 @@ if(BUILD_wireshark AND QT_FOUND)
 		${ZLIB_LIBRARIES}
 		${ZLIBNG_LIBRARIES}
 		${MINIZIP_LIBRARIES}
-		${MINIZIPNG_LIBRARIES}
 	)
 
 	add_executable(wireshark WIN32 MACOSX_BUNDLE ${wireshark_FILES} ${EXTRA_WIRESHARK_BUNDLE_FILES})
@@ -3282,7 +3325,7 @@ if(BUILD_wireshark AND QT_FOUND)
 				MACOSX_BUNDLE_INFO_PLIST ${CMAKE_BINARY_DIR}/packaging/macosx/WiresharkInfo.plist
 				XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "org.wireshark.Wireshark"
 		)
-		if(CMAKE_CFG_INTDIR STREQUAL ".")
+		if(NOT GENERATOR_IS_MULTI_CONFIG)
 			# Add a wrapper script which opens the bundle. This is more convenient
 			# and lets Sparkle find our CFBundleIdentifier, but means that you have
 			# to pass the full path to run/Wireshark.app/Contents/MacOS/Wireshark
@@ -3367,7 +3410,6 @@ if(BUILD_stratoshark AND QT_FOUND)
 		${ZLIB_LIBRARIES}
 		${ZLIBNG_LIBRARIES}
 		${MINIZIP_LIBRARIES}
-		${MINIZIPNG_LIBRARIES}
 	)
 
 	add_executable(stratoshark WIN32 MACOSX_BUNDLE ${stratoshark_FILES} ${EXTRA_STRATOSHARK_BUNDLE_FILES})
@@ -3401,7 +3443,7 @@ if(BUILD_stratoshark AND QT_FOUND)
 				MACOSX_BUNDLE_INFO_PLIST ${CMAKE_BINARY_DIR}/packaging/macosx/StratosharkInfo.plist
 				XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "org.wireshark.Stratoshark"
 		)
-		if(CMAKE_CFG_INTDIR STREQUAL ".")
+		if(NOT GENERATOR_IS_MULTI_CONFIG)
 			# Add a wrapper script which opens the bundle. This is more convenient
 			# and lets Sparkle find our CFBundleIdentifier, but means that you have
 			# to pass the full path to run/Wireshark.app/Contents/MacOS/Stratoshark
@@ -3494,7 +3536,7 @@ function(set_extra_executable_properties _executable _folder)
 		if (_executable MATCHES "strato")
 			set(bundle_name "Stratoshark.app")
 		endif()
-		if(NOT CMAKE_CFG_INTDIR STREQUAL ".")
+		if(GENERATOR_IS_MULTI_CONFIG)
 			# Xcode
 			set_target_properties(${_executable} PROPERTIES
 				RUNTIME_OUTPUT_DIRECTORY run/$<CONFIG>/${bundle_name}/Contents/MacOS
@@ -3983,7 +4025,7 @@ if(ENABLE_APPLICATION_BUNDLE AND ASCIIDOCTOR_FOUND AND (BUILD_wireshark OR BUILD
 endif()
 
 if(ENABLE_APPLICATION_BUNDLE AND BUILD_wireshark)
-	file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/run/${CMAKE_CFG_INTDIR}/Wireshark.app/Contents/Resources/Extras")
+	file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/run/Wireshark.app/Contents/Resources/Extras")
 
 	# --preserve-xattr is undocumented but ensures that we install
 	# a signed ChmodBPF script.
@@ -4282,10 +4324,10 @@ if(RPMBUILD_EXECUTABLE)
 	else()
 		list(APPEND _rpmbuild_with_args --without qt6)
 	endif()
+	# SINSP is only found when BUILD_stratoshark is enabled
 	if(SINSP_FOUND)
-		if(BUILD_stratoshark)
-			list(APPEND _rpmbuild_with_args --with stratoshark)
-		endif()
+		list(APPEND _rpmbuild_with_args --with stratoshark)
+
 		if(BUILD_falcodump)
 			list(APPEND _rpmbuild_with_args --with falcodump)
 		endif()

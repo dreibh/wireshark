@@ -388,6 +388,8 @@ static int hf_svc_param_port;
 static int hf_svc_param_ipv4hint_ip;
 static int hf_svc_param_ipv6hint_ip;
 static int hf_svc_param_dohpath;
+static int hf_svc_param_docpath_length;
+static int hf_svc_param_docpath;
 static int hf_svc_param_odohconfig;
 
 static int hf_dns_dsync_type;
@@ -536,6 +538,10 @@ static int hf_dns_tlsa_certificate_usage;
 static int hf_dns_tlsa_selector;
 static int hf_dns_tlsa_matching_type;
 static int hf_dns_tlsa_certificate_association_data;
+static int hf_dns_smimea_certificate_usage;
+static int hf_dns_smimea_selector;
+static int hf_dns_smimea_matching_type;
+static int hf_dns_smimea_certificate_association_data;
 static int hf_dns_tsig_algorithm_name;
 static int hf_dns_tsig_time_signed;
 static int hf_dns_tsig_error;
@@ -1070,6 +1076,7 @@ static const value_string dns_types_vals[] = {
   { DNS_T_NSEC3,      "NSEC3"      }, /* RFC 5155 */
   { DNS_T_NSEC3PARAM, "NSEC3PARAM" }, /* RFC 5155 */
   { DNS_T_TLSA,       "TLSA"       },
+  { DNS_T_SMIMEA,     "SMIMEA"     }, /* RFC 8162 */
   { DNS_T_HIP,        "HIP"        }, /* RFC 5205 */
   { DNS_T_RKEY,       "RKEY"       },
   { DNS_T_TALINK,     "TALINK"     },
@@ -1174,6 +1181,7 @@ static const value_string dns_types_description_vals[] = {
   { DNS_T_NSEC3,      "" },
   { DNS_T_NSEC3PARAM, "" },
   { DNS_T_TLSA,       "" },
+  { DNS_T_SMIMEA,     "(S/MIME cert association)" }, /* RFC 8162 */ /* RFC 8162 */
   { DNS_T_HIP,        "(Host Identity Protocol)" }, /* RFC 5205 */
   { DNS_T_RKEY,       "" },
   { DNS_T_TALINK,     "(Trust Anchor LINK)" },
@@ -1358,6 +1366,7 @@ static const range_string dns_dso_type_rvals[] = {
 #define DNS_SVCB_KEY_IPV6HINT         6
 #define DNS_SVCB_KEY_DOHPATH          7 /* draft-ietf-add-svcb-dns-08 */
 #define DNS_SVCB_KEY_OHTTP            8 /* rfc9540 */
+#define DNS_SVCB_KEY_DOCPATH         10 /* RFC9953 */
 #define DNS_SVCB_KEY_ODOHCONFIG   32769 /* draft-pauly-dprive-oblivious-doh-02 */
 #define DNS_SVCB_KEY_RESERVED     65535
 
@@ -1375,6 +1384,7 @@ static const value_string dns_svcb_param_key_vals[] = {
   { DNS_SVCB_KEY_IPV6HINT,      "ipv6hint" },
   { DNS_SVCB_KEY_DOHPATH,       "dohpath" },
   { DNS_SVCB_KEY_OHTTP,         "ohttp" },
+  { DNS_SVCB_KEY_DOCPATH,       "docpath" },
   { DNS_SVCB_KEY_ODOHCONFIG,    "odohconfig" },
   { DNS_SVCB_KEY_RESERVED,      "key65535" },
   { 0,                          NULL }
@@ -2445,6 +2455,34 @@ dissect_svc_params(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
         proto_tree_add_item_ret_string(svcb_param_tree, hf_svc_param_dohpath, tvb, cur_offset, svc_param_length, ENC_UTF_8|ENC_NA, pinfo->pool, &dohpath);
         cur_offset += svc_param_length;
         proto_item_append_text(svcb_param_ti, "=%s", dohpath);
+        break;
+      case DNS_SVCB_KEY_DOCPATH:
+        if (svc_param_length == 0) {
+          proto_item_append_text(svcb_param_ti, "=/");
+          break;
+        }
+        for (svc_param_offset = 0; svc_param_offset < svc_param_length; ) {
+          const uint8_t *seg;
+          uint32_t seg_len;
+          if (cur_offset >= param_end) {
+            malformed = true;
+            expert_add_info_format(pinfo, svcb_param_ti, &ei_dns_svcb_param_bad_length,
+                                   "docpath SvcParamValue ended unexpectedly");
+            break;
+          }
+          proto_tree_add_item_ret_uint(svcb_param_tree, hf_svc_param_docpath_length, tvb, cur_offset, 1, ENC_BIG_ENDIAN, &seg_len);
+          cur_offset += 1;
+          if ((int)seg_len > (param_end - cur_offset)) {
+            malformed = true;
+            expert_add_info_format(pinfo, svcb_param_ti, &ei_dns_svcb_param_bad_length,
+                                   "Invalid docpath segment length %u in SvcParamValue", seg_len);
+            break;
+          }
+          proto_tree_add_item_ret_string(svcb_param_tree, hf_svc_param_docpath, tvb, cur_offset, seg_len, ENC_ASCII|ENC_NA, pinfo->pool, &seg);
+          cur_offset += seg_len;
+          proto_item_append_text(svcb_param_ti, "%c%s", (svc_param_offset == 0 ? '=' : ','), seg);
+          svc_param_offset += 1 + seg_len;
+        }
         break;
       case DNS_SVCB_KEY_OHTTP:
         if (svc_param_length != 0) {
@@ -3666,10 +3704,14 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
           {
             uint16_t family;
             uint16_t addr_len = optlen - 4;
+            /* Initialize bytes, the largest member; {0} initializes only
+             * the first member (always strictly true, made explicit in C23);
+             * Clang 18, GCC 15 and later no longer clear the rest of the
+             * union, which the address may not fill. */
             union {
               uint32_t addr;
               uint8_t bytes[16];
-            } ip_addr = {0};
+            } ip_addr = {.bytes = {0}};
 
             proto_tree_add_item_ret_uint16(rropt_tree, hf_dns_opt_client_family, tvb, cur_offset, 2, ENC_BIG_ENDIAN, &family);
             cur_offset += 2;
@@ -4198,6 +4240,27 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
       rr_len --;
 
       proto_tree_add_item(rr_tree, hf_dns_tlsa_certificate_association_data, tvb, cur_offset, rr_len, ENC_NA);
+    }
+    break;
+
+    case DNS_T_SMIMEA: /* S/MIME cert association (53) */
+    {
+      int     rr_len = data_len;
+      col_append_fstr(pinfo->cinfo, COL_INFO, " %s", name_out);
+
+      proto_tree_add_item(rr_tree, hf_dns_smimea_certificate_usage, tvb, cur_offset, 1, ENC_BIG_ENDIAN);
+      cur_offset ++;
+      rr_len --;
+
+      proto_tree_add_item(rr_tree, hf_dns_smimea_selector, tvb, cur_offset, 1, ENC_BIG_ENDIAN);
+      cur_offset ++;
+      rr_len --;
+
+      proto_tree_add_item(rr_tree, hf_dns_smimea_matching_type, tvb, cur_offset, 1, ENC_BIG_ENDIAN);
+      cur_offset ++;
+      rr_len --;
+
+      proto_tree_add_item(rr_tree, hf_dns_smimea_certificate_association_data, tvb, cur_offset, rr_len, ENC_NA);
     }
     break;
 
@@ -7157,6 +7220,16 @@ proto_register_dns(void)
         FT_STRING, BASE_NONE, NULL, 0x0,
         "DoH URI template", HFILL}},
 
+    { &hf_svc_param_docpath_length,
+      { "DoC path segment length", "svc_params.docpath.length",
+        FT_UINT8, BASE_DEC, NULL, 0x0,
+        NULL, HFILL }},
+
+    { &hf_svc_param_docpath,
+      { "DoC path segment", "svc_params.docpath",
+        FT_STRING, BASE_NONE, NULL, 0x0,
+        "DNS over CoAP path segment (RFC9953)", HFILL }},
+
     { &hf_svc_param_odohconfig,
       { "ODoHConfig", "svc_params.odohconfig",
         FT_BYTES, BASE_NONE, NULL, 0x0,
@@ -7921,6 +7994,26 @@ proto_register_dns(void)
       { "Certificate Association Data", "dns.tlsa.certificate_association_data",
         FT_BYTES, BASE_NONE, NULL, 0,
         "The data refers to the certificate in the association", HFILL }},
+
+    { &hf_dns_smimea_certificate_usage,
+      { "Certificate Usage", "dns.smimea.certificate_usage",
+        FT_UINT8, BASE_DEC, VALS(tlsa_certificate_usage_vals), 0,
+        NULL, HFILL }},
+
+    { &hf_dns_smimea_selector,
+      { "Selector", "dns.smimea.selector",
+        FT_UINT8, BASE_DEC, VALS(tlsa_selector_vals), 0,
+        NULL, HFILL }},
+
+    { &hf_dns_smimea_matching_type,
+      { "Matching Type", "dns.smimea.matching_type",
+        FT_UINT8, BASE_DEC, VALS(tlsa_matching_type_vals), 0,
+        NULL, HFILL }},
+
+    { &hf_dns_smimea_certificate_association_data,
+      { "Certificate Association Data", "dns.smimea.certificate_association_data",
+        FT_BYTES, BASE_NONE, NULL, 0,
+        NULL, HFILL }},
 
     { &hf_dns_tsig_algorithm_name,
       { "Algorithm Name", "dns.tsig.algorithm_name",

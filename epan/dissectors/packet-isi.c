@@ -811,6 +811,7 @@ static int dissect_isi_sim(tvbuff_t *tvb, packet_info *pinfo, proto_item *isitre
 	proto_item *item;
 	proto_tree *tree;
 	uint8_t cmd, code;
+	uint8_t imsi_len;
 
 	item = proto_tree_add_item(isitree, hf_isi_sim_payload, tvb, 0, -1, ENC_NA);
 	tree = proto_item_add_subtree(item, ett_isi_msg);
@@ -834,10 +835,9 @@ static int dissect_isi_sim(tvbuff_t *tvb, packet_info *pinfo, proto_item *isitre
 			break;
 
 		case 0x1A: /* SIM_NETWORK_INFO_RESP */
-			proto_tree_add_item(tree, hf_isi_sim_service_type, tvb, 1, 1, ENC_BIG_ENDIAN);
+			proto_tree_add_item_ret_uint8(tree, hf_isi_sim_service_type, tvb, 1, 1, ENC_BIG_ENDIAN, &code);
 			proto_tree_add_item(tree, hf_isi_sim_cause, tvb, 2, 1, ENC_BIG_ENDIAN);
 
-			code = tvb_get_uint8(tvb, 1);
 			switch(code) {
 				case 0x2F:
 					dissect_e212_mcc_mnc(tvb, pinfo, tree, 3, E212_LAI, false);
@@ -892,23 +892,17 @@ static int dissect_isi_sim(tvbuff_t *tvb, packet_info *pinfo, proto_item *isitre
 
 			When regrouped, we should have something that looks like 0x02|0x34|0x10|0x07|0x33|0x56|0x94|0x23
 
-			Can we use the E212 dissector?
-				No, it appears that the current version of the dissector is hard-coded in a way that ignores all of our set-up work. :(
+			This is the value part of a 3GPP TS 24.008 Mobile Identity: the low nibble
+			of the first octet holds the odd/even indicator and the type of identity,
+			so the E.212 dissector decodes it when it skips the first nibble.
 
 			*/
 
 			code = tvb_get_uint8(tvb, 1);
 			switch(code) {
 				default:
-					proto_tree_add_item(tree, hf_isi_sim_imsi_length, tvb, 3, 1, ENC_BIG_ENDIAN);
-
-					/*
-					next_tvb = tvb_new_subset_remaining(tvb, 0);
-					proto_tree_add_item(tree, hf_isi_sim_imsi_byte_1, next_tvb, 4, 1, ENC_LITTLE_ENDIAN);
-					dissect_e212_mcc_mnc(next_tvb, pinfo, tree, 4, false );
-					proto_tree_add_item(tree, hf_E212_msin, tvb, 2, 7, ENC_BIG_ENDIAN);
-
-					*/
+					proto_tree_add_item_ret_uint8(tree, hf_isi_sim_imsi_length, tvb, 3, 1, ENC_BIG_ENDIAN, &imsi_len);
+					dissect_e212_imsi(tvb, pinfo, tree, 4, imsi_len, true);
 
 					col_set_str(pinfo->cinfo, COL_INFO, "Read IMSI Response");
 					break;
@@ -1044,9 +1038,8 @@ static int dissect_isi_sim(tvbuff_t *tvb, packet_info *pinfo, proto_item *isitre
 			break;
 
 		case 0xF0: /* SIM_COMMON_MESSAGE */
-			proto_tree_add_item(tree, hf_isi_sim_cause, tvb, 1, 1, ENC_BIG_ENDIAN);
-			proto_tree_add_item(tree, hf_isi_sim_secondary_cause, tvb, 2, 1, ENC_BIG_ENDIAN);
-			code = tvb_get_uint8(tvb, 1);
+            proto_tree_add_item_ret_uint8(tree, hf_isi_sim_cause, tvb, 1, 1, ENC_BIG_ENDIAN, &code);
+            proto_tree_add_item(tree, hf_isi_sim_secondary_cause, tvb, 2, 1, ENC_BIG_ENDIAN);
 			switch(code) {
 				case 0x00:
 					col_set_str(pinfo->cinfo, COL_INFO, "Common Message: SIM Server Not Available");
@@ -1126,9 +1119,8 @@ static int dissect_isi_gss(tvbuff_t *tvb, packet_info *pinfo, proto_item *isitre
 			break;
 
 		case 0xF0: /* Common Message */
-			proto_tree_add_item(tree, hf_isi_gss_common_message_id, tvb, 1, 1, ENC_BIG_ENDIAN);
+			proto_tree_add_item_ret_uint8(tree, hf_isi_gss_common_message_id, tvb, 1, 1, ENC_BIG_ENDIAN, &code);
 			/* proto_tree_add_item(tree, hf_isi_gss_cause, tvb, 2, 1, ENC_BIG_ENDIAN); */
-			code = tvb_get_uint8(tvb, 1);
 			switch(code) {
 				case 0x01: /* COMM_SERVICE_NOT_IDENTIFIED_RESP */
 					col_set_str(pinfo->cinfo, COL_INFO, "Common Message: Service Not Identified Response");
@@ -1156,7 +1148,7 @@ static int dissect_isi_gss(tvbuff_t *tvb, packet_info *pinfo, proto_item *isitre
 	return tvb_captured_length(tvb);
 }
 
-static void dissect_isi_gps_data(tvbuff_t *tvb, packet_info *pinfo _U_, proto_item *item _U_, proto_tree *tree)
+static void dissect_isi_gps_data(tvbuff_t *tvb, packet_info *pinfo, proto_item *item _U_, proto_tree *tree)
 {
 	int i;
 	double tmp_double;
@@ -1170,6 +1162,11 @@ static void dissect_isi_gps_data(tvbuff_t *tvb, packet_info *pinfo _U_, proto_it
 	for(i=0; i<pkgcount; i++) {
 		uint8_t sptype = tvb_get_uint8(tvb, offset+1);
 		uint8_t splen = tvb_get_uint8(tvb, offset+3);
+
+		if (splen < 4) {
+			proto_tree_add_expert_remaining(tree, pinfo, &ei_isi_len, tvb, offset);
+			break;
+		}
 		proto_tree *subtree = proto_tree_add_subtree_format(tree, tvb, offset, splen, ett_isi_msg, NULL, "Subpacket (%s)", val_to_str(pinfo->pool, sptype, isi_gps_sub_id, "unknown: 0x%x"));
 
 		proto_tree_add_item(subtree, hf_isi_gps_sub_type, tvb, offset+1, 1, ENC_BIG_ENDIAN);
@@ -1454,8 +1451,7 @@ static int dissect_isi_ss(tvbuff_t *tvb, packet_info *pinfo, proto_item *isitree
 			break;
 
 		case 0xF0: /* SS_COMMON_MESSAGE */
-			proto_tree_add_item(tree, hf_isi_ss_common_message_id, tvb, 1, 1, ENC_BIG_ENDIAN);
-			code = tvb_get_uint8(tvb, 1);
+			proto_tree_add_item_ret_uint8(tree, hf_isi_ss_common_message_id, tvb, 1, 1, ENC_BIG_ENDIAN, &code);
 			switch(code) {
 				case 0x01: /* COMM_SERVICE_NOT_IDENTIFIED_RESP */
 					col_set_str(pinfo->cinfo, COL_INFO, "Common Message: Service Not Identified Response");
@@ -1483,7 +1479,7 @@ static int dissect_isi_ss(tvbuff_t *tvb, packet_info *pinfo, proto_item *isitree
 	return tvb_captured_length(tvb);
 }
 
-static void dissect_isi_network_status(tvbuff_t *tvb, packet_info *pinfo _U_, proto_item *item _U_, proto_tree *tree)
+static void dissect_isi_network_status(tvbuff_t *tvb, packet_info *pinfo, proto_item *item _U_, proto_tree *tree)
 {
 	int i;
 	int offset = 0x03; /* subpackets start here */
@@ -1495,6 +1491,10 @@ static void dissect_isi_network_status(tvbuff_t *tvb, packet_info *pinfo _U_, pr
 	for(i=0; i<pkgcount; i++) {
 		uint8_t sptype = tvb_get_uint8(tvb, offset+0);
 		uint8_t splen = tvb_get_uint8(tvb, offset+1);
+		if (splen < 2) {
+			proto_tree_add_expert_remaining(tree, pinfo, &ei_isi_len, tvb, offset);
+			break;
+		}
 
 		proto_tree *subtree = proto_tree_add_subtree_format(tree, tvb, offset, splen, ett_isi_msg, NULL, "Subpacket (%s)", val_to_str(pinfo->pool, sptype, isi_network_status_sub_id, "unknown: 0x%x"));
 
@@ -1545,6 +1545,10 @@ static void dissect_isi_network_cell_info_ind(tvbuff_t *tvb, packet_info *pinfo,
 	for(i=0; i<pkgcount; i++) {
 		uint8_t sptype = tvb_get_uint8(tvb, offset+0);
 		uint8_t splen = tvb_get_uint8(tvb, offset+1);
+		if (splen < 2) {
+			proto_tree_add_expert_remaining(tree, pinfo, &ei_isi_len, tvb, offset);
+			break;
+		}
 
 		proto_tree *subtree = proto_tree_add_subtree_format(tree, tvb, offset, splen, ett_isi_msg, NULL, "Subpacket (%s)", val_to_str(pinfo->pool, sptype, isi_network_cell_info_sub_id, "unknown: 0x%x"));
 
@@ -1715,10 +1719,9 @@ static int dissect_isi_sms(tvbuff_t *tvb, packet_info *pinfo, proto_item *isitre
 			break;
 
 		case 0x22: /* SMS_MESSAGE_SEND_STATUS_IND */
-			proto_tree_add_item(tree, hf_isi_sms_send_status, tvb, 1, 1, ENC_BIG_ENDIAN);
+			proto_tree_add_item_ret_uint8(tree, hf_isi_sms_send_status, tvb, 1, 1, ENC_BIG_ENDIAN, &code);
 			/* The second byte is a "segment" identifier/"Message Reference" */
 			proto_tree_add_item(tree, hf_isi_sms_route, tvb, 3, 1, ENC_BIG_ENDIAN);
-			code = tvb_get_uint8(tvb, 1);
 			switch(code) {
 				case 0x02:
 					col_set_str(pinfo->cinfo, COL_INFO, "SMS Message Sending Status: Waiting for Network");
@@ -1733,8 +1736,7 @@ static int dissect_isi_sms(tvbuff_t *tvb, packet_info *pinfo, proto_item *isitre
 			break;
 
 		case 0xF0: /* SS_COMMON_MESSAGE */
-			proto_tree_add_item(tree, hf_isi_sms_common_message_id, tvb, 1, 1, ENC_BIG_ENDIAN);
-			code = tvb_get_uint8(tvb, 1);
+			proto_tree_add_item_ret_uint8(tree, hf_isi_sms_common_message_id, tvb, 1, 1, ENC_BIG_ENDIAN, &code);
 			switch(code) {
 				case 0x01: /* COMM_SERVICE_NOT_IDENTIFIED_RESP */
 					col_set_str(pinfo->cinfo, COL_INFO, "Common Message: Service Not Identified Response");

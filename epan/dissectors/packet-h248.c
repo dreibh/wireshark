@@ -679,7 +679,12 @@ gcp_trx_t* gcp_trx(gcp_msg_t* m ,uint32_t t_id , gcp_trx_type_t type, packet_inf
                     return trxmsg->trx;
                 }
             }
-            DISSECTOR_ASSERT_NOT_REACHED();
+            /* Not found (e.g. two reassembled messages of one frame share
+             * the same raw offset): use a transaction that is not kept. */
+            t = wmem_new0(pinfo->pool, gcp_trx_t);
+            t->id = t_id;
+            t->type = type;
+            return t;
         } else {
             wmem_tree_key_t key[4];
 
@@ -785,12 +790,12 @@ gcp_ctx_t* gcp_ctx(gcp_msg_t* m, gcp_trx_t* t, uint32_t c_id, packet_info *pinfo
                     }
                 } while(( context = context->prev ));
 
-                DISSECTOR_ASSERT(! "a context should exist");
+                /* No context found: context is NULL, a temporary one is made below */
             }
         } else {
             if (c_id == CHOOSE_CONTEXT) {
                 if (! ( context = (gcp_ctx_t *)wmem_tree_lookup32_array(gcp_ctxs_by_trx,trx_key))) {
-                    context = wmem_new(wmem_file_scope(), gcp_ctx_t);
+                    context = wmem_new0(wmem_file_scope(), gcp_ctx_t);
                     context->initial = m;
                     context->cmds = NULL;
                     context->id = c_id;
@@ -805,7 +810,7 @@ gcp_ctx_t* gcp_ctx(gcp_msg_t* m, gcp_trx_t* t, uint32_t c_id, packet_info *pinfo
                     if (( context_p = (gcp_ctx_t **)wmem_tree_lookup32_array(gcp_ctxs,ctx_key) )) {
                         if (context != *context_p) {
                             if(context->id != CHOOSE_CONTEXT) {
-                                context = wmem_new(wmem_file_scope(), gcp_ctx_t);
+                                context = wmem_new0(wmem_file_scope(), gcp_ctx_t);
                             }
                             context->initial = m;
                             context->id = c_id;
@@ -825,7 +830,7 @@ gcp_ctx_t* gcp_ctx(gcp_msg_t* m, gcp_trx_t* t, uint32_t c_id, packet_info *pinfo
                         wmem_tree_insert32_array(gcp_ctxs,ctx_key,context_p);
                     }
                 } else if (! ( context_p = (gcp_ctx_t**)wmem_tree_lookup32_array(gcp_ctxs,ctx_key) )) {
-                    context = wmem_new(wmem_file_scope(), gcp_ctx_t);
+                    context = wmem_new0(wmem_file_scope(), gcp_ctx_t);
                     context->initial = m;
                     context->id = c_id;
                     context->cmds = NULL;
@@ -841,8 +846,10 @@ gcp_ctx_t* gcp_ctx(gcp_msg_t* m, gcp_trx_t* t, uint32_t c_id, packet_info *pinfo
                 }
             }
         }
-    } else {
-        context = wmem_new(pinfo->pool, gcp_ctx_t);
+    }
+
+    if (!context) {
+        context = wmem_new0(pinfo->pool, gcp_ctx_t);
         context->initial = m;
         context->cmds = NULL;
         context->id = c_id;
@@ -863,8 +870,6 @@ gcp_cmd_t* gcp_cmd(gcp_msg_t* m, gcp_trx_t* t, gcp_ctx_t* c, gcp_cmd_type_t type
 
     if (persistent) {
         if (m->committed) {
-            DISSECTOR_ASSERT(t->cmds != NULL);
-
             for (cmdctx = t->cmds; cmdctx; cmdctx = cmdctx->next) {
                 cmd = cmdctx->cmd;
                 if (cmd->msg == m && cmd->offset == offset) {
@@ -872,9 +877,15 @@ gcp_cmd_t* gcp_cmd(gcp_msg_t* m, gcp_trx_t* t, gcp_ctx_t* c, gcp_cmd_type_t type
                 }
             }
 
-            DISSECTOR_ASSERT(!"called for a command that does not exist!");
-
-            return NULL;
+            /* Not found: return a command that is not kept. */
+            cmd = wmem_new0(pinfo->pool, gcp_cmd_t);
+            cmd->type = type;
+            cmd->offset = offset;
+            cmd->terms.last = &(cmd->terms);
+            cmd->msg = m;
+            cmd->trx = t;
+            cmd->ctx = c;
+            return cmd;
         } else {
             cmd = wmem_new(wmem_file_scope(), gcp_cmd_t);
             cmdtrx = wmem_new(wmem_file_scope(), gcp_cmd_msg_t);
@@ -2437,7 +2448,7 @@ static unsigned dissect_h248_SigParameterName(bool implicit_tag _U_, tvbuff_t *t
     offset = dissect_ber_octet_string(implicit_tag, actx, tree, tvb, offset,  hf_index, &next_tvb);
     pi = actx->created_item;
 
-    switch(tvb_reported_length(next_tvb)) {
+    switch(next_tvb ? tvb_reported_length(next_tvb) : 0) {
         case 4: param_id = tvb_get_ntohl(next_tvb,0); break;
         case 3: param_id = tvb_get_ntoh24(next_tvb,0); break;
         case 2: param_id = tvb_get_ntohs(next_tvb,0); break;
@@ -2903,6 +2914,8 @@ static unsigned
 dissect_h248_WildcardField(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
     tvbuff_t* new_tvb;
     offset = dissect_ber_octet_string(implicit_tag, actx, tree, tvb, offset, hf_index, &new_tvb);
+    if (!new_tvb || tvb_captured_length(new_tvb) < 1)
+        return offset;
     tree = proto_item_add_subtree(actx->created_item,ett_wildcard);
     proto_tree_add_item(tree,hf_h248_term_wild_type,new_tvb,0,1,ENC_BIG_ENDIAN);
     proto_tree_add_item(tree,hf_h248_term_wild_level,new_tvb,0,1,ENC_BIG_ENDIAN);

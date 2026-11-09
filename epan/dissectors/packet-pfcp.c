@@ -35,6 +35,7 @@
 #include <wsutil/array.h>
 #include "packet-e164.h"
 #include "packet-e212.h"
+#include "packet-gtp.h"
 #include "packet-ip.h"
 
 void proto_register_pfcp(void);
@@ -1666,6 +1667,7 @@ typedef struct pfcp_session_args {
     uint8_t last_cause;
     pfcp_rule_ids_t last_rule_ids;
     const char *imsi;
+    wmem_list_t *teid_list;     /* GTP-U TEIDs (GUINT_TO_POINTER) of the message */
 } pfcp_session_args_t;
 
 typedef struct _pfcp_hdr {
@@ -2341,37 +2343,62 @@ pfcp_info_equal(const void *key1, const void *key2)
     return (a->seid == b->seid && (cmp_address(&a->addr, &b->addr) == 0));
 }
 
+/* Frames whose response was not accepted. Their <seid,ip> mappings stay in
+ * pfcp_frame_map but no longer count, which is much faster than going through
+ * the whole map to remove them.
+ */
+static wmem_map_t* pfcp_rejected_frames;
+
+/* The frame that key maps to in pfcp_frame_map, or 0 */
+static uint32_t
+pfcp_lookup_frame(const pfcp_info_t *key) {
+    uint32_t frame = GPOINTER_TO_UINT(wmem_map_lookup(pfcp_frame_map, key));
+
+    if (frame && wmem_map_contains(pfcp_rejected_frames, GUINT_TO_POINTER(frame))) {
+        return 0;
+    }
+    return frame;
+}
+
 static uint32_t
 pfcp_get_frame(address ip, uint64_t seid, uint32_t *frame) {
     pfcp_info_t info;
-    uint32_t *value;
+    uint32_t value;
 
     info.seid = seid;
     copy_address_shallow(&info.addr, &ip);
-    value = wmem_map_lookup(pfcp_frame_map, &info);
-    if (value != NULL) {
-        *frame = GPOINTER_TO_UINT(value);
+    value = pfcp_lookup_frame(&info);
+    if (value) {
+        *frame = value;
         return 1;
     }
     return 0;
 }
 
-static gboolean
-pfcp_frame_equal(void *key _U_, void *value, void *data){
-    uint32_t frame = GPOINTER_TO_UINT(data);
-
-    return (GPOINTER_TO_UINT(value) == frame);
+/* Makes the <seid,ip> mappings to frame f no longer count */
+static void
+pfcp_reject_frame_info(uint32_t f) {
+    wmem_map_insert(pfcp_rejected_frames, GUINT_TO_POINTER(f), GUINT_TO_POINTER(1));
 }
 
+/* Removes the <seid,ip> mappings to frame that pfcp_fill_map() added for
+ * its seid_list and ip_list.
+ */
 static void
-pfcp_remove_frame_info(uint32_t f) {
-    /* XXX: This iterates through the entire map and it is slow if done
-     * often. For large files with lots of removals, there are better
-     * alternatives, e.g. marking sessions as expired and then periodically
-     * removing all expired sessions from the map, or using a bijective
-     * map to coordinate removals.
-     */
-    wmem_map_foreach_remove(pfcp_frame_map, pfcp_frame_equal, GUINT_TO_POINTER(f));
+pfcp_remove_frame_info_lists(wmem_list_t *seid_list, wmem_list_t *ip_list, uint32_t frame) {
+    wmem_list_frame_t *elem_ip, *elem_seid;
+    pfcp_info_t info;
+
+    for (elem_ip = wmem_list_head(ip_list); elem_ip; elem_ip = wmem_list_frame_next(elem_ip)) {
+        copy_address_shallow(&info.addr, (address*)wmem_list_frame_data(elem_ip));
+        for (elem_seid = wmem_list_head(seid_list); elem_seid; elem_seid = wmem_list_frame_next(elem_seid)) {
+            info.seid = *(uint64_t*)wmem_list_frame_data(elem_seid);
+            /* Unless a later message took the mapping */
+            if (GPOINTER_TO_UINT(wmem_map_lookup(pfcp_frame_map, &info)) == frame) {
+                wmem_map_remove(pfcp_frame_map, &info);
+            }
+        }
+    }
 }
 
 
@@ -2411,25 +2438,12 @@ pfcp_ip_exists(address ip, wmem_list_t *ip_list) {
     return found;
 }
 
-/* wmem_map_foreach() callback used in fill_map() */
-static void
-pfcp_remove_session_from_table(void *key, void *val, void *userdata) {
-    unsigned fr = GPOINTER_TO_UINT(key);
-    unsigned session = GPOINTER_TO_UINT(val);
-    unsigned remove_session = GPOINTER_TO_UINT(userdata);
-
-    /* If it's the session we are looking for, we remove all the frame information */
-    if (session == remove_session) {
-        pfcp_remove_frame_info(fr);
-    }
-}
-
 static void
 pfcp_fill_map(wmem_list_t *seid_list, wmem_list_t *ip_list, uint32_t frame) {
     wmem_list_frame_t *elem_ip, *elem_seid;
-    pfcp_info_t *pfcp_info;
+    pfcp_info_t info;
+    const void *map_key;
     uint64_t seid;
-    uint32_t session;
     address *ip;
 
     elem_ip = wmem_list_head(ip_list);
@@ -2439,20 +2453,16 @@ pfcp_fill_map(wmem_list_t *seid_list, wmem_list_t *ip_list, uint32_t frame) {
         elem_seid = wmem_list_head(seid_list);
         while (elem_seid) {
             seid = *(uint64_t*)wmem_list_frame_data(elem_seid);
-            pfcp_info = wmem_new0(wmem_file_scope(), pfcp_info_t);
-            pfcp_info->seid = seid;
-            copy_address_wmem(wmem_file_scope(), &pfcp_info->addr, ip);
-            if (wmem_map_lookup(pfcp_frame_map, pfcp_info)) {
-                /* If the seid and ip already maps to a session, that means
-                 * that we need to remove old info about that session */
-                /* We look for its session ID */
-                session = GPOINTER_TO_UINT(wmem_map_lookup(pfcp_session_table, GUINT_TO_POINTER(frame)));
-                if (session) {
-                    /* If the msg has the same session ID and it's not the upd req we have to remove its info */
-                    wmem_map_foreach(pfcp_session_table, pfcp_remove_session_from_table, GUINT_TO_POINTER(session));
-                }
+            info.seid = seid;
+            copy_address_shallow(&info.addr, ip);
+            /* Copy the key only if the map does not have it */
+            if (!wmem_map_lookup_extended(pfcp_frame_map, &info, &map_key, NULL)) {
+                pfcp_info_t *pfcp_info = wmem_new0(wmem_file_scope(), pfcp_info_t);
+                pfcp_info->seid = seid;
+                copy_address_wmem(wmem_file_scope(), &pfcp_info->addr, ip);
+                map_key = pfcp_info;
             }
-            wmem_map_insert(pfcp_frame_map, pfcp_info, GUINT_TO_POINTER(frame));
+            wmem_map_insert(pfcp_frame_map, map_key, GUINT_TO_POINTER(frame));
             elem_seid = wmem_list_frame_next(elem_seid);
         }
         elem_ip = wmem_list_frame_next(elem_ip);
@@ -2607,9 +2617,6 @@ pfcp_track_session(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, pfcp_
              * XXX: Wouldn't it be better not to insert this information
              * in the first place for other message types, instead of
              * inserting it and then immediately removing it?
-             * At the very least, it would be faster to iterate through the
-             * seid_list and ip_list and remove via keys rather than doing
-             * removal through a reverse lookup.
              */
             if ((pfcp_hdr->message != PFCP_MSG_SESSION_ESTABLISHMENT_REQUEST && pfcp_hdr->message != PFCP_MSG_SESSION_ESTABLISHMENT_RESPONSE &&
                 pfcp_hdr->message != PFCP_MSG_SESSION_MODIFICATION_REQUEST && pfcp_hdr->message != PFCP_MSG_SESSION_MODIFICATION_RESPONSE &&
@@ -2617,7 +2624,7 @@ pfcp_track_session(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, pfcp_
                 pfcp_hdr->message != PFCP_MSG_SESSION_REPORT_REQUEST && pfcp_hdr->message != PFCP_MSG_SESSION_REPORT_RESPONSE)) {
                 /* If the lists are not empty*/
                 if (wmem_list_count(args->seid_list) && wmem_list_count(args->ip_list)) {
-                    pfcp_remove_frame_info(pinfo->num);
+                    pfcp_remove_frame_info_lists(args->seid_list, args->ip_list, pinfo->num);
                 }
             }
             if (pfcp_hdr->message == PFCP_MSG_SESSION_ESTABLISHMENT_REQUEST){
@@ -2626,9 +2633,9 @@ pfcp_track_session(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, pfcp_
 
                 if (args->imsi) {
                     imsi = wmem_strdup(wmem_file_scope(), args->imsi);
-                    wmem_map_insert(pfcp_session_imsi, GUINT_TO_POINTER(pfcp_session_count++), imsi);
+                    wmem_map_insert(pfcp_session_imsi, GUINT_TO_POINTER(pfcp_session_count), imsi);
                 }
-
+                pfcp_session_count++;
             }
             else if (pfcp_hdr->message != PFCP_MSG_SESSION_ESTABLISHMENT_RESPONSE) {
                 /* We have to check if its seid == seid_cp and ip.dst == gsn_ipv4 from the lists, if that is the case then we have to assign
@@ -2651,18 +2658,34 @@ pfcp_track_session(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, pfcp_
         }
     }
 
-    if (tree) {
-        session = GPOINTER_TO_UINT(wmem_map_lookup(pfcp_session_table, GUINT_TO_POINTER(pinfo->num)));
-        if (session) {
-            it = proto_tree_add_uint(tree, hf_pfcp_session, tvb, 0, 0, session);
-            proto_item_set_generated(it);
+    /* Add the IMSI without a tree as well, so that the "imsi" tap gets it */
+    session = GPOINTER_TO_UINT(wmem_map_lookup(pfcp_session_table, GUINT_TO_POINTER(pinfo->num)));
+    if (session) {
+        it = proto_tree_add_uint(tree, hf_pfcp_session, tvb, 0, 0, session);
+        proto_item_set_generated(it);
 
-            imsi = wmem_map_lookup(pfcp_session_imsi, GUINT_TO_POINTER(session));
-            if (imsi) {
-                add_assoc_imsi_item(tvb, pinfo, tree, imsi);
+        imsi = wmem_map_lookup(pfcp_session_imsi, GUINT_TO_POINTER(session));
+        if (imsi) {
+            add_assoc_imsi_item(tvb, pinfo, tree, imsi);
+
+            if (!PINFO_FD_VISITED(pinfo) && pfcp_is_cause_accepted(args->last_cause)) {
+                /* So that GTP-U with the TEIDs of the message gets the IMSI */
+                for (wmem_list_frame_t *elem = wmem_list_head(args->teid_list); elem; elem = wmem_list_frame_next(elem)) {
+                    gtp_add_teid_imsi(GPOINTER_TO_UINT(wmem_list_frame_data(elem)), imsi);
+                }
             }
         }
     }
+}
+
+/* Keep a GTP-U TEID of the message for pfcp_track_session() */
+static void
+pfcp_add_teid(packet_info *pinfo, pfcp_session_args_t *args, uint32_t teid)
+{
+    if (!g_pfcp_session || !args || !args->teid_list || PINFO_FD_VISITED(pinfo) || teid == 0) {
+        return;
+    }
+    wmem_list_append(args->teid_list, GUINT_TO_POINTER(teid));
 }
 
 static void
@@ -2860,10 +2883,11 @@ dissect_pfcp_source_interface(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
  * 8.2.3    F-TEID
  */
 static void
-dissect_pfcp_f_teid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_item *item, uint16_t length, uint8_t message_type _U_, pfcp_session_args_t *args _U_)
+dissect_pfcp_f_teid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_item *item, uint16_t length, uint8_t message_type _U_, pfcp_session_args_t *args)
 {
     unsigned offset = 0;
     uint64_t fteid_flags_val;
+    uint32_t teid;
 
     static int * const pfcp_fteid_flags[] = {
         &hf_pfcp_fteid_flg_spare,
@@ -2899,8 +2923,9 @@ dissect_pfcp_f_teid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_i
     } else {
 
         /* Octet 6 to 9    TEID */
-        proto_tree_add_item(tree, hf_pfcp_f_teid_teid, tvb, offset, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item_ret_uint(tree, hf_pfcp_f_teid_teid, tvb, offset, 4, ENC_BIG_ENDIAN, &teid);
         proto_item_append_text(item, "TEID: 0x%s", tvb_bytes_to_str(pinfo->pool, tvb, offset, 4));
+        pfcp_add_teid(pinfo, args, teid);
         offset += 4;
 
         if ((fteid_flags_val & 0x1) == 1) {
@@ -5224,10 +5249,11 @@ dissect_pfcp_linked_urr_id(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
  * 8.2.56   Outer Header Creation
  */
 static void
-dissect_pfcp_outer_header_creation(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_item *item _U_, uint16_t length, uint8_t message_type _U_, pfcp_session_args_t *args _U_)
+dissect_pfcp_outer_header_creation(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_item *item _U_, uint16_t length, uint8_t message_type _U_, pfcp_session_args_t *args)
 {
     unsigned offset = 0;
     uint64_t value;
+    uint32_t teid;
 
     static int * const outer_hdr_desc[] = {
         &hf_pfcp_outer_hdr_desc_o5_b7_stag,
@@ -5255,7 +5281,8 @@ dissect_pfcp_outer_header_creation(tvbuff_t *tvb, packet_info *pinfo, proto_tree
      * Otherwise it shall not be present
      */
     if ((value & 0x0100) || (value & 0x0200)) {
-        proto_tree_add_item(tree, hf_pfcp_outer_hdr_creation_teid, tvb, offset, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item_ret_uint(tree, hf_pfcp_outer_hdr_creation_teid, tvb, offset, 4, ENC_BIG_ENDIAN, &teid);
+        pfcp_add_teid(pinfo, args, teid);
         offset += 4;
     }
 
@@ -11554,7 +11581,7 @@ pfcp_match_response(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, unsi
 
                 if (!pfcp_is_cause_accepted(last_cause)){
                     /* If the cause is not accepted then we have to remove all the session information about its corresponding request */
-                    pfcp_remove_frame_info(pcrp->req_frame);
+                    pfcp_reject_frame_info(pcrp->req_frame);
                 }
             }
         }
@@ -12494,6 +12521,7 @@ dissect_pfcp_message(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree)
         /* We create the auxiliary lists */
         args->seid_list = wmem_list_new(pinfo->pool);
         args->ip_list = wmem_list_new(pinfo->pool);
+        args->teid_list = wmem_list_new(pinfo->pool);
     }
 
     /* Do we have a conversation for this connection? */
@@ -14859,6 +14887,7 @@ pfcp_init(void)
     pfcp_session_table = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), g_direct_hash, g_direct_equal);
     pfcp_session_imsi = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), g_direct_hash, g_direct_equal);
     pfcp_frame_map = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), pfcp_info_hash, pfcp_info_equal);
+    pfcp_rejected_frames = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), g_direct_hash, g_direct_equal);
 }
 
 void

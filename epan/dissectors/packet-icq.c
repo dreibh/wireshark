@@ -28,6 +28,7 @@
 #include <epan/packet.h>
 #include <epan/to_str.h>
 #include <epan/expert.h>
+#include <epan/prefs.h>
 #include <epan/tfs.h>
 #include <wsutil/array.h>
 
@@ -123,6 +124,7 @@ static int ett_icq_body_parts;
 
 static expert_field ei_icq_unknown_meta_subcmd;
 static expert_field ei_icq_unknown_command;
+static expert_field ei_icq_too_deep;
 
 /* This is not IANA registered */
 #define UDP_PORT_ICQ    4000
@@ -647,7 +649,7 @@ icqv5_decode_msgType(proto_tree *tree, tvbuff_t *tvb, unsigned offset, unsigned 
         bool last = false;
 
         while (!last) {
-            if (!tvb_find_uint8_length(tvb, offset, left, 0xfe, &sep_offset)) {
+            if (tvb_find_uint8_length(tvb, offset, left, 0xfe, &sep_offset)) {
                 sz_local = sep_offset - offset + 1;
             }
             else {
@@ -665,8 +667,8 @@ icqv5_decode_msgType(proto_tree *tree, tvbuff_t *tvb, unsigned offset, unsigned 
 
                 left -= sz_local;
                 sep_offset_prev = sep_offset;
-                found = tvb_find_uint8_length(tvb, offset, left, 0xfe, &sep_offset);
-                if (found == false)
+                found = tvb_find_uint8_length(tvb, sep_offset_prev, left, 0xfe, &sep_offset);
+                if (found)
                     sz_local = sep_offset - offset + 1;
                 else {
                     sz_local = left;
@@ -701,8 +703,7 @@ icqv5_cmd_send_text_code(proto_tree *tree, /* Tree to put the data in */
     proto_tree *subtree = tree;
     uint16_t len;
 
-    len = tvb_get_letohs(tvb, offset+CMD_SEND_TEXT_CODE_LEN);
-    proto_tree_add_item(subtree, hf_icq_text_code_length, tvb, offset + CMD_SEND_TEXT_CODE_LEN, 2, ENC_LITTLE_ENDIAN);
+    proto_tree_add_item_ret_uint16(subtree, hf_icq_text_code_length, tvb, offset + CMD_SEND_TEXT_CODE_LEN, 2, ENC_LITTLE_ENDIAN, &len);
 
     if (len>0) {
         proto_tree_add_item(subtree, hf_icq_text_code, tvb, offset + CMD_SEND_TEXT_CODE_TEXT, len, ENC_ASCII);
@@ -751,8 +752,7 @@ icqv5_cmd_contact_list(proto_tree *tree, tvbuff_t *tvb, unsigned offset)
     uint32_t uin;
 
     if (tree) {
-        num = tvb_get_uint8(tvb, offset + CMD_CONTACT_LIST_NUM);
-        proto_tree_add_item(tree, hf_icq_number_of_uins, tvb, offset + CMD_CONTACT_LIST, 1, ENC_NA);
+        proto_tree_add_item_ret_uint8(tree, hf_icq_number_of_uins, tvb, offset + CMD_CONTACT_LIST, 1, ENC_NA, &num);
         /*
          * A sequence of num times UIN follows
          */
@@ -805,8 +805,7 @@ icqv5_srv_multi(proto_tree *tree, /* Tree to put the data in */
     uint16_t pktSz;
     int i;
 
-    num = tvb_get_uint8(tvb, offset + SRV_MULTI_NUM);
-    proto_tree_add_item(tree, hf_icq_multi_num_packets, tvb, offset + SRV_MULTI_NUM, 1, ENC_NA);
+    proto_tree_add_item_ret_uint8(tree, hf_icq_multi_num_packets, tvb, offset + SRV_MULTI_NUM, 1, ENC_NA, &num);
     /*
      * A sequence of num times ( pktsize, packetData) follows
      */
@@ -814,8 +813,13 @@ icqv5_srv_multi(proto_tree *tree, /* Tree to put the data in */
     for (i = 0; i < num; i++) {
         pktSz = tvb_get_letohs(tvb, offset);
         offset += 2;
-        // We recurse here, but we'll run out of packet before we run out of stack.
+        if (pinfo->dissection_depth + 16 >= prefs.gui_max_tree_depth) {
+            proto_tree_add_expert(tree, pinfo, &ei_icq_too_deep, tvb, offset, 0);
+            return;
+        }
+        increment_dissection_depth(pinfo);
         dissect_icqv5Server(tvb, offset, pinfo, tree, pktSz);
+        decrement_dissection_depth(pinfo);
         offset += pktSz;
     }
 }
@@ -836,7 +840,7 @@ icqv5_srv_meta_user(proto_tree *tree, /* Tree to put the data in */
     sstree = proto_item_add_subtree(ti, ett_icq_body_parts);
     result = tvb_get_uint8(tvb, offset + SRV_META_USER_RESULT);
     proto_tree_add_uint_format_value(sstree, hf_icq_meta_user_result, tvb, offset + SRV_META_USER_RESULT,
-                result, 1, "%s", (result==0x0a)?"Success":"Failure");
+                1, result, "%s", (result==0x0a)?"Success":"Failure");
 
     /* Skip the META_USER header */
     offset += 3;
@@ -1356,6 +1360,7 @@ proto_register_icq(void)
     static ei_register_info ei[] = {
         { &ei_icq_unknown_meta_subcmd, { "icq.unknown_meta_subcmd", PI_UNDECODED, PI_WARN, "Unknown meta subcmd", EXPFILL }},
         { &ei_icq_unknown_command, { "icq.unknown_command", PI_UNDECODED, PI_WARN, "Unknown command", EXPFILL }},
+        { &ei_icq_too_deep, { "icq.too_deep", PI_PROTOCOL, PI_WARN, "Multi packet nesting too deep", EXPFILL }},
     };
 
     expert_module_t *expert_icq;

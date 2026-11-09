@@ -119,6 +119,7 @@ static int ett_ipcomp;
 
 static expert_field ei_esp_sequence_analysis_wrong_sequence_number;
 static expert_field ei_esp_pad_bogus;
+static expert_field ei_ah_nesting_too_deep;
 
 
 static int exported_pdu_tap = -1;
@@ -235,7 +236,7 @@ static const value_string esp_encryption_type_vals[] = {
 static const char *
 esp_get_encr_algo_name(int esp_encr_algo)
 {
-  return esp_encryption_type_vals[esp_encr_algo].strptr;
+  return val_to_str_const((uint32_t)esp_encr_algo, esp_encryption_type_vals, "Unknown");
 }
 
 
@@ -260,7 +261,7 @@ static const value_string esp_authentication_type_vals[] = {
 static const char *
 esp_get_auth_algo_name(int esp_auth_algo)
 {
-  return esp_authentication_type_vals[esp_auth_algo].strptr;
+  return val_to_str_const((uint32_t)esp_auth_algo, esp_authentication_type_vals, "Unknown");
 }
 
 
@@ -716,16 +717,17 @@ static int get_ipv6_suffix(char* ipv6_suffix, char *ipv6_address)
   int j =0;
   int ipv6_len = 0;
   bool found = false;
+  bool invalid = false;
 
   ipv6_len = (int) strlen(ipv6_address);
   if(ipv6_len  != 0)
     {
-      while ( (cpt_suffix < IPSEC_STRLEN_IPV6) && (ipv6_len - cpt -1 >= 0) && (found == false))
+      while ( (cpt_suffix < IPSEC_STRLEN_IPV6) && (ipv6_len - cpt -1 >= 0) && (found == false) && !invalid)
         {
           if(ipv6_address[ipv6_len - cpt - 1] == ':')
             {
               /* Add some 0 to the prefix; */
-              for(j = cpt_seg; j < 4; j++)
+              for(j = cpt_seg; j < 4 && cpt_suffix < IPSEC_STRLEN_IPV6; j++)
                 {
                   suffix[IPSEC_STRLEN_IPV6 -1 -cpt_suffix] = '0';
                   cpt_suffix ++;
@@ -750,6 +752,11 @@ static int get_ipv6_suffix(char* ipv6_suffix, char *ipv6_address)
                     cpt++;
                   }
             }
+          else if (cpt_seg >= 4)
+            {
+              /* A group has at most 4 hex digits. */
+              invalid = true;
+            }
           else
             {
               suffix[IPSEC_STRLEN_IPV6 -1 -cpt_suffix] = g_ascii_toupper(ipv6_address[ipv6_len - cpt - 1]);
@@ -759,9 +766,14 @@ static int get_ipv6_suffix(char* ipv6_suffix, char *ipv6_address)
             }
         }
 
-      if(cpt_suffix % 4 != 0)
+      if (invalid)
         {
-          for(j = cpt_seg; j < 4; j++)
+          cpt = 0;
+          cpt_suffix = 0;
+        }
+      else if(cpt_suffix % 4 != 0)
+        {
+          for(j = cpt_seg; j < 4 && cpt_suffix < IPSEC_STRLEN_IPV6; j++)
             {
               suffix[IPSEC_STRLEN_IPV6 -1 -cpt_suffix] = '0';
               cpt_suffix ++;
@@ -859,11 +871,12 @@ get_full_ipv6_addr(wmem_allocator_t* scope, char* ipv6_addr_expanded, char *ipv6
       if(mask <= 4 * i || ipv6_addr_expanded[i] == '*')
         ipv6_addr_expanded[i] = '*';
       else {
-        if(sscanf(ipv6_addr_expanded + i, "%X", &addr_byte) == EOF)
+        /* Mask this one hex digit. */
+        if(sscanf(ipv6_addr_expanded + i, "%1X", &addr_byte) != 1)
            break;
         addr_byte &= (0x0F << (4 * (i + 1) - mask));
         addr_byte &= 0x0F;
-        snprintf(ipv6_addr_expanded + i, 4, "%X", addr_byte);
+        ipv6_addr_expanded[i] = "0123456789ABCDEF"[addr_byte];
       }
     }
   }
@@ -896,9 +909,7 @@ get_full_ipv4_addr(char* ipv4_address_expanded, char *ipv4_address)
   char addr_byte_string[12];
 
   unsigned addr_byte = 0;
-  unsigned i = 0;
-  unsigned j = 0;
-  unsigned k = 0;
+  unsigned i = 0, j, k;
   unsigned cpt = 0;
   bool done_flag = false;
   unsigned mask = IPSEC_IPV4_ADDR_LEN;
@@ -1007,22 +1018,23 @@ get_full_ipv4_addr(char* ipv4_address_expanded, char *ipv4_address)
 
     }
 
-    for(i = 0; i < IPSEC_STRLEN_IPV4; i++)
+    ipv4_address_expanded[cpt] = '\0';
+    for(i = 0; i < cpt; i++)
     {
       if(4 * (i + 1) > mask)
       {
         if(mask <= 4 * i || ipv4_address_expanded[i] == '*')
           ipv4_address_expanded[i] = '*';
         else {
-          if(sscanf(ipv4_address_expanded + i, "%X", &addr_byte) == EOF)
+          /* Mask this one hex digit. */
+          if(sscanf(ipv4_address_expanded + i, "%1X", &addr_byte) != 1)
              return false;
           addr_byte &= (0x0F << (4 * (i + 1) - mask));
           addr_byte &= 0x0F;
-          snprintf(ipv4_address_expanded + i, 4, "%X", addr_byte);
+          ipv4_address_expanded[i] = "0123456789ABCDEF"[addr_byte];
         }
       }
     }
-    ipv4_address_expanded[cpt] = '\0';
   }
 
   return done_flag;
@@ -1409,13 +1421,18 @@ capture_ah(const unsigned char *pd, int offset, int len, capture_packet_info_t *
   if (!BYTES_ARE_IN_FRAME(offset, len, 2))
     return false;
   nxt = pd[offset];
-  advance = 8 + ((pd[offset+1] - 1) << 2);
+  advance = (int)(((unsigned)pd[offset+1] + 2) << 2);
   if (!BYTES_ARE_IN_FRAME(offset, len, advance))
     return false;
   offset += advance;
 
   return try_capture_dissector("ip.proto", nxt, pd, offset, len, cpinfo, pseudo_header);
 }
+
+/* AH can be nested through itself or through MIPv6 (next header 51 or
+ * 135). Count the nesting per packet and stop at a small limit, well
+ * before the tree and dissection depth limits are reached. */
+#define AH_MAX_NESTING 8
 
 static int
 dissect_ah(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
@@ -1430,6 +1447,7 @@ dissect_ah(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
   tvbuff_t   *next_tvb;
   dissector_handle_t dissector_handle;
   uint32_t saved_match_uint;
+  unsigned    nesting;
 
   col_set_str(pinfo->cinfo, COL_PROTOCOL, "AH");
   col_clear(pinfo->cinfo, COL_INFO);
@@ -1464,6 +1482,14 @@ dissect_ah(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 
   next_tvb = tvb_new_subset_remaining(tvb, ah_hdr_len);
 
+  nesting = p_get_proto_depth(pinfo, proto_ah);
+  if (nesting >= AH_MAX_NESTING) {
+    proto_tree_add_expert_remaining(ah_tree, pinfo, &ei_ah_nesting_too_deep, next_tvb, 0);
+    return tvb_captured_length(tvb);
+  }
+  p_set_proto_depth(pinfo, proto_ah, nesting + 1);
+  increment_dissection_depth(pinfo);
+
   if (pinfo->dst.type == AT_IPv6) {
     ipv6_dissect_next(ah_nxt, next_tvb, pinfo, tree, (ws_ip6 *)data);
   } else {
@@ -1479,6 +1505,8 @@ dissect_ah(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
     call_dissector(dissector_handle, next_tvb, pinfo, tree);
     pinfo->match_uint = saved_match_uint;
   }
+  decrement_dissection_depth(pinfo);
+  p_set_proto_depth(pinfo, proto_ah, nesting);
   return tvb_captured_length(tvb);
 }
 
@@ -1702,9 +1730,7 @@ dissect_esp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
                 sn_upper++;
               }
             } else {
-              if (sequence_number >= (status->firstValidSN - window)) {
-                sn_upper--;
-              }
+              sn_upper--;
             }
           }
         }
@@ -2035,7 +2061,7 @@ dissect_esp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
           */
 
           /* Fix parameters for TWOFISH-CBC */
-          esp_iv_len = 16;
+          esp_iv_len = esp_block_len = 16;
           crypt_mode_libgcrypt = GCRY_CIPHER_MODE_CBC;
 
           switch(esp_encr_key_len * 8)
@@ -2208,31 +2234,30 @@ dissect_esp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
        /*
         * Add the encrypted portion to the tree and store it in a packet scope buffer for later decryption.
         */
-       if (esp_encr_data_len) {
-         encr_data_item = proto_tree_add_item(esp_tree, hf_esp_encrypted_data, tvb, offset, esp_encr_data_len, ENC_NA);
-         proto_item_append_text(encr_data_item, " (%d bytes) <%s>",
-                                esp_encr_data_len,
-                                esp_get_encr_algo_name(esp_encr_algo));
 
-         esp_encr_data = (unsigned char *)tvb_memdup(pinfo->pool, tvb, offset, esp_encr_data_len);
-         offset += esp_encr_data_len;
+        encr_data_item = proto_tree_add_item(esp_tree, hf_esp_encrypted_data, tvb, offset, esp_encr_data_len, ENC_NA);
+        proto_item_append_text(encr_data_item, " (%d bytes) <%s>",
+                               esp_encr_data_len,
+                               esp_get_encr_algo_name(esp_encr_algo));
 
-         /*
-          * Verify that the encrypted payload data is properly aligned: The ciphertext length
-          * needs to be a multiple of the of block size (which equals 1 for 'stream ciphers'
-          * like AES-GCM and AES-CTR) and the ciphertext needs to terminate on a 4-byte boundary,
-          * according to RFC 2406, section 2.4. Given the fact that all current block sizes are
-          * powers of 2, only the stricter alignment requirement needs to be checked:
-          */
-         if (esp_block_len > 4 && esp_encr_data_len % esp_block_len != 0) {
-           proto_item_append_text(encr_data_item, "[Invalid length, ciphertext should be a multiple of block size (%u)]",
-                                  esp_block_len);
-           decrypt_using_libgcrypt = false;
-         } else if (esp_encr_data_len % 4 != 0) {
-           proto_item_append_text(encr_data_item, "[Invalid length, ciphertext should terminate at 4-byte boundary]");
-           decrypt_using_libgcrypt = false;
-         }
-       }
+        esp_encr_data = (unsigned char *)tvb_memdup(pinfo->pool, tvb, offset, esp_encr_data_len);
+        offset += esp_encr_data_len;
+
+        /*
+         * Verify that the encrypted payload data is properly aligned: The ciphertext length
+         * needs to be a multiple of the of block size (which equals 1 for 'stream ciphers'
+         * like AES-GCM and AES-CTR) and the ciphertext needs to terminate on a 4-byte boundary,
+         * according to RFC 2406, section 2.4. Given the fact that all current block sizes are
+         * powers of 2, only the stricter alignment requirement needs to be checked:
+         */
+        if (esp_block_len > 4 && esp_encr_data_len % esp_block_len != 0) {
+          proto_item_append_text(encr_data_item, "[Invalid length, ciphertext should be a multiple of block size (%u)]",
+                                 esp_block_len);
+          decrypt_using_libgcrypt = false;
+        } else if (esp_encr_data_len % 4 != 0) {
+          proto_item_append_text(encr_data_item, "[Invalid length, ciphertext should terminate at 4-byte boundary]");
+          decrypt_using_libgcrypt = false;
+        }
 
 
         /*
@@ -2274,6 +2299,7 @@ dissect_esp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
                 if (err) {
                   gcry_cipher_close(*cipher_hd);
+                  *cipher_hd_created = false;
                   REPORT_DISSECTOR_BUG("<IPsec/ESP Dissector> Error in Algorithm %s Mode %d, gcry_cipher_setkey(key_len=%u) failed: %s\n",
                                        gcry_cipher_algo_name(crypt_algo_libgcrypt), crypt_mode_libgcrypt, esp_encr_key_len, gcry_strerror(err));
                 }
@@ -2338,6 +2364,7 @@ dissect_esp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
           if (err) {
             gcry_cipher_close(*cipher_hd);
+            *cipher_hd_created = false;
             REPORT_DISSECTOR_BUG("<IPsec/ESP Dissector> Error in Algorithm %s Mode %d, gcry_cipher_set%s() failed: %s\n",
                                  gcry_cipher_algo_name(crypt_algo_libgcrypt), crypt_mode_libgcrypt,
                                  (crypt_mode_libgcrypt == GCRY_CIPHER_MODE_CTR) ? "ctr" : "iv",
@@ -2361,6 +2388,7 @@ dissect_esp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
             if (err) {
               gcry_cipher_close(*cipher_hd);
+              *cipher_hd_created = false;
               REPORT_DISSECTOR_BUG("<IPsec/ESP Dissector> Error in Algorithm %s Mode %d, gcry_cipher_authenticate() failed: %s\n",
                                    gcry_cipher_algo_name(crypt_algo_libgcrypt), crypt_mode_libgcrypt, gcry_strerror(err));
             }
@@ -2374,6 +2402,7 @@ dissect_esp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
           if (err)
           {
             gcry_cipher_close(*cipher_hd);
+            *cipher_hd_created = false;
             REPORT_DISSECTOR_BUG("<IPsec/ESP Dissector> Error in Algorithm %s, Mode %d, gcry_cipher_decrypt failed: %s\n",
                                  gcry_cipher_algo_name(crypt_algo_libgcrypt), crypt_mode_libgcrypt, gcry_strerror(err));
           }
@@ -2397,6 +2426,7 @@ dissect_esp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
               err = gcry_cipher_gettag(*cipher_hd, esp_icv_computed, tag_len);
               if (err) {
                 gcry_cipher_close(*cipher_hd);
+                *cipher_hd_created = false;
                 REPORT_DISSECTOR_BUG("<IPsec/ESP Dissector> Error in Algorithm %s:  gcry_cipher_gettag failed: %s",
                                      gcry_md_algo_name(crypt_algo_libgcrypt), gcry_strerror(err));
               }
@@ -2554,7 +2584,7 @@ dissect_esp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
         if (sn_length == IPSEC_SA_ESN && g_esp_do_sequence_analysis) {
           spi_status *status = (spi_status*)wmem_map_lookup(esp_sequence_analysis_hash,
                                                                 GUINT_TO_POINTER((unsigned)spi));
-          if (status && !status->firstValidSN) {
+          if (status && !PINFO_FD_VISITED(pinfo) && !status->firstValidSN) {
             status->firstValidSN = sequence_number;
           }
         }
@@ -2655,12 +2685,16 @@ static void ipsec_cleanup_protocol(void)
 }
 
 static void
-esp_secrets_block_callback(const void *secrets, unsigned size _U_)
+esp_secrets_block_callback(const void *secrets, unsigned size)
 {
   char *err;
+  char *str;
 
-  if (!uat_load_str(esp_uat, (const char *)secrets, &err))
+  /* The block is not necessarily NUL-terminated. */
+  str = g_strndup((const char *)secrets, size);
+  if (!uat_load_str(esp_uat, str, &err))
     g_free(err);
+  g_free(str);
 }
 
 static void
@@ -2791,6 +2825,10 @@ proto_register_ipsec(void)
     &ett_ipcomp,
   };
 
+  static ei_register_info ei_ah[] = {
+    { &ei_ah_nesting_too_deep, { "ah.nesting_too_deep", PI_MALFORMED, PI_ERROR, "AH nested too deeply", EXPFILL }},
+  };
+
   static ei_register_info ei[] = {
     { &ei_esp_sequence_analysis_wrong_sequence_number, { "esp.sequence-analysis.wrong-sequence-number", PI_SEQUENCE, PI_WARN, "Wrong Sequence Number", EXPFILL }},
     { &ei_esp_pad_bogus, { "esp.pad.bogus", PI_PROTOCOL, PI_WARN, "Padding MUST increment starting with 1 [RFC 4303 2.4]", EXPFILL }}
@@ -2832,6 +2870,7 @@ proto_register_ipsec(void)
   module_t *esp_module;
 
   expert_module_t* expert_esp;
+  expert_module_t* expert_ah;
 
   proto_ah = proto_register_protocol("Authentication Header", "AH", "ah");
   proto_register_field_array(proto_ah, hf_ah, array_length(hf_ah));
@@ -2846,6 +2885,9 @@ proto_register_ipsec(void)
 
   expert_esp = expert_register_protocol(proto_esp);
   expert_register_field_array(expert_esp, ei, array_length(ei));
+
+  expert_ah = expert_register_protocol(proto_ah);
+  expert_register_field_array(expert_ah, ei_ah, array_length(ei_ah));
 
   ah_module = prefs_register_protocol_obsolete(proto_ah);
 

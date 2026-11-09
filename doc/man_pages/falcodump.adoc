@@ -24,22 +24,22 @@ falcodump - Dump log data to a file using a Falco source plugin.
 [ *--extcap-capture-filter*=<capture filter> ]
 [ *--capture* ]
 [ *--fifo*=<path to file or pipe> ]
-[ *--plugin-source*=<source path or URL> ]
-[ *--log-level*=<log level> ]
 [ *--log-file*=<path to file> ]
+[ *--log-level*=<log level> ]
+[ *--plugin-source*=<source path or URL> ]
 
 .CloudTrail plugin options
 [manarg]
+[ *--cloudtrail-aws-config*=<path> ]
+[ *--cloudtrail-aws-credentials*=<path to file> ]
+[ *--cloudtrail-aws-profile*=<AWS profile> ]
+[ *--cloudtrail-aws-region*=<AWS region> ]
+[ *--cloudtrail-s3accountlist*=<comma separated account IDs> ]
 [ *--cloudtrail-s3downloadconcurrency*=<number of concurrent downloads> ]
 [ *--cloudtrail-s3interval*=<timeframe> ]
-[ *--cloudtrail-s3accountlist*=<comma separated account IDs> ]
 [ *--cloudtrail-sqsdelete*=<true or false> ]
 [ *--cloudtrail-useasync*=<true or false> ]
 [ *--cloudtrail-uses3sns*=<true or false> ]
-[ *--cloudtrail-aws-region*=<AWS region> ]
-[ *--cloudtrail-aws-profile*=<AWS profile> ]
-[ *--cloudtrail-aws-config*=<path> ]
-[ *--cloudtrail-aws-credentials*=<path to file> ]
 
 == DESCRIPTION
 
@@ -82,48 +82,48 @@ Start capturing from the source specified by --plugin-source via the specified i
 --fifo=<path to file or pipe>::
 Save captured packet to file or send it through pipe.
 
---plugin-source=<source path or URL>::
-Capture from the specified location.
+--log-file=<path to file>::
+Set a log file to log messages in addition to the console
 
---log-level::
+--log-level=<log level>::
 Set the log level
 
---log-file::
-Set a log file to log messages in addition to the console
+--plugin-source=<source path or URL>::
+Capture from the specified location.
 
 == PLUGINS
 
 === cloudtrail (AWS CloudTrail)
 
---cloudtrail-s3downloadconcurrency::
-Controls the number of background goroutines used to download S3 files (Default: 32)
-
---cloudtrail-s3interval::
-Download log files over the specified interval (Default: no interval)
-
---cloudtrail-s3accountlist::
-If source is an organization CloudTrail S3 bucket download log files for all specified account IDs (Default: no account IDs)
-
---cloudtrail-sqsdelete::
-If true then the plugin will delete SQS messages from the queue immediately after receiving them (Default: true)
-
---cloudtrail-useasync::
-If true then async extraction optimization is enabled (Default: true)
-
---cloudtrail-uses3sns::
-If true then the plugin will expect SNS messages to originate from S3 instead of directly from Cloudtrail (Default: false)
-
---cloudtrail-aws-profile::
-If non-empty overrides the AWS shared configuration profile (e.g. 'default') and environment variables such as AWS_PROFILE (Default: empty)
-
---cloudtrail-aws-region::
-If non-empty overrides the AWS region specified in the profile (e.g. 'us-east-1') and environment variables such as AWS_REGION (Default: empty)
-
---cloudtrail-aws-config::
+--cloudtrail-aws-config=<path>::
 If non-empty overrides the AWS shared configuration filepath (e.g. ~/.aws/config) and env variables such as AWS_CONFIG_FILE (Default: empty)
 
---cloudtrail-aws-credentials::
+--cloudtrail-aws-credentials=<path to file>::
 If non-empty overrides the AWS shared credentials filepath (e.g. ~/.aws/credentials) and env variables such as AWS_SHARED_CREDENTIALS_FILE (Default: empty)
+
+--cloudtrail-aws-profile=<AWS profile>::
+If non-empty overrides the AWS shared configuration profile (e.g. 'default') and environment variables such as AWS_PROFILE (Default: empty)
+
+--cloudtrail-aws-region=<AWS region>::
+If non-empty overrides the AWS region specified in the profile (e.g. 'us-east-1') and environment variables such as AWS_REGION (Default: empty)
+
+--cloudtrail-s3accountlist=<comma separated account IDs>::
+If source is an organization CloudTrail S3 bucket download log files for all specified account IDs (Default: no account IDs)
+
+--cloudtrail-s3downloadconcurrency=<number of concurrent downloads>::
+Controls the number of background goroutines used to download S3 files (Default: 32)
+
+--cloudtrail-s3interval=<timeframe>::
+Download log files over the specified interval (Default: no interval)
+
+--cloudtrail-sqsdelete=<true or false>::
+If true then the plugin will delete SQS messages from the queue immediately after receiving them (Default: true)
+
+--cloudtrail-useasync=<true or false>::
+If true then async extraction optimization is enabled (Default: true)
+
+--cloudtrail-uses3sns=<true or false>::
+If true then the plugin will expect SNS messages to originate from S3 instead of directly from Cloudtrail (Default: false)
 
 CloudTrail sources can be S3 buckets or SQS queue URLs. S3 bucket URLs have the form
 

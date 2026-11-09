@@ -34,7 +34,6 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QToolButton>
 #include <QWidget>
 #include <QCheckBox>
 
@@ -72,10 +71,6 @@ enum {
     status_col_
 };
 
-static const QRgb color_cn_ = 0xbfbfff;
-static const QRgb color_rtp_warn_ = 0xffdbbf;
-static const QRgb color_pt_event_ = 0xefffff;
-
 enum { rtp_analysis_type_ = 1000 };
 class RtpAnalysisTreeWidgetItem : public QTreeWidgetItem
 {
@@ -105,40 +100,40 @@ public:
 
         if (statinfo->pt == PT_CN) {
             status = "Comfort noise (PT=13, RFC 3389)";
-            bg_color = color_cn_;
+            bg_color = ThemeManager::instance()->color(ThemeManager::ExpertChat);
         } else if (statinfo->pt == PT_CN_OLD) {
             status = "Comfort noise (PT=19, reserved)";
-            bg_color = color_cn_;
+            bg_color = ThemeManager::instance()->color(ThemeManager::ExpertChat);
         } else if (statinfo->flags & STAT_FLAG_WRONG_SEQ) {
             status = "Wrong sequence number";
             bg_color = ThemeManager::instance()->color(ThemeManager::ExpertError);
         } else if (statinfo->flags & STAT_FLAG_DUP_PKT) {
             status = "Suspected duplicate (MAC address) only delta time calculated";
-            bg_color = color_rtp_warn_;
+            bg_color = ThemeManager::instance()->color(ThemeManager::ExpertWarn);
         } else if (statinfo->flags & STAT_FLAG_REG_PT_CHANGE) {
             status = QStringLiteral("Payload changed to PT=%1").arg(statinfo->pt);
             if (statinfo->flags & STAT_FLAG_PT_T_EVENT) {
                 status.append(" telephone/event");
             }
-            bg_color = color_rtp_warn_;
+            bg_color = ThemeManager::instance()->color(ThemeManager::ExpertWarn);
         } else if (statinfo->flags & STAT_FLAG_WRONG_TIMESTAMP) {
             status = "Incorrect timestamp";
             /* color = COLOR_WARNING; */
-            bg_color = color_rtp_warn_;
+            bg_color = ThemeManager::instance()->color(ThemeManager::ExpertWarn);
         } else if ((statinfo->flags & STAT_FLAG_PT_CHANGE)
             &&  !(statinfo->flags & STAT_FLAG_FIRST)
             &&  !(statinfo->flags & STAT_FLAG_PT_CN)
             &&  (statinfo->flags & STAT_FLAG_FOLLOW_PT_CN)
             &&  !(statinfo->flags & STAT_FLAG_MARKER)) {
             status = "Marker missing?";
-            bg_color = color_rtp_warn_;
+            bg_color = ThemeManager::instance()->color(ThemeManager::ExpertWarn);
         } else if (statinfo->flags & STAT_FLAG_PT_T_EVENT) {
             status = QStringLiteral("PT=%1 telephone/event").arg(statinfo->pt);
             /* XXX add color? */
-            bg_color = color_pt_event_;
+            bg_color = ThemeManager::instance()->color(ThemeManager::ExpertNote);
         } else {
             if (statinfo->flags & STAT_FLAG_MARKER) {
-                bg_color = color_rtp_warn_;
+                bg_color = ThemeManager::instance()->color(ThemeManager::ExpertWarn);
             }
         }
 
@@ -301,6 +296,7 @@ RtpAnalysisDialog::RtpAnalysisDialog(QWidget &parent, CaptureFile &cf) :
     save_menu->addSeparator();
     save_menu->addAction(ui->actionSaveGraph);
     export_btn->setMenu(save_menu);
+    ui->buttonBox->button(QDialogButtonBox::Close)->setDefault(true);
 
     WiresharkMainWindow* ws_main_window = qobject_cast<WiresharkMainWindow*>(&parent);
     connect(ui->tabWidget, &QTabWidget::currentChanged, this, &RtpAnalysisDialog::updateWidgets);
@@ -1162,7 +1158,7 @@ tab_info_t *RtpAnalysisDialog::getTabInfoForCurrentTab()
 }
 
 
-QToolButton *RtpAnalysisDialog::addAnalyzeButton(QDialogButtonBox *button_box,
+QPushButton *RtpAnalysisDialog::addAnalyzeButton(QDialogButtonBox *button_box,
 #ifdef QT_MULTIMEDIA_LIB
     RtpBaseDialog *dialog
 #else
@@ -1172,21 +1168,12 @@ QToolButton *RtpAnalysisDialog::addAnalyzeButton(QDialogButtonBox *button_box,
 {
     if (!button_box) return nullptr;
 
-    QToolButton *analysis_button = nullptr;
+    QPushButton *analysis_button = nullptr;
 
 #ifdef QT_MULTIMEDIA_LIB
     QAction *ca;
-    analysis_button = new QToolButton();
-    button_box->addButton(analysis_button, QDialogButtonBox::ActionRole);
-    analysis_button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    analysis_button->setPopupMode(QToolButton::MenuButtonPopup);
-
-    ca = new QAction(tr("&Analyze"), analysis_button);
-    ca->setToolTip(tr("Open the analysis window for the selected stream(s)"));
-    connect(ca, &QAction::triggered, dialog, &RtpBaseDialog::rtpAnalysisReplace);
-    analysis_button->setDefaultAction(ca);
-    // Overrides text striping of shortcut undercode in QAction
-    analysis_button->setText(ca->text());
+    analysis_button = button_box->addButton(tr("&Analyze"), QDialogButtonBox::ActionRole);
+    analysis_button->setToolTip(tr("Open the analysis window for the selected stream(s)"));
 
     QMenu *button_menu = new QMenu(analysis_button);
     button_menu->setToolTipsVisible(true);

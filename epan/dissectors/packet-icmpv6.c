@@ -42,6 +42,7 @@
 
 #include "packet-ber.h"
 #include "packet-dns.h"
+#include "packet-e212.h"
 #include "packet-x509af.h"
 #include "packet-x509if.h"
 #include "packet-icmp.h"    /* same transaction_t used for both v4 and v6 */
@@ -218,6 +219,8 @@ static int hf_icmpv6_opt_reserved;
 static int hf_icmpv6_opt_padding;
 static int hf_icmpv6_opt_rdnss_lifetime;
 static int hf_icmpv6_opt_rdnss;
+static int hf_icmpv6_opt_rdao_lifetime;
+static int hf_icmpv6_opt_rdao_address;
 static int hf_icmpv6_opt_efo;
 static int hf_icmpv6_opt_efo_rsv;
 static int hf_icmpv6_opt_efo_pex;
@@ -1159,6 +1162,7 @@ static const value_string nd_opt_hai_option_code_val[] = {
     { 0, NULL }
 };
 
+#define ND_OPT_MN_OPTION_CODE_IMSI 2
 static const value_string nd_opt_mn_option_code_val[] = {
     { 1, "NAI" },
     { 2, "IMSI" },
@@ -1533,6 +1537,11 @@ static const value_string dnssl_infinity[] = {
 static const value_string rdnss_infinity[] = {
     { 0, "RDNSS address MUST no longer be used" },
     { LIFETIME_INFINITY, "Infinity" },
+    { 0, NULL}
+};
+
+static const value_string rdao_lifetime_vals[] = {
+    { 0, "RD address is not valid anymore" },
     { 0, NULL}
 };
 
@@ -2605,9 +2614,10 @@ static unsigned dissect_icmpv6_nd_opt(tvbuff_t *tvb, unsigned offset, packet_inf
             case ND_OPT_MOBILE_NODE_ID: /* Mobile Node Identifier Option (30) */
             {
                 uint8_t mn_len;
+                uint32_t mn_option_code;
                 int padd_length;
                 /* Option-Code */
-                proto_tree_add_item(icmp6opt_tree, hf_icmpv6_opt_mn_option_code, tvb, opt_offset, 1, ENC_BIG_ENDIAN);
+                proto_tree_add_item_ret_uint(icmp6opt_tree, hf_icmpv6_opt_mn_option_code, tvb, opt_offset, 1, ENC_BIG_ENDIAN, &mn_option_code);
                 opt_offset += 1;
 
                 /* MN Length */
@@ -2616,6 +2626,11 @@ static unsigned dissect_icmpv6_nd_opt(tvbuff_t *tvb, unsigned offset, packet_inf
 
                 /* MN Value */
                 proto_tree_add_item(icmp6opt_tree, hf_icmpv6_opt_mn_value, tvb, opt_offset, mn_len, ENC_NA);
+                if (mn_option_code == ND_OPT_MN_OPTION_CODE_IMSI) {
+                    /* RFC 5271 section 3: an ASCII string of decimal digits */
+                    add_assoc_imsi_item(tvb, pinfo, icmp6opt_tree,
+                                        (const char *)tvb_get_string_enc(pinfo->pool, tvb, opt_offset, mn_len, ENC_ASCII));
+                }
                 opt_offset += mn_len;
 
                 /* Padding... */
@@ -2952,6 +2967,33 @@ static unsigned dissect_icmpv6_nd_opt(tvbuff_t *tvb, unsigned offset, packet_inf
                         break;
                 }
                 opt_offset += 12;
+            }
+            break;
+            case ND_OPT_RESOURCE_DIR_ADDRESS: /* Resource Directory Address Option (41) */
+            {
+                uint32_t lifetime;
+
+                /* RFC 9176: Length is always 3 (24 bytes) */
+                if (opt_len != 24) {
+                    expert_add_info(pinfo, ti_opt_len, &ei_icmpv6_invalid_option_length);
+                    break;
+                }
+
+                /* Reserved */
+                proto_tree_add_item(icmp6opt_tree, hf_icmpv6_opt_reserved, tvb, opt_offset, 2, ENC_NA);
+                opt_offset += 2;
+
+                /* Valid Lifetime */
+                ti_opt = proto_tree_add_item_ret_uint(icmp6opt_tree, hf_icmpv6_opt_rdao_lifetime, tvb, opt_offset, 4, ENC_BIG_ENDIAN, &lifetime);
+                if (lifetime != 0) {
+                    proto_item_append_text(ti_opt, " (%s)", unsigned_time_secs_to_str(pinfo->pool, lifetime));
+                }
+                opt_offset += 4;
+
+                /* RD Address */
+                proto_tree_add_item(icmp6opt_tree, hf_icmpv6_opt_rdao_address, tvb, opt_offset, 16, ENC_NA);
+                proto_item_append_text(ti, " %s", tvb_ip6_to_str(pinfo->pool, tvb, opt_offset));
+                opt_offset += 16;
             }
             break;
             case ND_OPT_ENCRYPTED_DNS: /* Encrypted DNS Option (144) */
@@ -3729,7 +3771,7 @@ dissect_rpl_control(tvbuff_t *tvb, int rpl_offset, packet_info *pinfo _U_, proto
         /* KIM & LVL */
         proto_tree_add_bitmask(icmp6_tree, tvb, rpl_offset, hf_icmpv6_rpl_secure_flag,
                             ett_icmpv6_flag_secure, rpl_secure_flags2, ENC_BIG_ENDIAN);
-        kim = tvb_get_uint8(tvb, rpl_offset) & RPL_SECURE_KIM >> 6;
+        kim = (tvb_get_uint8(tvb, rpl_offset) & RPL_SECURE_KIM) >> 6;
         lvl = tvb_get_uint8(tvb, rpl_offset) & RPL_SECURE_LVL;
         rpl_offset += 1;
 
@@ -4838,7 +4880,7 @@ dissect_icmpv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
             case ICMP6_DST_UNREACH: /* Destination Unreachable (1) */
             case ICMP6_TIME_EXCEEDED: /* Time Exceeded (3) */
             {
-                char orig_datagram_length = tvb_get_uint8(tvb, offset);
+                uint8_t orig_datagram_length = tvb_get_uint8(tvb, offset);
                 if (orig_datagram_length) {
                   /* RFC 4884 Original datagram length */
                   proto_tree_add_item(icmp6_tree, hf_icmpv6_length, tvb, offset, 1, ENC_NA);
@@ -5823,6 +5865,12 @@ proto_register_icmpv6(void)
         { &hf_icmpv6_opt_rdnss,
           { "Recursive DNS Servers", "icmpv6.opt.rdnss", FT_IPv6, BASE_NONE, NULL, 0x0,
             NULL, HFILL }},
+        { &hf_icmpv6_opt_rdao_lifetime,
+          { "Valid Lifetime", "icmpv6.opt.rdao.lifetime", FT_UINT32, BASE_DEC|BASE_SPECIAL_VALS, VALS(rdao_lifetime_vals), 0x0,
+            "Time in seconds that the RD address is valid", HFILL }},
+        { &hf_icmpv6_opt_rdao_address,
+          { "RD Address", "icmpv6.opt.rdao.address", FT_IPv6, BASE_NONE, NULL, 0x0,
+            "IPv6 address of the Resource Directory", HFILL }},
         { &hf_icmpv6_opt_efo,
           { "Flags Expansion Option", "icmpv6.opt.efo", FT_UINT48, BASE_HEX, NULL, 0x0,
             NULL, HFILL }},

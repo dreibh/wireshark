@@ -27,7 +27,6 @@
 
 #include <QClipboard>
 #include <QContextMenuEvent>
-#include <QToolButton>
 
 // To do:
 // - More context menu items
@@ -100,6 +99,7 @@ VoipCallsDialog::VoipCallsDialog(QWidget &parent, CaptureFile &cf, bool all_flow
     prepare_button_ = ui->buttonBox->addButton(ui->actionPrepareFilter->text(), QDialogButtonBox::ActionRole);
     prepare_button_->setToolTip(ui->actionPrepareFilter->toolTip());
     player_button_ = RtpPlayerDialog::addPlayerButton(ui->buttonBox, this);
+    ui->buttonBox->button(QDialogButtonBox::Close)->setDefault(true);
 
     connect (ui->todCheckBox, &QAbstractButton::toggled, this, &VoipCallsDialog::switchTimeOfDay);
 

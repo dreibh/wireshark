@@ -82,6 +82,7 @@ struct _output_fields {
     char          aggregator;
     GPtrArray    *fields;
     GPtrArray    *field_dfilters;
+    header_field_info **field_hfinfos; /* NULL entry for a complex expression */
     GHashTable   *field_indicies;
     GPtrArray   **field_values;
     wmem_map_t   *protocolfilter;
@@ -111,7 +112,7 @@ static void write_specified_fields(fields_format format,
                                    FILE *fh,
                                    json_dumper *dumper);
 static void print_escaped_xml(FILE *fh, const char *unescaped_string);
-static void print_escaped_csv(FILE *fh, const char *unescaped_string, char delimiter, char quote_char, bool escape_wsp, bool escape_formulas);
+static void append_escaped_csv(wmem_strbuf_t *buf, const char *unescaped_string, char delimiter, char quote_char, bool escape_wsp, bool escape_formulas);
 
 typedef void (*proto_node_value_writer)(proto_node *, write_json_data *);
 static void write_json_index(json_dumper *dumper, epan_dissect_t *edt);
@@ -2101,11 +2102,11 @@ print_escaped_xml(FILE *fh, const char *unescaped_string)
 }
 
 static void
-print_escaped_csv(FILE *fh, const char *unescaped_string, char delimiter, char quote_char, bool escape_wsp, bool escape_formulas)
+append_escaped_csv(wmem_strbuf_t *buf, const char *unescaped_string, char delimiter, char quote_char, bool escape_wsp, bool escape_formulas)
 {
     char *formula_string = NULL;
 
-    if (fh == NULL || unescaped_string == NULL) {
+    if (buf == NULL || unescaped_string == NULL) {
         return;
     }
 
@@ -2126,7 +2127,7 @@ print_escaped_csv(FILE *fh, const char *unescaped_string, char delimiter, char q
     } else {
         escaped_string = ws_escape_csv(NULL, unescaped_string, true, quote_char, true, escape_wsp);
     }
-    fputs(escaped_string, fh);
+    wmem_strbuf_append(buf, escaped_string);
     wmem_free(NULL, escaped_string);
     g_free(formula_string);
 }
@@ -2346,6 +2347,8 @@ void output_fields_free(output_fields_t* fields)
         if (NULL != fields->field_dfilters) {
             g_ptr_array_unref(fields->field_dfilters);
         }
+
+        g_free(fields->field_hfinfos);
 
         if (NULL != fields->field_values) {
             g_free(fields->field_values);
@@ -2614,15 +2617,8 @@ bool output_fields_has_cols(output_fields_t* fields)
 }
 
 static void
-output_field_prime_edt(void *data, void *user_data)
+output_field_prime_edt(header_field_info *hfinfo, epan_dissect_t *edt)
 {
-    char *field = (char *)data;
-    epan_dissect_t *edt = (epan_dissect_t*)user_data;
-
-    /* Find a hf. Note in tshark we already converted the protocol from
-     * its alias, if any.
-     */
-    header_field_info *hfinfo = proto_registrar_get_byname(field);
     if (hfinfo) {
         /* Rewind to the first hf of that name. */
         while (hfinfo->same_name_prev_id != -1) {
@@ -2659,23 +2655,33 @@ dfilter_free_cb(void *data)
 void output_fields_prime_edt(epan_dissect_t *edt, output_fields_t* fields)
 {
     if (fields->fields != NULL) {
-        g_ptr_array_foreach(fields->fields, output_field_prime_edt, edt);
-
         if (fields->field_dfilters == NULL) {
             fields->field_dfilters = g_ptr_array_new_full(fields->fields->len, dfilter_free_cb);
+            fields->field_hfinfos = g_new0(header_field_info *, fields->fields->len);
 
             for (size_t i = 0; i < fields->fields->len; ++i) {
                 char *field = (char *)g_ptr_array_index(fields->fields, i);
                 dfilter_t *dfilter = NULL;
 
+                /* Find a hf. Note in tshark we already converted the
+                 * protocol from its alias, if any. Look it up once here,
+                 * not for every packet: the lookup hashes the name, and
+                 * with many fields that can cost more than the dissection.
+                 */
+                fields->field_hfinfos[i] = proto_registrar_get_byname(field);
+
                 /* For now, we only compile a filter for complex expressions.
                  * If it's just a field name, use the previous method.
                  */
-                if (!proto_registrar_get_byname(field)) {
+                if (!fields->field_hfinfos[i]) {
                     dfilter_compile_full(field, &dfilter, NULL, DF_EXPAND_MACROS|DF_OPTIMIZE|DF_RETURN_VALUES, __func__);
                 }
                 g_ptr_array_add(fields->field_dfilters, dfilter);
             }
+        }
+
+        for (size_t i = 0; i < fields->fields->len; ++i) {
+            output_field_prime_edt(fields->field_hfinfos[i], edt);
         }
 
         g_ptr_array_foreach(fields->field_dfilters, output_field_dfilter_prime_edt, edt);
@@ -2876,9 +2882,12 @@ static void proto_tree_get_node_field_values_split(proto_node *node, void *data)
 static void output_csv_row(output_fields_t *fields, GPtrArray **bucket,
                            GPtrArray **global_values, FILE *fh)
 {
+    /* Build the row, then write it with one call. See write_specified_fields(). */
+    wmem_strbuf_t *line = wmem_strbuf_new_sized(NULL, fields->fields->len);
+
     for (unsigned i = 0; i < fields->fields->len; ++i) {
         if (0 != i) {
-            fputc(fields->separator, fh);
+            wmem_strbuf_append_c(line, fields->separator);
         }
         /* Use instance-specific value if present, else global */
         GPtrArray *fv_p = bucket ? bucket[i] : NULL;
@@ -2890,10 +2899,12 @@ static void output_csv_row(output_fields_t *fields, GPtrArray **bucket,
                 wmem_strbuf_append_c(buf, fields->aggregator);
                 wmem_strbuf_append(buf, (char *)g_ptr_array_index(fv_p, j));
             }
-            print_escaped_csv(fh, wmem_strbuf_get_str(buf), fields->separator, fields->quote, fields->escape, fields->escape_formulas);
+            append_escaped_csv(line, wmem_strbuf_get_str(buf), fields->separator, fields->quote, fields->escape, fields->escape_formulas);
             wmem_strbuf_destroy(buf);
         }
     }
+    fwrite(wmem_strbuf_get_str(line), 1, wmem_strbuf_get_len(line), fh);
+    wmem_strbuf_destroy(line);
 }
 
 /* Write fields in split mode: one CSV row per message instance */
@@ -3038,9 +3049,16 @@ static void write_specified_fields(fields_format format, output_fields_t *fields
 
     switch (format) {
     case FORMAT_CSV:
+    {
+        /* Build the row, then write it with one call. Each stdio call
+         * locks the stream, and with many fields a call per separator
+         * and value can cost more than formatting the values.
+         */
+        wmem_strbuf_t *line = wmem_strbuf_new_sized(NULL, fields->fields->len);
+
         for(i = 0; i < fields->fields->len; ++i) {
             if (0 != i) {
-                fputc(fields->separator, fh);
+                wmem_strbuf_append_c(line, fields->separator);
             }
             if (NULL != fields->field_values[i]) {
                 GPtrArray *fv_p;
@@ -3054,14 +3072,17 @@ static void write_specified_fields(fields_format format, output_fields_t *fields
                         wmem_strbuf_append_c(buf, fields->aggregator);
                         wmem_strbuf_append(buf, (char *)g_ptr_array_index(fv_p, j));
                     }
-                    print_escaped_csv(fh, wmem_strbuf_get_str(buf), fields->separator, fields->quote, fields->escape, fields->escape_formulas);
+                    append_escaped_csv(line, wmem_strbuf_get_str(buf), fields->separator, fields->quote, fields->escape, fields->escape_formulas);
                     wmem_strbuf_destroy(buf);
                 }
                 g_ptr_array_free(fv_p, true);  /* get ready for the next packet */
                 fields->field_values[i] = NULL;
             }
         }
+        fwrite(wmem_strbuf_get_str(line), 1, wmem_strbuf_get_len(line), fh);
+        wmem_strbuf_destroy(line);
         break;
+    }
     case FORMAT_XML:
         for(i = 0; i < fields->fields->len; ++i) {
             char *field = (char *)g_ptr_array_index(fields->fields, i);
@@ -3287,6 +3308,7 @@ output_fields_t* output_fields_new(void)
     fields->aggregator          = ',';
     fields->fields              = NULL; /*Do lazy initialisation */
     fields->field_dfilters      = NULL;
+    fields->field_hfinfos       = NULL;
     fields->field_indicies      = NULL;
     fields->field_values        = NULL;
     fields->protocolfilter      = NULL;

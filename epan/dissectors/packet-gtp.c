@@ -2626,96 +2626,79 @@ gtp_info_deint_equal(const void *key1, const void *key2)
 }
 
 /* GTP Session funcs*/
+
+/* Frames whose response was not accepted. Their <teid,ip> mappings stay in
+ * frame_map but no longer count, which is much faster than going through the
+ * whole map to remove them.
+ */
+static wmem_map_t* rejected_frames;
+
+/* frame, or 0 if its mappings in map no longer count */
+static uint32_t
+counted_frame(const wmem_map_t *map, uint32_t frame) {
+    if (frame && map == frame_map && wmem_map_contains(rejected_frames, GUINT_TO_POINTER(frame))) {
+        return 0;
+    }
+    return frame;
+}
+
+/* The frame that key maps to in map, or 0 */
+static uint32_t
+lookup_frame(wmem_map_t *map, const void *key) {
+    return counted_frame(map, GPOINTER_TO_UINT(wmem_map_lookup(map, key)));
+}
+
 uint32_t
 get_frame(address ip, uint32_t teid, uint32_t *frame) {
     gtp_info_t info;
-    uint32_t *value;
+    uint32_t value;
 
     info.teid = teid;
     copy_address_shallow(&info.addr, &ip);
-    value = wmem_map_lookup(frame_map, &info);
-    if (value != NULL) {
-        *frame = GPOINTER_TO_UINT(value);
+    value = lookup_frame(frame_map, &info);
+    if (value) {
+        *frame = value;
         return 1;
     }
     return 0;
 }
 
 uint32_t
-get_gtp_session_frame(address ip, uint32_t teid, uint32_t convid, uint32_t *frame, bool ignore_conv) {
-    uint32_t *value;
-
+get_gtp_session_frame(address ip, uint32_t teid, uint32_t convid, uint32_t *frame) {
     gtp_info_deint_t info;
+    uint32_t value;
+
     info.teid = teid;
     info.convid = convid;
     copy_address_shallow(&info.addr, &ip);
-
-    /*
-     * When not ignoring the IP conversation (deinterlacing is enabled),
-     * look for the exact element matching all properties <teid,convid,addr>
-     */
-    if(!ignore_conv) {
-        value = wmem_map_lookup(frame_map_deint, &info);
-        if (value != NULL) {
-            *frame = GPOINTER_TO_UINT(value);
-            return 1;
-        }
-        return 0;
+    value = lookup_frame(frame_map_deint, &info);
+    if (value) {
+        *frame = value;
+        return 1;
     }
-
-    /*
-     * Otherwise, look for an element matching only properties : <teid,addr>,
-     * as the get_frame() would do with its own Map.
-     * For this, parse the Map until any element looks good.
-     */
-    else {
-        wmem_list_t *frame_map_keys = wmem_map_get_keys(NULL, frame_map_deint);
-        for (wmem_list_frame_t *cur_frame = wmem_list_head(frame_map_keys); cur_frame; cur_frame = wmem_list_frame_next(cur_frame)) {
-            gtp_info_deint_t *comp_info = (gtp_info_deint_t *)wmem_list_frame_data(cur_frame);
-            if(comp_info) {
-
-                /* teid and addr are matching */
-                if( (info.teid == comp_info->teid) && (cmp_address(&info.addr, &comp_info->addr) == 0) ) {
-
-                    gtp_info_deint_t ginfod;
-                    ginfod.teid = teid;
-                    ginfod.convid = comp_info->convid;
-                    copy_address_shallow(&ginfod.addr, &ip);
-
-                    value = wmem_map_lookup(frame_map_deint, &ginfod);
-                    if (value != NULL) {
-                        *frame = GPOINTER_TO_UINT(value);
-                        return 1;
-                    }
-
-                    /* very unlikely, but keep it safe */
-                    wmem_destroy_list(frame_map_keys);
-                    return 0;
-                }
-            }
-        }
-        wmem_destroy_list(frame_map_keys);
-    }
-
     return 0;
-}
-
-static gboolean
-frame_equal(void *key _U_, void *value, void *data){
-    uint32_t frame = GPOINTER_TO_UINT(data);
-
-    return (GPOINTER_TO_UINT(value) == frame);
 }
 
 void
 remove_frame_info(uint32_t f) {
-    /* XXX: This iterates through the entire map and it is slow if done
-     * often. For large files with lots of removals, there are better
-     * alternatives, e.g. marking sessions as expired and then periodically
-     * removing all expired sessions from the map, or using a bijective
-     * map to coordinate removals.
-     */
-    wmem_map_foreach_remove(frame_map, frame_equal, GUINT_TO_POINTER(f));
+    wmem_map_insert(rejected_frames, GUINT_TO_POINTER(f), GUINT_TO_POINTER(1));
+}
+
+void
+remove_frame_info_lists(wmem_list_t *teid_list, wmem_list_t *ip_list, uint32_t frame) {
+    wmem_list_frame_t *elem_ip, *elem_teid;
+    gtp_info_t info;
+
+    for (elem_ip = wmem_list_head(ip_list); elem_ip; elem_ip = wmem_list_frame_next(elem_ip)) {
+        copy_address_shallow(&info.addr, (address*)wmem_list_frame_data(elem_ip));
+        for (elem_teid = wmem_list_head(teid_list); elem_teid; elem_teid = wmem_list_frame_next(elem_teid)) {
+            info.teid = *(uint32_t*)wmem_list_frame_data(elem_teid);
+            /* Unless a later message took the mapping */
+            if (GPOINTER_TO_UINT(wmem_map_lookup(frame_map, &info)) == frame) {
+                wmem_map_remove(frame_map, &info);
+            }
+        }
+    }
 }
 
 void
@@ -2755,34 +2738,73 @@ ip_exists(address ip, wmem_list_t *ip_list) {
 }
 
 
-/* wmem_map_foreach() callback used in fill_map() */
-static void
-remove_session_from_table(void *key, void *val, void *userdata) {
-    unsigned fr = GPOINTER_TO_UINT(key);
-    unsigned session = GPOINTER_TO_UINT(val);
-    unsigned remove_session = GPOINTER_TO_UINT(userdata);
+/* A <teid,ip> mapping that fill_map() replaced */
+typedef struct {
+    const void *key;    /* gtp_info_t or gtp_info_deint_t of the map */
+    bool deint;         /* key of frame_map_deint, not of frame_map */
+    uint32_t frame;     /* frame that the key mapped to */
+} gtp_replaced_info_t;
 
-    /* If it's the session we are looking for, we remove all the frame information */
-    if (session == remove_session) {
-        remove_frame_info(fr);
+/* A copy in file scope of a key of frame_map or frame_map_deint */
+static const void *
+copy_frame_info_key(const void *key, bool deint) {
+    if (deint) {
+        const gtp_info_deint_t *k = (const gtp_info_deint_t *)key;
+        gtp_info_deint_t *copy = wmem_new0(wmem_file_scope(), gtp_info_deint_t);
+
+        copy->teid = k->teid;
+        copy->convid = k->convid;
+        copy_address_wmem(wmem_file_scope(), &copy->addr, &k->addr);
+        return copy;
+    } else {
+        const gtp_info_t *k = (const gtp_info_t *)key;
+        gtp_info_t *copy = wmem_new0(wmem_file_scope(), gtp_info_t);
+
+        copy->teid = k->teid;
+        copy_address_wmem(wmem_file_scope(), &copy->addr, &k->addr);
+        return copy;
     }
 }
 
+/* Insert key -> frame into map. The key of the map is used if it has one,
+ * so that only a new key is copied. If the key was mapped to another frame,
+ * add that mapping (allocated in scope) to replaced_list, so that
+ * restore_frame_info() can put it back.
+ */
+static void
+insert_frame_info(wmem_map_t *map, const void *key, bool deint, uint32_t frame, wmem_allocator_t *scope, wmem_list_t *replaced_list) {
+    const void *map_key;
+    void *value;
+    uint32_t old_frame = 0;
+
+    if (wmem_map_lookup_extended(map, key, &map_key, &value)) {
+        old_frame = counted_frame(map, GPOINTER_TO_UINT(value));
+    } else {
+        map_key = copy_frame_info_key(key, deint);
+    }
+
+    if (old_frame && old_frame != frame && replaced_list) {
+        gtp_replaced_info_t *replaced = wmem_new(scope, gtp_replaced_info_t);
+        replaced->key = map_key;
+        replaced->deint = deint;
+        replaced->frame = old_frame;
+        wmem_list_append(replaced_list, replaced);
+    }
+    wmem_map_insert(map, map_key, GUINT_TO_POINTER(frame));
+}
+
 void
-fill_map(wmem_list_t *teid_list, wmem_list_t *ip_list, uint32_t frame, uint32_t convid, bool ignore_conv) {
+fill_map(wmem_list_t *teid_list, wmem_list_t *ip_list, uint32_t frame, uint32_t convid, bool ignore_conv, wmem_allocator_t *scope, wmem_list_t *replaced_list) {
     wmem_list_frame_t *elem_ip, *elem_teid;
-    gtp_info_t *gtp_info;
-    gtp_info_deint_t *gtp_infod;
-    uint32_t teid, session;
+    gtp_info_t info;
+    gtp_info_deint_t infod;
+    uint32_t teid;
     address *ip;
 
     /* XXX: This adds all combinations of addresses and TEIDs. It
      * should only add matching pairs for a F-TEID, though this is
      * difficult to determine for GTPv1 (especially if the check_etsi
-     * preference is off) unlike with GTPv2.
-     * It also should not add anything that uses the reserved TEID
-     * (0), such as happens in GTPv2 on S11/S4 interfaces for the
-     * PGW S5/S8 TEID on initial attach, etc.
+     * preference is off) unlike with GTPv2, which uses fill_map_fteids().
      */
     elem_ip = wmem_list_head(ip_list);
     while (elem_ip) {
@@ -2792,44 +2814,82 @@ fill_map(wmem_list_t *teid_list, wmem_list_t *ip_list, uint32_t frame, uint32_t 
         while (elem_teid) {
             teid = *(uint32_t*)wmem_list_frame_data(elem_teid);
             if(!ignore_conv) {  // deinterlacing was asked
-
-                gtp_infod = wmem_new0(wmem_file_scope(), gtp_info_deint_t);
-                gtp_infod->teid = teid;
-                gtp_infod->convid = convid;
-                copy_address_wmem(wmem_file_scope(), &gtp_infod->addr, ip);
-                if (wmem_map_lookup(frame_map_deint, gtp_infod)) {
-                    /* If the teid and ip already maps to a session, that means
-                     * that we need to remove old info about that session */
-                    /* We look for its session ID */
-                    session = GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(frame)));
-                    if (session) {
-                        /* If the msg has the same session ID and it's not the upd req we have to remove its info */
-                        wmem_map_foreach(session_table, remove_session_from_table, GUINT_TO_POINTER(session));
-                    }
-                }
-                wmem_map_insert(frame_map_deint, gtp_infod, GUINT_TO_POINTER(frame));
-
+                infod.teid = teid;
+                infod.convid = convid;
+                copy_address_shallow(&infod.addr, ip);
+                insert_frame_info(frame_map_deint, &infod, true, frame, scope, replaced_list);
             }
             else {
-                gtp_info = wmem_new0(wmem_file_scope(), gtp_info_t);
-                gtp_info->teid = teid;
-                copy_address_wmem(wmem_file_scope(), &gtp_info->addr, ip);
-                if (wmem_map_lookup(frame_map, gtp_info)) {
-                    /* If the teid and ip already maps to a session, that means
-                     * that we need to remove old info about that session */
-                    /* We look for its session ID */
-                    session = GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(frame)));
-                    if (session) {
-                        /* If the msg has the same session ID and it's not the upd req we have to remove its info */
-                        wmem_map_foreach(session_table, remove_session_from_table, GUINT_TO_POINTER(session));
-                    }
-                }
-                wmem_map_insert(frame_map, gtp_info, GUINT_TO_POINTER(frame));
+                info.teid = teid;
+                copy_address_shallow(&info.addr, ip);
+                insert_frame_info(frame_map, &info, false, frame, scope, replaced_list);
             }
 
             elem_teid = wmem_list_frame_next(elem_teid);
         }
         elem_ip = wmem_list_frame_next(elem_ip);
+    }
+}
+
+void
+fill_map_fteids(wmem_list_t *fteid_list, uint32_t frame, uint32_t convid, bool ignore_conv, wmem_allocator_t *scope, wmem_list_t *replaced_list) {
+    wmem_list_frame_t *elem;
+    gtp_info_t info;
+    gtp_info_deint_t infod;
+
+    for (elem = wmem_list_head(fteid_list); elem; elem = wmem_list_frame_next(elem)) {
+        const gtp_fteid_t *fteid = (const gtp_fteid_t *)wmem_list_frame_data(elem);
+
+        if (!ignore_conv) {  // deinterlacing was asked
+            infod.teid = fteid->teid;
+            infod.convid = convid;
+            copy_address_shallow(&infod.addr, &fteid->addr);
+            insert_frame_info(frame_map_deint, &infod, true, frame, scope, replaced_list);
+        } else {
+            info.teid = fteid->teid;
+            copy_address_shallow(&info.addr, &fteid->addr);
+            insert_frame_info(frame_map, &info, false, frame, scope, replaced_list);
+        }
+    }
+}
+
+void
+remove_frame_info_fteids(wmem_list_t *fteid_list, uint32_t frame) {
+    wmem_list_frame_t *elem;
+    gtp_info_t info;
+
+    for (elem = wmem_list_head(fteid_list); elem; elem = wmem_list_frame_next(elem)) {
+        const gtp_fteid_t *fteid = (const gtp_fteid_t *)wmem_list_frame_data(elem);
+
+        info.teid = fteid->teid;
+        copy_address_shallow(&info.addr, &fteid->addr);
+        /* Unless a later message took the mapping */
+        if (GPOINTER_TO_UINT(wmem_map_lookup(frame_map, &info)) == frame) {
+            wmem_map_remove(frame_map, &info);
+        }
+    }
+}
+
+void
+restore_frame_info(uint32_t frame, wmem_list_t *replaced_list) {
+    wmem_list_frame_t *elem;
+
+    if (!replaced_list || GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(frame)))) {
+        return;
+    }
+    for (elem = wmem_list_head(replaced_list); elem; elem = wmem_list_frame_next(elem)) {
+        gtp_replaced_info_t *replaced = (gtp_replaced_info_t *)wmem_list_frame_data(elem);
+        wmem_map_t *map = replaced->deint ? frame_map_deint : frame_map;
+        uint32_t cur_frame;
+
+        if (!GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(replaced->frame)))) {
+            continue;
+        }
+        /* Unless another message took the mapping since, e.g. a piggybacked one */
+        cur_frame = lookup_frame(map, replaced->key);
+        if (!cur_frame || cur_frame == frame) {
+            wmem_map_insert(map, replaced->key, GUINT_TO_POINTER(replaced->frame));
+        }
     }
 }
 
@@ -2851,7 +2911,7 @@ void
 gtp_add_teid_imsi(uint32_t teid, const char* imsi)
 {
     if(g_gtp_session) {
-        wmem_map_insert(teid_imsi, GUINT_TO_POINTER(teid), wmem_strdup(wmem_epan_scope(), imsi));
+        wmem_map_insert(teid_imsi, GUINT_TO_POINTER(teid), wmem_strdup(wmem_file_scope(), imsi));
     }
 }
 
@@ -5420,7 +5480,7 @@ decode_gtp_user_addr(tvbuff_t * tvb, unsigned offset, packet_info * pinfo _U_, p
                 proto_tree_add_ipv6_format_value(ext_tree_user, hf_gtp_user_ipv6, tvb, offset + 9, 0, &ipv6, "dynamic");
                 proto_item_append_text(te, " : %s / dynamic", tvb_ip_to_str(pinfo->pool, tvb, offset + 5));
             } else if (length == 18) {
-                proto_tree_add_ipv4_format_value(ext_tree_user, hf_gtp_user_ipv6, tvb, offset + 5, 0, 0, "dynamic");
+                proto_tree_add_ipv4_format_value(ext_tree_user, hf_gtp_user_ipv4, tvb, offset + 5, 0, 0, "dynamic");
                 proto_tree_add_item(ext_tree_user, hf_gtp_user_ipv6, tvb, offset + 5, 16, ENC_NA);
                 proto_item_append_text(te, " : dynamic / %s", tvb_ip6_to_str(pinfo->pool, tvb, offset + 5));
             } else if (length == 22) {
@@ -5477,8 +5537,7 @@ decode_quintuplet(tvbuff_t * tvb, unsigned offset, proto_tree * tree, uint16_t c
 
         proto_tree_add_item(ext_tree_quint, hf_gtp_rand, tvb, offset + q_offset, 16, ENC_NA);
         q_offset = q_offset + 16;
-        xres_len = tvb_get_uint8(tvb, offset + q_offset);
-        proto_tree_add_item(ext_tree_quint, hf_gtp_xres_length, tvb, offset + q_offset, 1, ENC_BIG_ENDIAN);
+        proto_tree_add_item_ret_uint8(ext_tree_quint, hf_gtp_xres_length, tvb, offset + q_offset, 1, ENC_BIG_ENDIAN, &xres_len);
         q_offset++;
         proto_tree_add_item(ext_tree_quint, hf_gtp_xres, tvb, offset + q_offset, xres_len, ENC_NA);
         q_offset = q_offset + xres_len;
@@ -5486,8 +5545,7 @@ decode_quintuplet(tvbuff_t * tvb, unsigned offset, proto_tree * tree, uint16_t c
         q_offset = q_offset + 16;
         proto_tree_add_item(ext_tree_quint, hf_gtp_quintuplet_integrity_key, tvb, offset + q_offset, 16, ENC_NA);
         q_offset = q_offset + 16;
-        auth_len = tvb_get_uint8(tvb, offset + q_offset);
-        proto_tree_add_item(ext_tree_quint, hf_gtp_authentication_length, tvb, offset + q_offset, 1, ENC_BIG_ENDIAN);
+        proto_tree_add_item_ret_uint8(ext_tree_quint, hf_gtp_authentication_length, tvb, offset + q_offset, 1, ENC_BIG_ENDIAN, &auth_len);
         q_offset++;
         proto_tree_add_item(ext_tree_quint, hf_gtp_auth, tvb, offset + q_offset, auth_len, ENC_NA);
 
@@ -5624,8 +5682,7 @@ decode_gtp_mm_cntxt(tvbuff_t * tvb, unsigned offset, packet_info * pinfo, proto_
  * document for the used IEI in the MMcontext.
  */
 
-    con_len = tvb_get_ntohs(tvb, offset);
-    proto_tree_add_item(ext_tree_mm, hf_gtp_container_length, tvb, offset, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint16(ext_tree_mm, hf_gtp_container_length, tvb, offset, 2, ENC_BIG_ENDIAN, &con_len);
     offset = offset + 2;
 
     if (con_len > 0) {
@@ -6381,8 +6438,7 @@ decode_gtp_pdp_cntxt(tvbuff_t * tvb, unsigned offset, packet_info * pinfo, proto
 
     offset = offset + 3 + pdp_addr_len;
 
-    ggsn_addr_len = tvb_get_uint8(tvb, offset);
-    proto_tree_add_item(ext_tree_pdp, hf_gtp_ggsn_address_length, tvb, offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint8(ext_tree_pdp, hf_gtp_ggsn_address_length, tvb, offset, 1, ENC_BIG_ENDIAN, &ggsn_addr_len);
 
     switch (ggsn_addr_len) {
     case 4:
@@ -6399,8 +6455,7 @@ decode_gtp_pdp_cntxt(tvbuff_t * tvb, unsigned offset, packet_info * pinfo, proto
 
     if (gtp_version == 1) {
 
-        ggsn_addr_len = tvb_get_uint8(tvb, offset);
-        proto_tree_add_item(ext_tree_pdp, hf_gtp_ggsn_address_length, tvb, offset, 1, ENC_BIG_ENDIAN);
+        proto_tree_add_item_ret_uint8(ext_tree_pdp, hf_gtp_ggsn_address_length, tvb, offset, 1, ENC_BIG_ENDIAN, &ggsn_addr_len);
 
         switch (ggsn_addr_len) {
         case 4:
@@ -6548,7 +6603,7 @@ decode_gtp_gsn_addr_common(tvbuff_t * tvb, unsigned offset, packet_info * pinfo,
         if (hf_ipv4 != hf_gtp_gsn_ipv4)
             proto_item_set_hidden(proto_tree_add_item(ext_tree_gsn_addr, hf_gtp_gsn_ipv4, tvb, offset + 4, 4, ENC_BIG_ENDIAN));
         proto_item_append_text(te, "%s", tvb_ip_to_str(pinfo->pool, tvb, offset + 4));
-        set_address_tvb(gsn_address, AT_IPv6, 16, tvb, offset + 4);
+        set_address_tvb(gsn_address, AT_IPv4, 4, tvb, offset + 4);
         break;
     case 16:
         proto_tree_add_item(ext_tree_gsn_addr, hf_gtp_gsn_address_length, tvb, offset + 1, 2, ENC_BIG_ENDIAN);
@@ -6556,7 +6611,7 @@ decode_gtp_gsn_addr_common(tvbuff_t * tvb, unsigned offset, packet_info * pinfo,
         if (hf_ipv6 != hf_gtp_gsn_ipv6)
             proto_item_set_hidden(proto_tree_add_item(ext_tree_gsn_addr, hf_gtp_gsn_ipv6, tvb, offset + 3, 16, ENC_NA));
         proto_item_append_text(te, "%s", tvb_ip6_to_str(pinfo->pool, tvb, offset + 3));
-        set_address_tvb(gsn_address, AT_IPv4, 4, tvb, offset + 3);
+        set_address_tvb(gsn_address, AT_IPv6, 16, tvb, offset + 3);
         break;
     case 17:
         proto_tree_add_item(ext_tree_gsn_addr, hf_gtp_gsn_address_information_element_length, tvb, offset + 1, 2, ENC_BIG_ENDIAN);
@@ -6678,8 +6733,7 @@ decode_gtp_auth_qui(tvbuff_t * tvb, unsigned offset, packet_info * pinfo _U_, pr
 
     proto_tree_add_item(ext_tree, hf_gtp_rand, tvb, offset, 16, ENC_NA);
     offset = offset + 16;
-    xres_len = tvb_get_uint8(tvb, offset);
-    proto_tree_add_item(ext_tree, hf_gtp_xres_length, tvb, offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint8(ext_tree, hf_gtp_xres_length, tvb, offset, 1, ENC_BIG_ENDIAN, &xres_len);
     offset++;
     proto_tree_add_item(ext_tree, hf_gtp_xres, tvb, offset, xres_len, ENC_NA);
     offset = offset + xres_len;
@@ -6687,8 +6741,7 @@ decode_gtp_auth_qui(tvbuff_t * tvb, unsigned offset, packet_info * pinfo _U_, pr
     offset = offset + 16;
     proto_tree_add_item(ext_tree, hf_gtp_quintuplet_integrity_key, tvb, offset, 16, ENC_NA);
     offset = offset + 16;
-    auth_len = tvb_get_uint8(tvb, offset);
-    proto_tree_add_item(ext_tree, hf_gtp_authentication_length, tvb, offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint8(ext_tree, hf_gtp_authentication_length, tvb, offset, 1, ENC_BIG_ENDIAN, &auth_len);
     offset++;
     proto_tree_add_item(ext_tree, hf_gtp_auth, tvb, offset, auth_len, ENC_NA);
 
@@ -7708,7 +7761,7 @@ decode_gtp_mbms_sa(tvbuff_t * tvb, unsigned offset, packet_info * pinfo, proto_t
     offset++;
     proto_tree_add_item(ext_tree, hf_gtp_ext_length, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset = offset + 2;
-    next_tvb = tvb_new_subset_length(tvb, offset, length-3);
+    next_tvb = tvb_new_subset_length(tvb, offset, length);
     dissect_gtp_3gpp_mbms_service_area(next_tvb, pinfo, ext_tree, NULL);
 
     return 3 + length;
@@ -9903,7 +9956,7 @@ decode_gtp_data_req(tvbuff_t * tvb, unsigned offset, packet_info * pinfo, proto_
 
             offset = offset + cdr_length;
         }
-        return offset;
+        return 3 + length;
 
     } else {
         /* Proprietary CDR format */
@@ -10059,23 +10112,6 @@ track_gtp_session(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, gtp_hd
         /* If the message does not have any session ID */
         session = GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(pinfo->num)));
         if (!session) {
-            /* If the message is not a CPDPCRES, CPDPCREQ, UPDPREQ, UPDPRES
-             * then we remove its information from teid and ip lists
-             * XXX: Wouldn't it be better not to insert this information
-             * in the first place for other message types, instead of
-             * inserting it and then immediately removing it?
-             * At the very least, it would be faster to iterate through the
-             * teid_list and ip_list and remove via keys rather than doing
-             * removal through a reverse lookup.
-             */
-            if ((gtp_hdr->message != GTP_MSG_CREATE_PDP_RESP && gtp_hdr->message != GTP_MSG_CREATE_PDP_REQ && gtp_hdr->message != GTP_MSG_UPDATE_PDP_RESP
-                && gtp_hdr->message != GTP_MSG_UPDATE_PDP_REQ)) {
-                /* If the lists are not empty*/
-                if (wmem_list_count(args->teid_list) && wmem_list_count(args->ip_list)) {
-                    remove_frame_info(pinfo->num);
-                }
-            }
-
             if (gtp_hdr->message == GTP_MSG_CREATE_PDP_REQ) {
                 /* If CPDPCREQ and not already in the list then we create a new session*/
                 add_gtp_session(pinfo->num, gtp_session_count);
@@ -10089,66 +10125,32 @@ track_gtp_session(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, gtp_hd
             } else if (gtp_hdr->message != GTP_MSG_CREATE_PDP_RESP) {
                 /* If this is an error indication then we have to check the session id that belongs to the message with the same data teid and ip */
                 if (gtp_hdr->message == GTP_MSG_ERR_IND) {
-                    if (is_deinterlacing_supported(pinfo)) {
-                        if (get_gtp_session_frame(args->last_ip, args->last_teid, 0, &frame_teid_cp, 1) == 1) {
-                            session = GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(frame_teid_cp)));
-                            if (session) {
-                                /* We add the corresponding session to the session list*/
-                                add_gtp_session(pinfo->num, session);
+                    if (get_frame(args->last_ip, args->last_teid, &frame_teid_cp) == 1) {
+                        session = GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(frame_teid_cp)));
+                        if (session) {
+                            /* We add the corresponding session to the session list*/
+                            add_gtp_session(pinfo->num, session);
 
-                                if (args->imsi) {
-                                    imsi = wmem_strdup(wmem_file_scope(), args->imsi);
-                                    wmem_map_insert(session_imsi, GUINT_TO_POINTER(session), imsi);
-                                }
+                            if (args->imsi) {
+                                imsi = wmem_strdup(wmem_file_scope(), args->imsi);
+                                wmem_map_insert(session_imsi, GUINT_TO_POINTER(session), imsi);
                             }
                         }
-                    }
-                    else {
-                        if (get_frame(args->last_ip, args->last_teid, &frame_teid_cp) == 1) {
-                            session = GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(frame_teid_cp)));
-                            if (session) {
-                                /* We add the corresponding session to the session list*/
-                                add_gtp_session(pinfo->num, session);
-
-                                if (args->imsi) {
-                                    imsi = wmem_strdup(wmem_file_scope(), args->imsi);
-                                    wmem_map_insert(session_imsi, GUINT_TO_POINTER(session), imsi);
-                                }
-                            }
-                        }
-
                     }
                 }
                 else {
                     /* We have to check if its teid == teid_cp and ip.dst == gsn_ipv4 from the lists, if that is the case then we have to assign
                     the corresponding session ID */
-                    if(is_deinterlacing_supported(pinfo)) {
-                        if ((get_gtp_session_frame(pinfo->dst, (uint32_t)gtp_hdr->teid, 0, &frame_teid_cp, 1) == 1)) {
-                            /* Then we have to set its session ID */
-                            session = GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(frame_teid_cp)));
-                            if (session) {
-                                /* We add the corresponding session to the list so that when a response came we can associate its session ID*/
-                                add_gtp_session(pinfo->num, session);
+                    if ((get_frame(pinfo->dst, (uint32_t)gtp_hdr->teid, &frame_teid_cp) == 1)) {
+                        /* Then we have to set its session ID */
+                        session = GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(frame_teid_cp)));
+                        if (session) {
+                            /* We add the corresponding session to the list so that when a response came we can associate its session ID*/
+                            add_gtp_session(pinfo->num, session);
 
-                                if (args->imsi) {
-                                    imsi = wmem_strdup(wmem_file_scope(), args->imsi);
-                                    wmem_map_insert(session_imsi, GUINT_TO_POINTER(session), imsi);
-                                }
-                            }
-                        }
-                    }
-                    else {
-                        if ((get_frame(pinfo->dst, (uint32_t)gtp_hdr->teid, &frame_teid_cp) == 1)) {
-                            /* Then we have to set its session ID */
-                            session = GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(frame_teid_cp)));
-                            if (session) {
-                                /* We add the corresponding session to the list so that when a response came we can associate its session ID*/
-                                add_gtp_session(pinfo->num, session);
-
-                                if (args->imsi) {
-                                    imsi = wmem_strdup(wmem_file_scope(), args->imsi);
-                                    wmem_map_insert(session_imsi, GUINT_TO_POINTER(session), imsi);
-                                }
+                            if (args->imsi) {
+                                imsi = wmem_strdup(wmem_file_scope(), args->imsi);
+                                wmem_map_insert(session_imsi, GUINT_TO_POINTER(session), imsi);
                             }
                         }
                     }
@@ -10157,22 +10159,32 @@ track_gtp_session(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, gtp_hd
         }
     }
 
-    if (tree) {
-        session = GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(pinfo->num)));
-        if (session) {
-            it = proto_tree_add_uint(tree, hf_gtp_session, tvb, 0, 0, session);
-            proto_item_set_generated(it);
-
-            imsi = wmem_map_lookup(session_imsi, GUINT_TO_POINTER(session));
-            if (imsi) {
-                add_assoc_imsi_item(tvb, pinfo, tree, imsi);
-            }
-        } else {
-            imsi = gtp_get_imsi_from_teid((uint32_t)gtp_hdr->teid);
-            if (imsi) {
-                add_assoc_imsi_item(tvb, pinfo, tree, imsi);
-            }
+    if (!PINFO_FD_VISITED(pinfo)) {
+        /* If the message has no session (also not from its TEID) and is not
+         * a CPDPCRES, CPDPCREQ, UPDPREQ or UPDPRES, then we remove its
+         * information from teid and ip lists */
+        if (gtp_version == 1 && !GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(pinfo->num)))
+            && gtp_hdr->message != GTP_MSG_CREATE_PDP_RESP && gtp_hdr->message != GTP_MSG_CREATE_PDP_REQ
+            && gtp_hdr->message != GTP_MSG_UPDATE_PDP_RESP && gtp_hdr->message != GTP_MSG_UPDATE_PDP_REQ
+            && wmem_list_count(args->teid_list) && wmem_list_count(args->ip_list)) {
+            remove_frame_info_lists(args->teid_list, args->ip_list, pinfo->num);
         }
+        /* Do not let a message without a session take over the TEIDs of a session */
+        restore_frame_info(pinfo->num, args->replaced_list);
+    }
+
+    /* Add the IMSI without a tree as well, so that the "imsi" tap gets it */
+    session = GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(pinfo->num)));
+    if (session) {
+        it = proto_tree_add_uint(tree, hf_gtp_session, tvb, 0, 0, session);
+        proto_item_set_generated(it);
+
+        imsi = wmem_map_lookup(session_imsi, GUINT_TO_POINTER(session));
+    } else {
+        imsi = gtp_get_imsi_from_teid((uint32_t)gtp_hdr->teid);
+    }
+    if (imsi) {
+        add_assoc_imsi_item(tvb, pinfo, tree, imsi);
     }
 }
 
@@ -10478,7 +10490,7 @@ dissect_gtp_tpsu_as_pdcp_nr_info(tvbuff_t * tvb, packet_info * pinfo, proto_tree
 
     if ((found_record = look_up_pdcp_nr_keys_record(pinfo, (uint32_t)gtp_hdr->teid))) {
         tvbuff_t *pdcp_tvb;
-        struct pdcp_nr_info temp_data;
+        struct pdcp_nr_info temp_data = {0};
 
         pdcp_tvb = tvb_new_subset_remaining(tvb, offset);
 
@@ -10938,6 +10950,7 @@ dissect_gtp_common(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree)
         /* We create the auxiliary lists */
         args->teid_list = wmem_list_new(pinfo->pool);
         args->ip_list = wmem_list_new(pinfo->pool);
+        args->replaced_list = wmem_list_new(pinfo->pool);
     }
 
     gtp_info = find_or_create_gtp_conv_info(pinfo, NULL);
@@ -11209,15 +11222,9 @@ dissect_gtp_common(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree)
         }
 
         if (args && !PINFO_FD_VISITED(pinfo)) {
-            /* We insert the lists inside the table*/
-            if(is_deinterlacing_supported(pinfo)) {
-                conversation_t *conv = find_conversation_strat(pinfo, CONVERSATION_IP, NO_PORT_X, false);
-                fill_map(args->teid_list, args->ip_list, pinfo->num, conv->conv_index, 0);
-            }
-            else {
-                // no deinterlacing supported/asked
-                fill_map(args->teid_list, args->ip_list, pinfo->num, 0, 1);
-            }
+            /* We insert the lists inside the table. GTP looks the TEIDs
+             * up without the conversation, so it ignores deinterlacing */
+            fill_map(args->teid_list, args->ip_list, pinfo->num, 0, 1, pinfo->pool, args->replaced_list);
         }
         /* Use sequence number to track Req/Resp pairs except GTP' message "Data Record Transfer Response".
          * For "Data Record Transfer Response" sequence numbers are analysed inside decoder of TLV "Requests Responded".
@@ -13468,6 +13475,7 @@ proto_register_gtp(void)
     session_table = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), g_direct_hash, g_direct_equal);
     session_imsi = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), g_direct_hash, g_direct_equal);
     frame_map = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), gtp_info_hash, gtp_info_equal);
+    rejected_frames = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), g_direct_hash, g_direct_equal);
     frame_map_deint = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), gtp_info_hash, gtp_info_deint_equal);
     teid_imsi = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), g_direct_hash, g_direct_equal);
     register_init_routine(gtp_init);

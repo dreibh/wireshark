@@ -10,6 +10,8 @@
 #  ZLIB_DLLS_RELEASE   - (Windows) Name of the zlib DLL and its possible proxy/wrapper.
 #  ZLIB_PDB            - (Windows) Name of the zlib PDB.
 #
+# Creates an IMPORTED target ZLIB::ZLIB if found.
+#
 #  ZLIB_VERSION_STRING - The version of zlib found (x.y.z)
 #  ZLIB_VERSION_MAJOR  - The major version of zlib
 #  ZLIB_VERSION_MINOR  - The minor version of zlib
@@ -147,7 +149,13 @@ if(ZLIB_FOUND)
     set(ZLIB_DLL_DIR "${ZLIB_HINTS}/bin")
     # MinGW, older zlib and vcpkg
     set(ZLIB_DLLS_RELEASE zlib1.dll)
-    # Newer zlib and vcpkg
+    # Newer zlib and vcpkg. zlib 1.3.2 renamed its DLL to z.dll, and our
+    # GLib bundle adds a zlib1.dll that forwards to it. Our libssh, which
+    # we get from MSYS2 so that it uses libgcrypt instead of OpenSSL,
+    # imports zlib1.dll for SSH compression.
+    # MSYS2 packages use the release CRT, so the wrapper and z.dll are
+    # the release DLLs in Debug builds too. If Debug builds ever link
+    # zd.lib, keep z.dll alongside zd.dll for the wrapper.
     if (EXISTS "${ZLIB_DLL_DIR}/z.dll")
         list(APPEND ZLIB_DLLS_RELEASE z.dll)
     endif()
@@ -156,6 +164,22 @@ if(ZLIB_FOUND)
     ws_add_runtime_dlls(${_zlib_dlls})
     SET(ZLIB_INCLUDE_DIRS ${ZLIB_INCLUDE_DIR})
     SET(ZLIB_LIBRARIES ${ZLIB_LIBRARY})
+    # On macOS zlib is part of the SDK, and the compiler finds its headers
+    # through the sysroot. Don't add the SDK's usr/include to the target:
+    # pkg-config (e.g. Homebrew's) can report a different SDK than the one
+    # the compiler uses, which CMake then doesn't recognize as an implicit
+    # include directory, and an SDK's usr/include on the -isystem path
+    # comes before libc++'s headers and breaks C++ compiles.
+    set(_zlib_target_include_dirs ${ZLIB_INCLUDE_DIRS})
+    if(APPLE AND ZLIB_INCLUDE_DIR MATCHES "\\.sdk/usr/include/?$")
+        set(_zlib_target_include_dirs)
+    endif()
+    # The DLLs are registered above, along with the zlib1.dll wrapper for
+    # libraries that use the old name, so the target doesn't need them.
+    ws_add_imported_library(ZLIB::ZLIB ZLIB_LIBRARY
+        INCLUDE_DIRS ${_zlib_target_include_dirs}
+    )
+    unset(_zlib_target_include_dirs)
 ELSE()
     SET(ZLIB_INCLUDE_DIRS )
     SET(ZLIB_LIBRARIES )

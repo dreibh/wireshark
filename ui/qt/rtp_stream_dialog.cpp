@@ -341,15 +341,8 @@ RtpStreamDialog::RtpStreamDialog(QWidget &parent, CaptureFile &cf) :
     connect(ui->streamTreeWidget, SIGNAL(customContextMenuRequested(QPoint)),
                 SLOT(showStreamMenu(QPoint)));
 
-    find_reverse_button_ = new QToolButton();
-    ui->buttonBox->addButton(find_reverse_button_, QDialogButtonBox::ActionRole);
-    find_reverse_button_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    find_reverse_button_->setPopupMode(QToolButton::MenuButtonPopup);
-
-    connect(ui->actionFindReverse, &QAction::triggered, this, &RtpStreamDialog::on_actionFindReverseNormal_triggered);
-    find_reverse_button_->setDefaultAction(ui->actionFindReverse);
-    // Overrides text striping of shortcut undercode in QAction
-    find_reverse_button_->setText(ui->actionFindReverseNormal->text());
+    find_reverse_button_ = ui->buttonBox->addButton(ui->actionFindReverse->text(), QDialogButtonBox::ActionRole);
+    find_reverse_button_->setToolTip(ui->actionFindReverse->toolTip());
     find_reverse_button_->setMenu(ui->menuFindReverse);
 
     analyze_button_ = RtpAnalysisDialog::addAnalyzeButton(ui->buttonBox, this);
@@ -362,6 +355,7 @@ RtpStreamDialog::RtpStreamDialog(QWidget &parent, CaptureFile &cf) :
     export_button_ = ui->buttonBox->addButton(ui->actionExportAsRtpDump->text(), QDialogButtonBox::ActionRole);
     export_button_->setToolTip(ui->actionExportAsRtpDump->toolTip());
     connect(export_button_, &QPushButton::pressed, this, &RtpStreamDialog::on_actionExportAsRtpDump_triggered);
+    ui->buttonBox->button(QDialogButtonBox::Close)->setDefault(true);
 
     QMenu *copy_menu = new QMenu(copy_button_);
     QAction *ca;

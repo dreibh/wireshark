@@ -133,8 +133,8 @@ dissect_id3v1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "ID3v1");
 	col_clear(pinfo->cinfo, COL_INFO);
 	asn1_ctx_init(&asn1_ctx, ASN1_ENC_PER, true, pinfo);
-	return dissect_mpeg_audio_ID3v1(tvb, 0, &asn1_ctx,
-			tree, hf_id3v1);
+	return (dissect_mpeg_audio_ID3v1(tvb, 0, &asn1_ctx,
+			tree, hf_id3v1) + 7) >> 3;
 }
 
 static int
@@ -158,7 +158,7 @@ dissect_mpeg_audio(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
 				offset += dissect_id3v1(next_tvb, pinfo, mpeg_audio_tree);
 				break;
 			case 0x494433: /* ID3 */
-				offset += call_dissector(id3v2_handle, tvb, pinfo, mpeg_audio_tree);
+				offset += call_dissector(id3v2_handle, next_tvb, pinfo, mpeg_audio_tree);
 				break;
 			default:
 				frame_len = dissect_mpeg_audio_frame(next_tvb, pinfo, mpeg_audio_tree);
