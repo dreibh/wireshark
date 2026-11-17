@@ -135,6 +135,7 @@ set(CLEAN_ASN1_DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ldap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-li-ps-pdu.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lix2.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-lixer.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-llc-v1.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lnpdqp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-logotypecertextn.c
@@ -391,6 +392,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/file-file.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-gif.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-jpeg.c
+	${CMAKE_CURRENT_SOURCE_DIR}/file-mdf.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-mmodule.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-mp4.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-ogg.c
@@ -414,6 +416,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-6lowpan.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-9p.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-a21.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-a2a.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-aarp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-aastra-aasp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-acap.c
@@ -1062,6 +1065,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-iperf.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-iperf3.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ipfc.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-ipfs.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ipmi.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ipmi-app.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ipmi-bridge.c
@@ -1260,6 +1264,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-moldudp64.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-monero.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mongo.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-moq-hang.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-moq-lite.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-moqt.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mount.c
@@ -1881,6 +1886,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-woww.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-wps.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-wreth.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-wsa.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-wsmp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-wsp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-wtls.c
@@ -2097,22 +2103,27 @@ add_library(dissectors OBJECT
 )
 add_dependencies(dissectors generate_dissector_registration)
 
-target_link_libraries(dissectors PRIVATE GCrypt::GCrypt)
+# The dissectors' objects are linked into epan, which links these libraries.
+# Link them here for their include directories.
+target_link_libraries(dissectors
+	PRIVATE
+		GCrypt::GCrypt
+		LibXml2::LibXml2
+		$<TARGET_NAME_IF_EXISTS:LZ4::LZ4>
+		$<TARGET_NAME_IF_EXISTS:XXHASH::XXHASH>
+		$<TARGET_NAME_IF_EXISTS:ZLIB::ZLIB>
+		$<TARGET_NAME_IF_EXISTS:ZLIBNG::ZLIBNG>
+		$<TARGET_NAME_IF_EXISTS:ZSTD::ZSTD>
+)
 
 target_include_directories(dissectors
 	SYSTEM PRIVATE
 		${GNUTLS_INCLUDE_DIRS}
 		${KERBEROS_INCLUDE_DIRS}
-		${LIBXML2_INCLUDE_DIRS}
-		${LZ4_INCLUDE_DIRS}
 		${NGHTTP2_INCLUDE_DIRS}
 		${NGHTTP3_INCLUDE_DIRS}
 		${SMI_INCLUDE_DIRS}
 		${SNAPPY_INCLUDE_DIRS}
-		${XXHASH_INCLUDE_DIRS}
-		${ZLIB_INCLUDE_DIRS}
-		${ZLIBNG_INCLUDE_DIRS}
-		${ZSTD_INCLUDE_DIRS}
 	PRIVATE
 		${CMAKE_CURRENT_BINARY_DIR}
 		${CMAKE_CURRENT_SOURCE_DIR}

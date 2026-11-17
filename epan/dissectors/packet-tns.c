@@ -45,6 +45,9 @@ void proto_register_tns(void);
 #define TNS_TYPE_DD             15
 #define TNS_TYPE_MAX            19
 
+/* the flags byte of the packet header */
+#define TNS_PACKET_FLAG_TLS_RENEG 0x08
+
 /*
  * Oracle datatype codes as they appear on the wire and in tns_data_types[].
  * python-oracledb lists most of these as its ORA_TYPE_NUM_* constants.
@@ -210,7 +213,8 @@ static int hf_tns_length;
 static int hf_tns_packet_checksum;
 static int hf_tns_header_checksum;
 static int hf_tns_packet_type;
-static int hf_tns_reserved_byte;
+static int hf_tns_packet_flags;
+static int hf_tns_packet_flags_tls_reneg;
 static int hf_tns_version;
 static int hf_tns_compat_version;
 
@@ -592,6 +596,7 @@ static int hf_tns_data_descriptor_row_count;
 static int hf_tns_data_descriptor_row_size;
 
 static int ett_tns;
+static int ett_tns_packet_flags;
 static int ett_tns_connect;
 static int ett_tns_accept;
 static int ett_tns_refuse;
@@ -647,6 +652,10 @@ static expert_field ei_tns_connect_data_next_packet;
 static expert_field ei_tns_data_descriptor_size_mismatch;
 static expert_field ei_tns_data_piggyback_cursors;
 static expert_field ei_tns_data_count_too_large;
+
+/* Bound on the columns that consume no bytes (NULL, same as previous
+ * row) in one TTI_RXD message; the rows cost one byte each. */
+#define TNS_MAX_EMPTY_COLUMNS 100000
 static expert_field ei_tns_data_encrypted;
 static expert_field ei_tns_data_compilation_error;
 static expert_field ei_tns_data_value_truncated;
@@ -868,6 +877,7 @@ static const value_string tns_command_types[] = {
 };
 
 static const value_string tns_field_versions[] = {
+	{TNS_FV_10_2,       "10.2"},
 	{TNS_FV_11_2,       "11.2"},
 	{TNS_FV_12_1,       "12.1"},
 	{TNS_FV_12_2,       "12.2"},
@@ -1740,6 +1750,11 @@ static int tns_chunks_len(tvbuff_t *tvb, packet_info *pinfo, int offset, wmem_st
 		}
 		if ( chunk_len <= 0 )
 			break;
+		if ( (unsigned)chunk_len > tvb_reported_length_remaining(tvb, o) )
+		{
+			o = tvb_reported_length(tvb);
+			break;
+		}
 		if ( strbuf )
 			wmem_strbuf_append(strbuf, (const char *)tvb_get_string_enc(pinfo->pool, tvb, o, chunk_len, ENC_UTF_8|ENC_NA));
 		o += chunk_len;
@@ -2211,6 +2226,8 @@ static const char *tns_format_vector(packet_info *pinfo, const uint8_t *data, in
 		return NULL;
 	if ( flags & 0x0012 )
 		pos += 8;
+	if ( pos > len )
+		return NULL;
 	if ( flags & 0x0020 )
 	{
 		if ( pos + 2 > len )
@@ -3187,6 +3204,8 @@ static int dissect_tns_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 				if ( img )
 					rendered = dtype == TNS_DATATYPE_VECTOR ? tns_format_vector(pinfo, img, img_len)
 						: tns_format_oson(pinfo, img, img_len);
+				if ( rendered )
+					rendered = (const char *)get_utf_8_string(pinfo->pool, (const uint8_t *)rendered, strlen(rendered));
 			}
 			if ( !rendered )
 				rendered = wmem_strdup_printf(pinfo->pool, "%s image, %d bytes",
@@ -4145,6 +4164,27 @@ static int dissect_tns_aq_msg_props(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 	return offset;
 }
 
+/* Add a string of an Advanced Queuing call's data section, whose length
+ * the header gave. From 12.1 the string has a length byte of its own in
+ * front; before 12.1 it stands alone. Returns the new offset. */
+static int dissect_tns_aq_text(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset,
+		int len, int hf, const char **text)
+{
+	int start = offset;
+
+	*text = NULL;
+	if ( tns_field_version(pinfo) != 0 && tns_field_version(pinfo) < TNS_FV_12_1 )
+	{
+		*text = (const char *)tvb_get_string_enc(pinfo->pool, tvb, offset, len, ENC_UTF_8|ENC_NA);
+		offset += len;
+	}
+	else
+		offset += get_dalc_custom(tvb, pinfo, offset, text);
+	if ( *text )
+		proto_tree_add_string(tree, hf, tvb, start, offset - start, *text);
+	return offset;
+}
+
 /* Decode an Advanced Queuing enqueue (121) or dequeue (122) call. Each
  * opens with a header of pointers and lengths - the queue name, the
  * options, the payload type's OID and, for an enqueue, the message
@@ -4249,47 +4289,28 @@ static int dissect_tns_aq_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 	/* the values the header's lengths describe */
 	if ( qname_len > 0 )
 	{
-		start = offset;
-		offset += get_dalc_custom(tvb, pinfo, offset, &text);
+		offset = dissect_tns_aq_text(tvb, pinfo, tree, offset, qname_len, hf_tns_data_aq_queue, &text);
 		if ( text )
-		{
-			proto_tree_add_string(tree, hf_tns_data_aq_queue, tvb, start, offset - start, text);
 			col_append_fstr(pinfo->cinfo, COL_INFO, " [%s]", text);
-		}
 	}
 	if ( func == TTI_AQ_ENQUEUE && num_recipients > 0 )
 		offset = dissect_tns_kv_pairs(tvb, pinfo, tree, offset, num_recipients);
 	if ( consumer_len > 0 )
-	{
-		start = offset;
-		offset += get_dalc_custom(tvb, pinfo, offset, &text);
-		if ( text )
-			proto_tree_add_string(tree, hf_tns_data_aq_consumer, tvb, start, offset - start, text);
-	}
+		offset = dissect_tns_aq_text(tvb, pinfo, tree, offset, consumer_len, hf_tns_data_aq_consumer, &text);
 	if ( msgid_ptr )
 	{
 		proto_tree_add_item(tree, hf_tns_data_aq_msgid, tvb, offset, TNS_AQ_MSGID_LEN, ENC_NA);
 		offset += TNS_AQ_MSGID_LEN;
 	}
 	if ( correlation_len > 0 )
-	{
-		start = offset;
-		offset += get_dalc_custom(tvb, pinfo, offset, &text);
-		if ( text )
-			proto_tree_add_string(tree, hf_tns_data_aq_correlation, tvb, start, offset - start, text);
-	}
+		offset = dissect_tns_aq_text(tvb, pinfo, tree, offset, correlation_len, hf_tns_data_aq_correlation, &text);
 	if ( toid_ptr && toid_len > 0 )
 	{
 		proto_tree_add_item(tree, hf_tns_data_aq_toid, tvb, offset, toid_len, ENC_NA);
 		offset += toid_len;
 	}
 	if ( condition_len > 0 )
-	{
-		start = offset;
-		offset += get_dalc_custom(tvb, pinfo, offset, &text);
-		if ( text )
-			proto_tree_add_string(tree, hf_tns_data_aq_condition, tvb, start, offset - start, text);
-	}
+		offset = dissect_tns_aq_text(tvb, pinfo, tree, offset, condition_len, hf_tns_data_aq_condition, &text);
 	if ( func == TTI_AQ_ENQUEUE )
 	{
 		/* the payload: raw bytes of the length the header gave, else an
@@ -4458,12 +4479,17 @@ static int dissect_tns_tpc_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 		offset += get_sb4_custom(tvb, offset, &v);
 		proto_tree_add_uint(tree, hf_tns_data_tpc_timeout, tvb, start, offset - start, v);
 		offset += 3; /* application value, return context and its length pointers */
-		int_ptr = tvb_get_uint8(tvb, offset);
-		offset += 1;
-		offset += get_sb4_custom(tvb, offset, &int_len);
-		ext_ptr = tvb_get_uint8(tvb, offset);
-		offset += 1;
-		offset += get_sb4_custom(tvb, offset, &ext_len);
+		/* the names came with 11g: a 10g switch has neither them nor
+		 * their pointers and lengths */
+		if ( tns_field_version(pinfo) == 0 || tns_field_version(pinfo) >= TNS_FV_11_2 )
+		{
+			int_ptr = tvb_get_uint8(tvb, offset);
+			offset += 1;
+			offset += get_sb4_custom(tvb, offset, &int_len);
+			ext_ptr = tvb_get_uint8(tvb, offset);
+			offset += 1;
+			offset += get_sb4_custom(tvb, offset, &ext_len);
+		}
 	}
 	else
 	{
@@ -4773,8 +4799,13 @@ static void dissect_tns_data_descriptor(tvbuff_t *tvb, int offset, packet_info *
 	uint32_t data_len, row_count, row_size, total_row_size = 0;
 	int orig_offset = offset;
 
-	/* We only get here after tcp_dissect_pdus(), length is guaranteed. */
-	DISSECTOR_ASSERT_CMPINT(length, >=, TNS_HDR_LEN);
+	/* For a Data Descriptor the header length is not validated by
+	 * tcp_dissect_pdus(). */
+	if (length < TNS_HDR_LEN) {
+		proto_tree_add_expert_format(tns_tree, pinfo, &ei_tns_data_count_too_large, tvb, offset, 0,
+			"Header length %u is below the minimum of %u", length, (unsigned)TNS_HDR_LEN);
+		return;
+	}
 
 	dd_tree = proto_tree_add_subtree(tns_tree, tvb, offset, -1, ett_tns_data, NULL, "Data Descriptor");
 
@@ -5409,6 +5440,27 @@ static int dissect_tns_oci_message(tvbuff_t *tvb, int offset, packet_info *pinfo
 			return offset;
 		}
 
+		case SQLNET_DESCRIBE_INFO:
+		{
+			/* The describe of a query's columns, as an OCI client gets
+			 * it: a cursor uuid and a time behind a ub4 LE length, a ub1
+			 * from a 10g server, then the describe a REF CURSOR's value
+			 * carries. The rows that follow are not decoded. */
+			unsigned fv = tns_field_version(pinfo);
+			bool band_12c = fv ? fv >= TNS_FV_12_1 : tns_is_oci_12c(pinfo);
+			bool fv_11_2 = !fv || fv >= TNS_FV_11_2;
+
+			if ( fv_11_2 )
+			{
+				if ( !tvb_bytes_exist(tvb, offset, 4) )
+					return offset;
+				offset += 4 + tvb_get_letohl(tvb, offset);
+			}
+			else
+				offset += 1 + tvb_get_uint8(tvb, offset);
+			return dissect_tns_oci_describe_body(tvb, pinfo, data_tree, offset, band_12c, fv_11_2);
+		}
+
 		case SQLNET_RETURN_STATUS:
 		{
 			/* The OCI status block: 136 bytes, or a compact 24 for a
@@ -5698,15 +5750,19 @@ static int dissect_tns_message(tvbuff_t *tvb, int offset, packet_info *pinfo, pr
 			}
 			/* The header opens with the length of the client's compile
 			 * capabilities, and capability 7 is the TTC field version.
-			 * The client has already lowered it to the server's, so it
-			 * is the one the connection uses. */
+			 * A thin client has already lowered it to the server's, but
+			 * an OCI 11.2 client sends its own, 11.2, to a 10g server as
+			 * well, and the connection then runs at the lower of the
+			 * two. */
 			if ( caps_len > TNS_CCAP_FIELD_VERSION )
 			{
+				tns_conv_info_t *tns_info = tns_get_conv_info(pinfo);
 				uint8_t fv = tvb_get_uint8(tvb, offset + 1 + TNS_CCAP_FIELD_VERSION);
 				proto_tree_add_item(caphdr_tree, hf_tns_data_setdt_field_version, tvb,
 					offset + 1 + TNS_CCAP_FIELD_VERSION, 1, ENC_NA);
 				if ( !PINFO_FD_VISITED(pinfo) )
-					tns_get_conv_info(pinfo)->field_version = fv;
+					tns_info->field_version = tns_info->server_field_version != 0
+						? MIN(fv, tns_info->server_field_version) : fv;
 			}
 			offset += 1 + caps_len;
 
@@ -5715,15 +5771,17 @@ static int dissect_tns_message(tvbuff_t *tvb, int offset, packet_info *pinfo, pr
 			proto_tree_add_item(data_tree, hf_tns_data_setdt_tblhdr, tvb, offset, 1 + caps_len, ENC_NA);
 			offset += 1 + caps_len;
 
-			if ( dty_flag == TNS_DTY_ENCODING_OCI )
+			if ( dty_flag & TNS_DTY_ENCODING_OCI )
 			{
 				/* An OCI client - sqlplus, thick python-oracledb - sends
 				 * no type table: the server keeps its own representations,
 				 * the fixed-width integers of the OCI dialect, which this
-				 * flag is the first sign of. In the table's place come the
-				 * session's time zone block, from 11.2 on a ub4 BE
-				 * timezone file version, and the national charset as a
-				 * little-endian ub2. */
+				 * flag is the first sign of. sqlplus sends it as 2, and an
+				 * OCI 11.2 program as 0x83, whose other bits are not
+				 * understood. In the table's place come the session's
+				 * time zone block, from 11.2 on a ub4 BE timezone file
+				 * version, and the national charset as a little-endian
+				 * ub2. */
 				if ( !PINFO_FD_VISITED(pinfo) )
 					tns_get_conv_info(pinfo)->oci_dialect = true;
 				offset = dissect_tns_dty_tz(tvb, pinfo, data_tree, offset);
@@ -6291,7 +6349,7 @@ static int dissect_tns_message(tvbuff_t *tvb, int offset, packet_info *pinfo, pr
 				offset += 1;
 				offset += get_sb4_custom(tvb, offset, &num_requests);
 				offset += get_sb4_custom(tvb, offset, &num_iters);
-				int num_binds = num_iters * 256 + num_requests;
+				int num_binds = (int)((uint32_t)num_iters * 256U + (uint32_t)num_requests);
 				proto_tree_add_uint(data_tree, hf_tns_data_iov_num_binds, tvb, offset, 0, num_binds);
 				/* num iters this time (skip) */
 				offset += get_sb4_custom(tvb, offset, &v);
@@ -6524,7 +6582,9 @@ static int dissect_tns_message(tvbuff_t *tvb, int offset, packet_info *pinfo, pr
 			if ( desc && desc->num_cols > 0 )
 			{
 				int rownum = 0, first_row = 1;
-				while ( tvb_reported_length_remaining(tvb, offset) > 0 )
+				unsigned empty_items = 0;
+				bool budget_hit = false;
+				while (!budget_hit &&  tvb_reported_length_remaining(tvb, offset) > 0 )
 				{
 					proto_tree *row_tree;
 					proto_item *row_item;
@@ -6548,6 +6608,11 @@ static int dissect_tns_message(tvbuff_t *tvb, int offset, packet_info *pinfo, pr
 						if ( ctx->bit_vector && c / 8 < ctx->bit_vector_len
 							&& !(ctx->bit_vector[c / 8] & (1 << (c % 8))) )
 						{
+							if ( ++empty_items > TNS_MAX_EMPTY_COLUMNS )
+							{
+								budget_hit = true;
+								break;
+							}
 							proto_tree_add_bytes_format(row_tree, hf_tns_data_col_value,
 								tvb, offset, 0, NULL, "Column %u (%s): same as previous row",
 								c + 1, val_to_str_const(col->type, tns_data_types, "unknown"));
@@ -6562,6 +6627,11 @@ static int dissect_tns_message(tvbuff_t *tvb, int offset, packet_info *pinfo, pr
 							&& col->type != TNS_DATATYPE_LONG_RAW
 							&& col->type != TNS_DATATYPE_UROWID )
 						{
+							if ( ++empty_items > TNS_MAX_EMPTY_COLUMNS )
+							{
+								budget_hit = true;
+								break;
+							}
 							proto_tree_add_bytes_format(row_tree, hf_tns_data_col_value,
 								tvb, offset, 0, NULL, "Column %u (%s): NULL (no data length)",
 								c + 1, val_to_str_const(col->type, tns_data_types, "unknown"));
@@ -6571,6 +6641,9 @@ static int dissect_tns_message(tvbuff_t *tvb, int offset, packet_info *pinfo, pr
 							col->type, col->csform, TNS_VALUE_FETCH, c + 1, hf_tns_data_col_value, "Column");
 					}
 					proto_item_set_len(row_item, offset - r_start);
+					if ( budget_hit )
+						expert_add_info_format(pinfo, row_item, &ei_tns_data_count_too_large,
+							"More than %u columns without data in one message, stopping", TNS_MAX_EMPTY_COLUMNS);
 					/* A bit vector covers one row only. */
 					ctx->bit_vector = NULL;
 				}
@@ -8389,8 +8462,15 @@ dissect_tns_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data 
 	col_append_fstr(pinfo->cinfo, COL_INFO, ", %s (%u)",
 			val_to_str_const(type, tns_type_vals, "Unknown"), type);
 
-	proto_tree_add_item(tns_tree, hf_tns_reserved_byte, tvb,
-			offset, 1, ENC_NA);
+	/* A listener handing a TLS connection to a dedicated server sets
+	 * 0x08 in its RESEND: the server runs a TLS handshake of its own on
+	 * the connection, and the client sends the CONNECT again over it. */
+	static int * const packet_flags[] = {
+		&hf_tns_packet_flags_tls_reneg,
+		NULL
+	};
+	proto_tree_add_bitmask(tns_tree, tvb, offset, hf_tns_packet_flags,
+			ett_tns_packet_flags, packet_flags, ENC_NA);
 	offset += 1;
 
 	proto_tree_add_checksum(tns_tree, tvb, offset, hf_tns_header_checksum, -1, NULL, pinfo, 0, ENC_BIG_ENDIAN, PROTO_CHECKSUM_NO_FLAGS);
@@ -9547,9 +9627,12 @@ void proto_register_tns(void)
 			"Row Size", "tns.data_descriptor.row_size", FT_UINT32, BASE_DEC,
 			NULL, 0x0, NULL, HFILL }},
 
-		{ &hf_tns_reserved_byte, {
-			"Reserved Byte", "tns.reserved_byte", FT_BYTES, BASE_NONE,
+		{ &hf_tns_packet_flags, {
+			"Packet Flags", "tns.packet_flags", FT_UINT8, BASE_HEX,
 			NULL, 0x0, NULL, HFILL }},
+		{ &hf_tns_packet_flags_tls_reneg, {
+			"TLS Renegotiation", "tns.packet_flags.tls_renegotiation", FT_BOOLEAN, 8,
+			NULL, TNS_PACKET_FLAG_TLS_RENEG, "The server runs a TLS handshake of its own before the client sends the CONNECT again", HFILL }},
 		{ &hf_tns_packet_type, {
 			"Packet Type", "tns.type", FT_UINT8, BASE_DEC,
 			VALS(tns_type_vals), 0x0, "Type of TNS packet", HFILL }}
@@ -9558,6 +9641,7 @@ void proto_register_tns(void)
 
 	static int *ett[] = {
 		&ett_tns,
+		&ett_tns_packet_flags,
 		&ett_tns_connect,
 		&ett_tns_accept,
 		&ett_tns_refuse,

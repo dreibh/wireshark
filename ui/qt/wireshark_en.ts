@@ -8740,6 +8740,13 @@ on an existing breakpoint, toggle its active state</source>
         <oldsource>Selected Personal Profile...</oldsource>
         <translation type="unfinished"></translation>
     </message>
+    <message numerus="yes">
+        <source>%Ln Personal Profile(s) (including sub-profiles)…</source>
+        <translation>
+            <numerusform>%Ln Personal Profile (including sub-profiles)…</numerusform>
+            <numerusform>%Ln Personal Profiles (including sub-profiles)…</numerusform>
+        </translation>
+    </message>
     <message>
         <source>All Personal Profiles…</source>
         <oldsource>All Personal Profiles...</oldsource>
@@ -10678,11 +10685,24 @@ on an existing breakpoint, toggle its active state</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <source>%Ln Selected Personal Profile(s)…</source>
-        <oldsource>%Ln Selected Personal Profile(s)...</oldsource>
-        <translation type="unfinished">
-            <numerusform>%Ln Selected Personal Profile…</numerusform>
-            <numerusform>%Ln Selected Personal Profiles…</numerusform>
+        <source>%Ln Personal Profile(s)…</source>
+        <translation>
+            <numerusform>%Ln Personal Profile…</numerusform>
+            <numerusform>%Ln Personal Profiles…</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln personal profile(s) selected</source>
+        <translation>
+            <numerusform>%Ln personal profile selected</numerusform>
+            <numerusform>%Ln personal profiles selected</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln Personal Profile(s) (including sub-profiles)…</source>
+        <translation>
+            <numerusform>%Ln Personal Profile (including sub-profiles)…</numerusform>
+            <numerusform>%Ln Personal Profiles (including sub-profiles)…</numerusform>
         </translation>
     </message>
     <message>
@@ -10727,6 +10747,13 @@ on an existing breakpoint, toggle its active state</source>
             <numerusform>%Ln profiles exported</numerusform>
         </translation>
     </message>
+    <message numerus="yes">
+        <source>%Ln profile(s) exported (%1 skipped)</source>
+        <translation>
+            <numerusform>%Ln profile exported (%1 skipped)</numerusform>
+            <numerusform>%Ln profiles exported (%1 skipped)</numerusform>
+        </translation>
+    </message>
     <message>
         <source>Select zip file for import</source>
         <translation type="unfinished"></translation>
@@ -10759,10 +10786,10 @@ on an existing breakpoint, toggle its active state</source>
         </translation>
     </message>
     <message numerus="yes">
-        <source>, %Ln profile(s) skipped</source>
+        <source>%Ln profile(s) imported (%1 skipped)</source>
         <translation>
-            <numerusform>, %Ln profile skipped</numerusform>
-            <numerusform>, %Ln profiles skipped</numerusform>
+            <numerusform>%Ln profile imported (%1 skipped)</numerusform>
+            <numerusform>%Ln profiles imported (%1 skipped)</numerusform>
         </translation>
     </message>
     <message>
@@ -15965,10 +15992,6 @@ Preferences → Protocols → TCP to use this table.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Hairline dividers between cards and panes.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>color %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -17017,6 +17040,10 @@ Preferences → Protocols → TCP to use this table.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>ControlBorder</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>palette.base 53% toward palette.mid, kept at the divider ratio to palette.base</source>
         <translation type="unfinished"></translation>
     </message>
@@ -17057,7 +17084,11 @@ Preferences → Protocols → TCP to use this table.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Separator, kept at the divider ratio to CardBackground</source>
+        <source>border.separator, kept at the divider ratio to CardBackground</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>border.separator, kept at the divider ratio to OverlayCardBackground</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -17082,10 +17113,6 @@ Preferences → Protocols → TCP to use this table.</source>
     </message>
     <message>
         <source>the lighter of palette.base and CardBackground</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Separator, kept at the divider ratio to OverlayCardBackground</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -17452,6 +17479,14 @@ Preferences → Protocols → TCP to use this table.</source>
     </message>
     <message>
         <source>QPalette::Accent (Qt 6.6 and later). Auto: brand.primary.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Frame of text fields. Auto: palette.mid, kept visible on palette.base.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Hairline dividers between cards and panes. Auto: palette.base mixed toward palette.mid.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

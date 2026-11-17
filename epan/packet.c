@@ -1034,7 +1034,20 @@ call_dissector_work(dissector_handle_t handle, tvbuff_t *tvb, packet_info *pinfo
 	saved_proto_layer_num = pinfo->curr_proto_layer_num;
 	saved_can_desegment = pinfo->can_desegment;
 	saved_layers_len = wmem_list_count(pinfo->layers);
-	DISSECTOR_ASSERT(saved_layers_len < prefs.gui_max_tree_depth);
+	if (G_UNLIKELY(saved_layers_len >= prefs.gui_max_tree_depth)) {
+		/*
+		 * Encapsulations that can contain themselves (IP in IP,
+		 * tunnels over UDP, ...) can nest without limit in a
+		 * crafted packet. That is bad packet data, not a dissector
+		 * bug, so stop with an exception as the tree depth limit
+		 * in proto.c does instead of asserting.
+		 */
+		THROW_MESSAGE(DissectorError,
+		    wmem_strdup_printf(pinfo->pool,
+		        "Maximum protocol layer depth %u exceeded for \"%s\" (Maximum depth can be increased in advanced preferences)",
+		        prefs.gui_max_tree_depth,
+		        handle->protocol ? proto_get_protocol_filter_name(proto_get_id(handle->protocol)) : dissector_handle_get_description(handle)));
+	}
 
 	/*
 	 * can_desegment is set to 2 by anyone which offers the
@@ -2231,8 +2244,8 @@ void dissector_add_guid(const char *name, guid_key* guid_val, dissector_handle_t
 }
 
 /* Look for a given value in a given guid dissector table and, if found,
-   call the dissector with the arguments supplied, and return true,
-   otherwise return false. */
+   call the dissector with the arguments supplied, and return the number
+   of bytes consumed, otherwise return 0. */
 int dissector_try_guid_with_data(dissector_table_t sub_dissectors,
     guid_key* guid_val, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, const bool add_proto_name, void *data)
 {

@@ -62,6 +62,7 @@ static int hf_truncated_data;
 
 static expert_field ei_int_string;
 static expert_field ei_invalid_len;
+static expert_field ei_invalid_error;
 static expert_field ei_duplicate_dict_keys;
 static expert_field ei_unsorted_dict_keys;
 
@@ -123,8 +124,10 @@ bencoded_string_length(packet_info *pinfo _U_, tvbuff_t *tvb, unsigned *offset_p
 {
   unsigned offset, start;
   unsigned remaining = tvb_captured_length_remaining(tvb, *offset_ptr);
-  if (remaining == 0)
+  if (remaining == 0) {
+    *length = 0;
     return false;
+  }
 
   offset = *offset_ptr;
   start = offset;
@@ -137,6 +140,8 @@ bencoded_string_length(packet_info *pinfo _U_, tvbuff_t *tvb, unsigned *offset_p
     *offset_ptr = offset;
     return true;
   }
+
+  *length = offset - start;
   return false;
 }
 
@@ -150,8 +155,10 @@ static int
 dissect_bencoded_string(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, const char **result, bool tohex, const char *label)
 {
   unsigned string_len;
-  if (!bencoded_string_length(pinfo, tvb, &offset, &string_len))
+  if (!bencoded_string_length(pinfo, tvb, &offset, &string_len)) {
+    proto_tree_add_expert(tree, pinfo, &ei_int_string, tvb, offset, string_len);
     return 0;
+  }
 
   const unsigned remaining = tvb_captured_length_remaining(tvb, offset);
   if (remaining < string_len)
@@ -184,11 +191,10 @@ dissect_bencoded_int(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsign
   if (remaining < 3)
     return 0;
 
-  if (tvb_get_uint8(tvb, offset) != 'i')
-    return 0;
-
+  DISSECTOR_ASSERT(tvb_get_uint8(tvb, offset) == 'i');
   offset += 1;
   remaining -= 1;
+
   start_offset = offset;
   while (tvb_get_uint8(tvb, offset) != 'e' && --remaining)
     offset += 1;
@@ -226,8 +232,7 @@ dissect_bencoded_list(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsig
   ti = proto_tree_add_none_format(tree, hf_bencoded_list, tvb, offset, 0, "%s: list...", label);
   sub_tree = proto_item_add_subtree(ti, ett_bencoded_list);
 
-  if (tvb_get_uint8(tvb, offset) != 'l')
-    return 0;
+  DISSECTOR_ASSERT(tvb_get_uint8(tvb, offset) == 'l');
   offset += 1;
 
   while (tvb_captured_length_remaining(tvb, offset) > 0)
@@ -262,7 +267,6 @@ dissect_bencoded_list(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsig
     }
     if (offset <= start_offset)
     {
-      proto_tree_add_expert_remaining(sub_tree, pinfo, &ei_int_string, tvb, offset);
       /* if offset is not going on, there is no chance to exit the loop, then return*/
       return 0;
     }
@@ -294,8 +298,17 @@ dissect_bt_dht_error(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsign
   offset += 1;
 
   /* dissect bt-dht error number and message */
+  if (tvb_get_uint8(tvb, offset) != 'i') {
+    proto_tree_add_expert_format(sub_tree, pinfo, &ei_invalid_error, tvb, offset, 1, "Error ID should be an integer");
+    return 0;
+  }
   offset = dissect_bencoded_int(tvb, pinfo, sub_tree, offset, &error_no, "Error ID");
   if (offset == 0) {
+    return 0;
+  }
+
+  if (!tvb_ascii_isdigit(tvb, offset, 1)) {
+    proto_tree_add_expert_format(sub_tree, pinfo, &ei_invalid_error, tvb, offset, 1, "Error message should be a string");
     return 0;
   }
   offset = dissect_bencoded_string(tvb, pinfo, sub_tree, offset, &error_msg, false, "Error Message");
@@ -309,6 +322,7 @@ dissect_bt_dht_error(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsign
 
   /* the list terminator */
   if (tvb_get_uint8(tvb, offset) != 'e') {
+    proto_tree_add_expert_format(sub_tree, pinfo, &ei_invalid_error, tvb, offset, 1, "Error list should only have two elements");
     return 0;
   }
   proto_tree_add_item(sub_tree, hf_bencoded_list_terminator, tvb, offset, 1, ENC_ASCII);
@@ -340,8 +354,8 @@ dissect_bt_dht_values(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsig
   {
     if (!bencoded_string_length(pinfo, tvb, &offset, &string_len))
     {
-      expert_add_info(pinfo, ti, &ei_invalid_len);
       // Fail hard here rather than potentially looping excessively.
+      proto_tree_add_expert(sub_tree, pinfo, &ei_invalid_len, tvb, offset, string_len);
       return 0;
     }
     else if (string_len == 6)
@@ -405,8 +419,10 @@ dissect_bt_dht_nodes(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsign
   unsigned    string_len;
   unsigned    node_byte_length;
 
-  if (!bencoded_string_length(pinfo, tvb, &offset, &string_len))
+  if (!bencoded_string_length(pinfo, tvb, &offset, &string_len)) {
+    proto_tree_add_expert(tree, pinfo, &ei_invalid_len, tvb, offset, string_len);
     return 0;
+  }
 
   ti = proto_tree_add_item(tree, hf_bt_dht_nodes, tvb, offset, string_len, ENC_NA);
   sub_tree = proto_item_add_subtree(ti, ett_bt_dht_nodes);
@@ -506,6 +522,7 @@ dissect_version(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, const unsig
 {
   unsigned int version_length;
   if (!bencoded_string_length(pinfo, tvb, offset, &version_length)) {
+    // Intentionally avoid expert info here, one has already been added by the version-as-string code
     return false;
   }
   const unsigned int version_start = *offset;
@@ -544,7 +561,7 @@ dissect_bencoded_dict_key(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, u
 {
   unsigned int key_length;
   if (!bencoded_string_length(pinfo, tvb, &offset, &key_length)) {
-    proto_tree_add_expert_remaining(tree, pinfo, &ei_invalid_len, tvb, offset);
+    proto_tree_add_expert(tree, pinfo, &ei_invalid_len, tvb, offset, key_length);
     return 0;
   }
 
@@ -630,7 +647,7 @@ dissect_bencoded_dict_entry(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
       unsigned len;
       int old_offset = offset;
       if (!bencoded_string_length(pinfo, tvb, &offset, &len)) {
-        proto_tree_add_expert_format_remaining(sub_tree, pinfo, &ei_int_string, tvb, offset, "Invalid string for value");
+        proto_tree_add_expert(sub_tree, pinfo, &ei_invalid_len, tvb, offset, len);
         return 0;
       }
 
@@ -673,10 +690,7 @@ dissect_bencoded_dict_entry(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
   }
 
   if (offset == 0)
-  {
-    proto_tree_add_expert_format_remaining(sub_tree, pinfo, &ei_int_string, tvb, offset, "Invalid string for value");
     return 0;
-  }
 
   if (strcmp(*key, "q") == 0 && strlen(val) > 1)
     col_prepend_fstr(pinfo->cinfo, COL_INFO, "%c%s", g_ascii_toupper(val[0]), val + 1);
@@ -727,8 +741,7 @@ dissect_bencoded_dict(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsig
     sub_tree = proto_item_add_subtree(ti, ett_bencoded_dict);
   }
 
-  if (tvb_get_uint8(tvb, offset) != 'd')
-    return 0;
+  DISSECTOR_ASSERT(tvb_get_uint8(tvb, offset) == 'd');
   offset += 1;
 
   const char * prev_key = NULL;
@@ -741,10 +754,7 @@ dissect_bencoded_dict(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsig
     const unsigned entry_start = offset;
     offset = dissect_bencoded_dict_entry(tvb, pinfo, sub_tree, offset, &key);
     if (offset == 0)
-    {
-      proto_tree_add_expert_remaining(sub_tree, pinfo, &ei_int_string, tvb, offset);
       return 0;
-    }
 
     if (prev_key != NULL && key != NULL) {
       const int ordering = strcmp(key, prev_key);
@@ -946,6 +956,8 @@ proto_register_bt_dht(void)
     "String must contain an integer", EXPFILL }},
     { &ei_invalid_len, { "bt-dht.invalid_length", PI_MALFORMED, PI_ERROR,
     "Invalid length", EXPFILL }},
+    { &ei_invalid_error, { "bt-dht.invalid_error", PI_MALFORMED, PI_ERROR,
+    "Invalid error", EXPFILL }},
     { &ei_duplicate_dict_keys, { "bt-dht.bencoding.dict_duplicate_key", PI_PROTOCOL, PI_WARN,
     "Dictionary has duplicate keys", EXPFILL }},
     { &ei_unsorted_dict_keys, { "bt-dht.bencoding.dict_out_of_order", PI_PROTOCOL, PI_CHAT,

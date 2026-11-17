@@ -25,7 +25,7 @@ Current dissection supports dissection of
 As part of it, it also calculates cmd completion latencies.
 
 This protocol is similar to iSCSI and SCSI dissection where iSCSI is
-transport protocol for carying SCSI commands and responses. Similarly
+transport protocol for carrying SCSI commands and responses. Similarly
 NVMe Fabrics - RDMA transport protocol carries NVMe commands.
 
      +----------+
@@ -60,6 +60,7 @@ http://www.iana.org/assignments/service-names-port-numbers/service-names-port-nu
 #include <epan/prefs.h>
 #include <epan/conversation.h>
 #include <epan/addr_resolv.h>
+#include <wsutil/pint.h>
 
 #include "packet-infiniband.h"
 #include "packet-nvme.h"
@@ -74,6 +75,17 @@ http://www.iana.org/assignments/service-names-port-numbers/service-names-port-nu
 
 #define SID_MASK (SID_ULP_MASK | SID_PROTO_MASK)
 #define SID_ULP_TCP ((SID_ULP << 3 * 8) | (SID_PROTO_TCP << 2 * 8))
+
+/*
+ * The InfiniBand dissector saves the 232 bytes of CM REQ MAD data, of
+ * which the REQ private data is the last 92 bytes. NVMe-oF RDMA uses an
+ * RDMA IP CM Service ID, so the private data starts with the 36 byte IP
+ * CM header, followed by the NVMe-oF RDMA connect private data: a 2 byte
+ * record format and then the little-endian QID.
+ */
+#define CM_REQ_PRIVATE_DATA_OFFSET (MAD_DATA_SIZE - 92)
+#define IP_CM_REQ_HEADER_LEN 36
+#define CM_REQ_NVME_QID_OFFSET (CM_REQ_PRIVATE_DATA_OFFSET + IP_CM_REQ_HEADER_LEN + 2)
 
 #define NVME_FABRIC_CMD_SIZE NVME_CMD_SIZE
 #define NVME_FABRIC_CQE_SIZE NVME_CQE_SIZE
@@ -198,7 +210,6 @@ static uint16_t find_nvme_qid(packet_info *pinfo)
 {
     conversation_t *conv;
     conversation_infiniband_data *conv_data;
-    uint16_t qid;
 
     conv = find_conversation(pinfo->num, &pinfo->dst, &pinfo->dst,
                              CONVERSATION_IBQP, pinfo->destport, pinfo->destport,
@@ -211,8 +222,7 @@ static uint16_t find_nvme_qid(packet_info *pinfo)
         return 0;
 
     if (conv_data->client_to_server == false) {
-        memcpy(&qid, &conv_data->mad_private_data[178], 2);
-        return qid;
+        return pletohu16(&conv_data->mad_private_data[CM_REQ_NVME_QID_OFFSET]);
     }
     conv = find_conversation(pinfo->num, &pinfo->src, &pinfo->src,
                              CONVERSATION_IBQP, conv_data->src_qp, conv_data->src_qp,
@@ -222,8 +232,7 @@ static uint16_t find_nvme_qid(packet_info *pinfo)
     conv_data = get_conversion_data(conv);
     if (!conv_data)
         return 0;
-    memcpy(&qid, &conv_data->mad_private_data[178], 2);
-    return qid;
+    return pletohu16(&conv_data->mad_private_data[CM_REQ_NVME_QID_OFFSET]);
 }
 
 static struct nvme_rdma_q_ctx*
@@ -382,7 +391,7 @@ bind_cmd_to_qctx(packet_info *pinfo, struct nvme_q_ctx *q_ctx,
     } else {
         /* Already visited this frame */
         ctx = (struct nvme_rdma_cmd_ctx*)
-                  nvme_lookup_cmd_in_done_list(pinfo, q_ctx, cmd_id);
+                  nvme_lookup_cmd_in_done_list(pinfo, q_ctx, cmd_id, false);
         /* if we have already visited frame but haven't found completion yet,
          * we won't find cmd in done q, so allocate a dummy ctx for doing
          * rest of the processing.
@@ -419,7 +428,13 @@ static void dissect_rdma_read_transfer(tvbuff_t *data_tvb, packet_info *pinfo, p
     if (rdma_cmd->n_cmd_ctx.fabric == true)
         dissect_nvmeof_cmd_data(data_tvb, pinfo, data_tree, 0, &q_ctx->n_q_ctx, &rdma_cmd->n_cmd_ctx, len);
     else
-        dissect_nvme_data_response(data_tvb, pinfo, data_tree, &q_ctx->n_q_ctx, &rdma_cmd->n_cmd_ctx, len, false);
+        /* An RDMA READ moves data from host memory to the controller, so
+         * these are the host's bytes for the command, not the controller's
+         * response data. */
+        dissect_nvme_data_response(data_tvb, pinfo, data_tree, &q_ctx->n_q_ctx,
+                                   &rdma_cmd->n_cmd_ctx, len, false,
+                                   NVME_DATA_DIR_HOST_TO_CONTROLLER,
+                                   NVME_DATA_ORIGIN_NONE);
 }
 
 static void
@@ -523,7 +538,7 @@ dissect_nvme_rdma_cqe(tvbuff_t *nvme_tvb, packet_info *pinfo,
     } else {
         /* Already visited this frame */
         cmd_ctx = (struct nvme_rdma_cmd_ctx*)
-                        nvme_lookup_cmd_in_done_list(pinfo, &q_ctx->n_q_ctx, cmd_id);
+                        nvme_lookup_cmd_in_done_list(pinfo, &q_ctx->n_q_ctx, cmd_id, true);
         if (!cmd_ctx)
             goto not_found;
     }
@@ -635,7 +650,16 @@ dissect_nvme_to_host(tvbuff_t *nvme_tvb, packet_info *pinfo,
                 nvme_publish_link(rdma_tree, nvme_tvb, hf_nvmeof_write_to_host_prev , cmd->data_tr_pkt_num[idx-1], false);
             if ((idx + 1) < NVME_CMD_MAX_TRS)
                 nvme_publish_link(rdma_tree, nvme_tvb, hf_nvmeof_write_to_host_next , cmd->data_tr_pkt_num[idx+1], false);
-            dissect_nvme_data_response(nvme_tvb, pinfo, root_tree, &q_ctx->n_q_ctx, cmd, len, false);
+            /* An RDMA WRITE to the host carries the controller's response
+             * data for the command.  This path maintains the running transfer
+             * offset itself -- nvme_add_data_tr_off() just above, and the
+             * tr_bytes increment just below -- so the offset the shared
+             * decoder infers is the real one and no explicit origin is
+             * needed. */
+            dissect_nvme_data_response(nvme_tvb, pinfo, root_tree,
+                                       &q_ctx->n_q_ctx, cmd, len, false,
+                                       NVME_DATA_DIR_CONTROLLER_TO_HOST,
+                                       NVME_DATA_ORIGIN_TRACKED);
             if (!PINFO_FD_VISITED(pinfo))
                  cmd->tr_bytes += len;
         } else {

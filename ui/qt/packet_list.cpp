@@ -286,7 +286,7 @@ PacketList::PacketList(QWidget *parent) :
     pinned_selection_model_(nullptr),
     syncing_selection_(false),
     pinned_column_boundary_(0),
-    saved_pinned_column_boundary_(0),
+    reload_pending_(false),
     pinned_column_view_(nullptr),
     pinned_row_view_(nullptr),
     pinned_row_corner_view_(nullptr),
@@ -654,6 +654,7 @@ QString PacketList::joinSummaryRow(QStringList col_parts, int row, SummaryCopyTy
 
 void PacketList::drawRow (QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
 {
+    ColorUtils::paintRowBackground(painter, option, index);
     QTreeView::drawRow(painter, option, index);
 
     // The hover highlight is driven by hovered_frame_num_ rather than Qt's
@@ -2219,7 +2220,6 @@ void PacketList::columnsChanged()
     if (pinned_column_boundary_ > 0) {
         setPinnedColumnBoundary(0);
     }
-    saved_pinned_column_boundary_ = 0;
     columns_changed_ = false;
 }
 
@@ -2329,20 +2329,16 @@ void PacketList::setVerticalAutoScroll(bool enabled)
 
 // Called when we finish reading, reloading, rescanning, and retapping
 // packets.
-void PacketList::captureFileReadFinished()
+void PacketList::captureFileReadFinished(CaptureEvent::Context context)
 {
     packet_list_proxy_model_->flushVisibleRows();
     packet_list_proxy_model_->dissectIdle(true);
-    // Redissection cleared the model; bring back the frozen columns and
-    // pinned packets.
-    if (saved_pinned_column_boundary_ > 0) {
-        int boundary = saved_pinned_column_boundary_;
-        saved_pinned_column_boundary_ = 0;
-        if (boundary < header()->count()) {
-            setPinnedColumnBoundary(boundary);
-        }
-    }
-    if (pinned_rows_model_ && pinned_rows_model_->restoreSavedPins()) {
+    // Redissecting or reloading the file cleared the model; bring back the
+    // pinned packets. A newly opened file has none, even if it's the same
+    // file.
+    if (context == CaptureEvent::File) {
+        pinned_rows_model_->discardSavedPins();
+    } else if (pinned_rows_model_->restoreSavedPins()) {
         updatePinnedRowVisibility();
         reconcilePinnedSelection();
     }
@@ -2466,20 +2462,13 @@ bool PacketList::thaw(bool restore_selection)
 
 void PacketList::clear() {
     // pinned_rows_model_ unpins everything itself when packet_list_model_
-    // is cleared below, remembering the pins so redissection can restore
-    // them (see captureFileReadFinished()). The frozen columns are handled
-    // the same way.
-    // cap_file_ is null when the file is being closed (setCaptureFile(NULL)
-    // precedes the clear), in which case there is nothing to restore later.
-    saved_pinned_column_boundary_ = cap_file_ ? pinned_column_boundary_ : 0;
-    setPinnedColumnBoundary(0);
-
+    // is cleared below, remembering the pins so redissecting or reloading
+    // the file can restore them (see captureFileReadFinished()). The frozen
+    // columns are part of the view, like the columns themselves, and are
+    // kept.
     related_packet_delegate_.clear();
     selectionModel()->clear();
     packet_list_model_->clear();
-    if (!cap_file_) {
-        pinned_rows_model_->discardSavedPins();
-    }
     proto_tree_->clear();
     selection_history_.clear();
     cur_history_ = -1;
@@ -2728,10 +2717,16 @@ void PacketList::deleteAllPacketComments()
 
 void PacketList::setCaptureFile(capture_file *cf)
 {
+    // Reloading closes and reopens the file before the reload starts, so
+    // keep the pins saved when the file is cleared, unless something other
+    // than a reload opens a file.
+    if (cf) {
+        if (!reload_pending_) {
+            pinned_rows_model_->discardSavedPins();
+        }
+        reload_pending_ = false;
+    }
     cap_file_ = cf;
-    // A different file (or none) is being shown, not a redissection.
-    pinned_rows_model_->discardSavedPins();
-    saved_pinned_column_boundary_ = 0;
     packet_list_model_->setCaptureFile(cf);
     if (cap_file_ && columns_changed_) {
         columnsChanged();
@@ -3440,14 +3435,14 @@ QString PacketList::createSummaryForAligned(int frame_num, QList<int> align_part
 
 QString PacketList::createDefaultStyleForHtml()
 {
-    QString fontFamily = QString(prefs.gui_font_name).split(",")[0];
-    QString fontSize = QString(prefs.gui_font_name).split(",")[1];
+    const QFont font = FontManager::monospaceFont();
+    const qreal fontSize = font.pointSizeF();
 
     return QStringLiteral("<style>"
         "table{font-family:%1;font-size:%2pt;}"
         "th{background-color:#000000;color:#ffffff;text-align:left;}"
         "th,td{padding:%3pt}"
-        "</style>").arg(fontFamily, fontSize).arg(fontSize.toInt() / 2);
+        "</style>").arg(font.family()).arg(fontSize).arg(int(fontSize) / 2);
 }
 
 QString PacketList::createOpeningTagForHtml()

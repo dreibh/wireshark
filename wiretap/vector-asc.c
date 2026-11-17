@@ -38,8 +38,12 @@
 
 #define ASC_MAGIC "date"
 #define VECTOR_ASC_MAX_LINE_SIZE 512
+/* Columns are separated by spaces or tabs; also drop the line ending */
+#define VECTOR_ASC_DELIMITERS " \t\r\n"
 
-static const gchar *packet_pattern = "\\d+\\.\\d+\\s+(\\d+\\s+(\\w+\\s+(Tx|Rx)|ErrorFrame)|CANFD)";
+/* Anchored, so that the first column is the time stamp, and the channel
+ * column is a channel number or CANFD */
+static const gchar *packet_pattern = "^\\s*\\d+\\.\\d+\\s+(\\d+\\s+(\\w+\\s+(Tx|Rx)|ErrorFrame)|CANFD)";
 static const gchar *base_pattern = "base\\s+(hex|dec)(\\s+timestamps\\s+(absolute|relative))?";
 
 typedef enum {
@@ -80,8 +84,7 @@ typedef struct {
   vector_asc_processing_state_t state;
   vector_asc_timestamp_t timestamps_type;
   vector_asc_base_t base;
-  time_t trace_start;
-  time_t trace_start_nsec;
+  nstime_t trace_start;
   GRegex* data_matcher;
   vector_asc_version_t version;
 } vector_asc_state_t;
@@ -99,21 +102,106 @@ static const gchar *month_patterns[16] = {
     "Sep", "Oct", "Nov", "Dec", "Mär", "Mai", "Okt", "Dez"
 };
 
-void init_month_regexes(void)
+/* The month regexes are compiled once and kept for the life of the
+ * program, as every heuristic open attempt may need them. */
+static void init_month_regexes(void)
 {
-  for (int i = 0; i < 16; ++i) {
-    month_regexes[i] = g_regex_new(month_patterns[i], 0, 0, NULL);
-  }
-}
+  static gsize initialized = 0;
 
-void free_month_regexes(void)
-{
-  for (int i = 0; i < 16; ++i) {
-    //g_free(month_regexes[i]);
+  if (g_once_init_enter(&initialized)) {
+    for (int i = 0; i < 16; ++i) {
+      month_regexes[i] = g_regex_new(month_patterns[i], 0, 0, NULL);
+    }
+    g_once_init_leave(&initialized, 1);
   }
 }
 
 void register_vector_asc(void);
+
+/* Parse the date in the "date <WeekDay> <Month> <Date> <Fulltime> <Year>"
+ * header line into the trace start time. */
+static void
+vector_asc_parse_date(vector_asc_state_t* state, const char* date_str)
+{
+  // replace month names with 2 digit numbers
+  gchar *datetime_string = g_strdup(date_str);
+  for (gsize i = 0; i < 16; i++) {
+    GError *error = NULL;
+    gchar *replaced = g_regex_replace_literal(
+        month_regexes[i],
+        datetime_string, -1, 0,
+        month_numbers[i],
+        0, &error
+        );
+    g_free(datetime_string);
+    if (replaced == NULL) {
+      // e.g. invalid UTF-8; leave the start time unparsed
+      vector_asc_debug_printf("%s: Cannot parse date: %s\n", G_STRFUNC, error ? error->message : "");
+      g_clear_error(&error);
+      return;
+    }
+    datetime_string = replaced;
+  }
+  // The month names are numbers now; skip the <WeekDay> name, if any
+  // (python-can matches "date\s+\w+\s+").
+  const char *date_fields = datetime_string;
+  while (g_ascii_isspace(*date_fields))
+    date_fields++;
+  if (g_ascii_isalpha(*date_fields)) {
+    while (*date_fields != '\0' && !g_ascii_isspace(*date_fields))
+      date_fields++;
+  }
+  bool parsed = false;
+  int year, month, day, hour, min, sec;
+  char ampm[4];
+  int sec_pos = 0;
+  nstime_t sec_frac;
+  const char *year_str;
+  // Try the %m %d %H:%M:%S[.%f] %Y format. Starting with CANalyzer/CANoe
+  // v8.2 SP2 the <Fulltime> is stored in milliseconds; parse the seconds
+  // and their fraction like a Unix time.
+  if (sscanf(date_fields, "%d %02d %02d:%02d:%n", &month, &day, &hour, &min, &sec_pos) == 4 &&
+      sec_pos > 0 &&
+      (year_str = unix_epoch_to_nstime(&sec_frac, &date_fields[sec_pos])) != NULL &&
+      sec_frac.secs <= 60 &&
+      sscanf(year_str, "%04d", &year) == 1) {
+    sec = (int)sec_frac.secs;
+    state->trace_start.nsecs = sec_frac.nsecs;
+    parsed = true;
+  }
+
+  if (!parsed) {
+    // try the 8 Apr 2025 3:49:52pm format
+    int matches = sscanf(date_fields, "%d %02d %04d %d:%d:%d%02s", &day, &month, &year, &hour, &min, &sec, ampm);
+    if (matches == 7) {
+      // 12:xx am is 00:xx, and 12:xx pm is 12:xx
+      if (hour == 12)
+        hour = 0;
+      if (g_ascii_strncasecmp(ampm, "pm", 2) == 0) {
+        hour += 12;
+      }
+      parsed = true;
+    }
+  }
+
+  if (parsed) {
+    struct tm t = {0};
+    t.tm_year = year - 1900;
+    t.tm_mon = month - 1;
+    t.tm_mday = day;
+    t.tm_hour = hour;
+    t.tm_min = min;
+    t.tm_sec = sec;
+    t.tm_isdst = -1;  // the date is local time; let mktime() find out about DST
+    time_t start = mktime(&t);
+    if (start != (time_t)-1)
+      state->trace_start.secs = start;
+    else
+      state->trace_start.nsecs = 0;
+  }
+
+  g_free(datetime_string);
+}
 
 static wtap_open_return_val
 vector_asc_parse(wtap* wth, vector_asc_state_t* state, gint64* offset, int* err, char** err_info)
@@ -124,12 +212,10 @@ vector_asc_parse(wtap* wth, vector_asc_state_t* state, gint64* offset, int* err,
   vector_asc_debug_printf("%s: Trying vector_asc file decoder\n", G_STRFUNC);
 
   /* Initial start time until we find it in the header */
-  state->trace_start = time(NULL);
-  state->trace_start_nsec = 0;
+  state->trace_start.secs = time(NULL);
+  state->trace_start.nsecs = 0;
   state->state = Date;
   state->timestamps_type = Absolute;
-
-  bool reprocess_line = false;
 
   /* Bail if the end of the file is here and it hasn't been determined it's a Vector ASC file */
   while (!file_eof(wth->fh))
@@ -137,19 +223,14 @@ vector_asc_parse(wtap* wth, vector_asc_state_t* state, gint64* offset, int* err,
     seek_off = file_tell(wth->fh);
     vector_asc_debug_printf("%s: Starting parser at offset %" PRIi64 "\n", G_STRFUNC, seek_off);
 
-    if (!reprocess_line)
+    if (file_gets(line_buffer, VECTOR_ASC_MAX_LINE_SIZE, wth->fh) == NULL)
     {
-      if (file_gets(line_buffer, VECTOR_ASC_MAX_LINE_SIZE, wth->fh) == NULL)
-      {
-        /* Error reading file, bail out */
-        *err = file_error(wth->fh, err_info);
-        if (*err != 0 && *err != WTAP_ERR_SHORT_READ)
-          return WTAP_OPEN_ERROR;
+      /* Error reading file, bail out */
+      *err = file_error(wth->fh, err_info);
+      if (*err != 0 && *err != WTAP_ERR_SHORT_READ)
+        return WTAP_OPEN_ERROR;
 
-        return WTAP_OPEN_NOT_MINE;
-      }
-    } else {
-      reprocess_line = false;
+      return WTAP_OPEN_NOT_MINE;
     }
 
     g_strstrip(line_buffer);
@@ -159,124 +240,78 @@ vector_asc_parse(wtap* wth, vector_asc_state_t* state, gint64* offset, int* err,
     if (line_len == 0)
       continue;
 
-    if (state->state == Date) {
-      if (strncmp(line_buffer, ASC_MAGIC, strlen(ASC_MAGIC)) != 0) {
-        return WTAP_OPEN_NOT_MINE;
-      } else {
-        // replace month names with 2 digit numbers
-        gchar *datetime_string = g_strdup(&line_buffer[5]);
-        for (gsize i = 0; i < 16; i++) {
-          gchar *old = datetime_string;
-          datetime_string = g_regex_replace_literal(
-              month_regexes[i],
-              datetime_string, -1, 0,
-              month_numbers[i],
-              0, NULL
-              );
-          g_free(old);
+    switch (state->state) {
+      case Date:
+        if (strncmp(line_buffer, ASC_MAGIC, strlen(ASC_MAGIC)) != 0) {
+          return WTAP_OPEN_NOT_MINE;
         }
-        // date <WeekDay> <Month> <Date> <Fulltime> <Year>
-        // Starting with CANalyzer/CANoe v8.2 SP2 the <Fulltime> is stored in milliseconds.
-        bool parsed = false;
-        int year, month, day, hour, min, sec, usec;
-        char ampm[4];
-        // Try the %m %d %H:%M:%S.%f %Y	format
-        int matches = sscanf(datetime_string, "%d %02d %02d:%02d:%02d.%d %04d", &month, &day, &hour, &min, &sec, &usec, &year);
-        if (matches == 7) {
-          parsed = true;
-          state->trace_start_nsec = usec * 1000;
-        }
-
-        if (!parsed) {
-          // fallback try on the %m %d %H:%M:%S %Y format
-          matches = sscanf(datetime_string, "%d %02d %02d:%02d:%02d %04d", &month, &day, &hour, &min, &sec, &year);
-          if (matches == 6) {
-            parsed = true;
-          }
-        }
-
-        if (!parsed) {
-          // try the 8 Apr 2025 3:49:52pm format
-          matches = sscanf(datetime_string, "%d %02d %04d %d:%d:%d%02s", &day, &month, &year, &hour, &min, &sec, ampm);
-          if (matches == 7) {
-            if (strncmp(ampm, "pm", 2) == 0) {
-              hour += 12;
-            }
-            parsed = true;
-          }
-        }
-
-        if (parsed) {
-          struct tm t = {0};
-          t.tm_year = year - 1900;
-          t.tm_mon = month - 1;
-          t.tm_mday = day;
-          t.tm_hour = hour;
-          t.tm_min = min;
-          t.tm_sec = sec;
-          state->trace_start = mktime(&t);
-        }
-
-        g_free(datetime_string);
-
+        // the line may be just "date", so don't index past its end
+        vector_asc_parse_date(state, &line_buffer[strlen(ASC_MAGIC)]);
         state->state = Base;
-        continue;
-      }
-    } else if (state->state == Base) {
-      if (strncmp(line_buffer, "base ", 5) == 0) {
-        GMatchInfo *match_info;
-        GRegex *base_regex = g_regex_new(base_pattern, G_REGEX_CASELESS, 0, NULL);
-        if (g_regex_match(base_regex, line_buffer, 0, &match_info)) {
-          const gchar *base_str = g_match_info_fetch(match_info, 1);
-          const gchar *time_str = g_match_info_fetch(match_info, 3);
+        break;
+      case Base:
+        if (g_ascii_strncasecmp(line_buffer, "base ", 5) == 0) {
+          GMatchInfo *match_info;
+          GRegex *base_regex = g_regex_new(base_pattern, G_REGEX_CASELESS, 0, NULL);
+          if (g_regex_match(base_regex, line_buffer, 0, &match_info)) {
+            const gchar *base_str = g_match_info_fetch(match_info, 1);
+            const gchar *time_str = g_match_info_fetch(match_info, 3);
 
-          if (g_strcmp0(base_str, "hex") == 0)
-            state->base = Hex;
-          else
-            state->base = Dec;
+            if (g_ascii_strcasecmp(base_str, "hex") == 0)
+              state->base = Hex;
+            else
+              state->base = Dec;
 
-          if (time_str && g_strcmp0(time_str, "relative") == 0) {
-            state->timestamps_type = Relative;
+            if (time_str && g_ascii_strcasecmp(time_str, "relative") == 0) {
+              state->timestamps_type = Relative;
+            }
+
+            g_free((gchar *)base_str);
+            g_free((gchar *)time_str);
           }
 
-          g_free((gchar *)base_str);
-          g_free((gchar *)time_str);
+          g_match_info_free(match_info);
+          g_regex_unref(base_regex);
+          state->state = Version;
+          break;
         }
-
-        g_match_info_free(match_info);
-        g_regex_unref(base_regex);
-        base_regex = NULL;
-      }
-      state->state = Packets;
-    } else if (state->state == Version) {
-      // Starting with CANalyzer/CANoe v7.0 a version number is written after the header in form of a comment:
-      // '// version <major>.<minor>.<patch>'
-      if (strncmp(line_buffer, "// version", 10) == 0) {
-      } else {
+        // The base line is expected after the date; like python-can, accept
+        // a file without one, and process the line as the next header line
+        // or a packet.
+        state->state = Version;
+        /* FALLTHROUGH */
+      case Version:
+        // The base line is followed by "internal events logged" or
+        // "no internal events logged", and starting with CANalyzer/CANoe v7.0
+        // a version number is written after the header in form of a comment:
+        // '// version <major>.<minor>.<patch>'
+        if (strncmp(line_buffer, "// version", 10) == 0 ||
+            g_ascii_strcasecmp(line_buffer, "internal events logged") == 0 ||
+            g_ascii_strcasecmp(line_buffer, "no internal events logged") == 0) {
+          state->state = Packets;
+          break;
+        }
         // version not following the header, maybe pre 7.0 file -> reprocess the line as Packet
         state->state = Packets;
-        reprocess_line = true;
-        continue;
-      }
-    } else if (state->state == Packets) {
-      /* seek until the first data packet */
-      if (state->data_matcher == NULL) {
-        GError *error = NULL;
-        state->data_matcher = g_regex_new(packet_pattern, (GRegexCompileFlags)(G_REGEX_OPTIMIZE | G_REGEX_RAW), (GRegexMatchFlags)0, NULL);
-        if (!state->data_matcher) {
-          g_error_free(error);
-          return WTAP_OPEN_ERROR;
+        /* FALLTHROUGH */
+      case Packets:
+        /* seek until the first data packet */
+        if (state->data_matcher == NULL) {
+          GError *error = NULL;
+          state->data_matcher = g_regex_new(packet_pattern, (GRegexCompileFlags)(G_REGEX_OPTIMIZE | G_REGEX_RAW), (GRegexMatchFlags)0, &error);
+          if (!state->data_matcher) {
+            *err = WTAP_ERR_INTERNAL;
+            *err_info = ws_strdup_printf("vector-asc: cannot compile the packet pattern: %s", error->message);
+            g_error_free(error);
+            return WTAP_OPEN_ERROR;
+          }
         }
-      }
 
-      GMatchInfo *match_info;
-      g_regex_match(state->data_matcher, line_buffer, 0, &match_info);
-      if (g_match_info_matches(match_info)) {
-        g_match_info_free(match_info);
-
-        *offset = seek_off;
-        return WTAP_OPEN_MINE;
-      }
+        if (g_regex_match(state->data_matcher, line_buffer, 0, NULL)) {
+          *offset = seek_off;
+          return WTAP_OPEN_MINE;
+        }
+        break;
     }
   }
 
@@ -286,7 +321,7 @@ vector_asc_parse(wtap* wth, vector_asc_state_t* state, gint64* offset, int* err,
 static bool vector_asc_process_classic_can_frame(char *token, wtap_can_msg_t *vector_msg, wtap* wth)
 {
   vector_asc_state_t *state = (vector_asc_state_t*)wtap_socketcan_get_private_data(wth);
-  if (strcmp(token, "errorframe") == 0) {
+  if (g_ascii_strcasecmp(token, "ErrorFrame") == 0) {
     vector_msg->type = MSG_TYPE_ERR;
   } else {
     int columnIndex = CanID;
@@ -347,7 +382,7 @@ static bool vector_asc_process_classic_can_frame(char *token, wtap_can_msg_t *ve
           // CAN FD columns
           break;
       }
-      token = strtok(NULL, " ");
+      token = strtok(NULL, VECTOR_ASC_DELIMITERS);
     }
   }
   return true;
@@ -356,7 +391,7 @@ static bool vector_asc_process_classic_can_frame(char *token, wtap_can_msg_t *ve
 static bool vector_asc_process_fd_can_frame(char *token, wtap_can_msg_t *vector_msg, wtap* wth)
 {
   (void)wth;
-  if (strcmp(token, "errorframe") == 0) {
+  if (g_ascii_strcasecmp(token, "ErrorFrame") == 0) {
     vector_msg->type = MSG_TYPE_ERR;
   } else {
     int columnIndex = CanID;
@@ -408,7 +443,7 @@ static bool vector_asc_process_fd_can_frame(char *token, wtap_can_msg_t *vector_
           dataCounter++;
           break;
       }
-      token = strtok(NULL, " ");
+      token = strtok(NULL, VECTOR_ASC_DELIMITERS);
     }
   }
   /*
@@ -469,74 +504,73 @@ vector_asc_read_packet(wtap *wth, FILE_T fh, vector_asc_state_t* state,
       return false;
     }
 
-    if ((strcmp(line_buffer, "Begin Triggerblock") == 0) ||
-        (strcmp(line_buffer, "End Triggerblock") == 0)) {
+    /* Skip the lines that are not CAN frames (Begin/End Triggerblock,
+     * comments, events and other message types) instead of making an
+     * empty record of them. */
+    if (!g_regex_match(state->data_matcher, line_buffer, 0, NULL))
       continue;
-    }
 
-    GMatchInfo *match_info;
-    double message_timestamp_s = 0.0;
     bool isFd = false;
+    bool skip_line = false;
 
+    memset(&vector_msg, 0, sizeof vector_msg);
     vector_msg.interface_id = WTAP_SOCKETCAN_INVALID_INTERFACE_ID;
 
-    g_regex_match(state->data_matcher, line_buffer, 0, &match_info);
-    if (g_match_info_matches(match_info)) {
-      g_match_info_free(match_info);
+    char *column = strtok(line_buffer, VECTOR_ASC_DELIMITERS);
+    int columnIndex = TimeStamp;
+    while (column != NULL && !skip_line)
+    {
+      switch ((vector_asc_data_column_t)columnIndex) {
+        case TimeStamp:
+          /* Seconds with a fraction; this fails (and the line is
+           * skipped) if it does not fit in time_t. */
+          if (unix_epoch_to_nstime(&vector_msg.ts, column) == NULL) {
+            skip_line = true;
+            break;
+          }
+          if (state->timestamps_type == Absolute) {
+            /* saturates instead of overflowing */
+            nstime_add(&vector_msg.ts, &state->trace_start);
+          }
+          columnIndex = Channel;
+          break;
+        case Channel:
+          if ((strcmp(column, "Comment:") == 0) ||
+              (strcmp(column, "GPS") == 0) ||
+              (strcmp(column, "SV:") == 0) ||
+              (strcmp(column, "log") == 0)) {
+            /* Not a CAN frame */
+            skip_line = true;
+            break;
+          }
 
-      char *column = strtok(line_buffer, " ");
-      int columnIndex = TimeStamp;
-      while (column != NULL)
-      {
-        switch ((vector_asc_data_column_t)columnIndex) {
-          case TimeStamp:
-            message_timestamp_s = g_ascii_strtod(column, NULL);
-            if (state->timestamps_type == Absolute) {
-              message_timestamp_s += state->trace_start + (state->trace_start_nsec / 1e9);
-              int delta_secs = (int)(message_timestamp_s);
-              int delta_nsecs = (int)((message_timestamp_s - delta_secs) * 1e9);
-
-              vector_msg.ts.secs = delta_secs;
-              vector_msg.ts.nsecs = delta_nsecs;
-            } else {
-              vector_msg.ts.secs = (time_t)(message_timestamp_s);
-              vector_msg.ts.nsecs = (int)((message_timestamp_s - (vector_msg.ts.secs)) * 1e9);
-            }
+          if (strcmp(column, "CANFD") == 0) {
+            isFd = true;
             columnIndex = Channel;
-            break;
-          case Channel:
-            if ((strcmp(column, "Comment:") == 0) ||
-                (strcmp(column, "GPS") == 0) ||
-                (strcmp(column, "SV:") == 0) ||
-                (strcmp(column, "log") == 0)) {
-              continue;
-            }
-
-            if (strcmp(column, "CANFD") == 0) {
-              isFd = true;
-              columnIndex = Channel;
-            } else if (strcmp(column, "CAN") == 0) {
-              columnIndex = Channel;
-            } else {
-              char* interface_name = wmem_strdup_printf(NULL, "interface%s", column);
-              vector_msg.interface_id = wtap_socketcan_find_or_create_new_interface(wth, interface_name);
-              wmem_free(NULL, interface_name);
-              columnIndex = CanID;
-            }
-            break;
-          case CanID:
-            if (isFd) {
-              vector_asc_process_fd_can_frame(column, &vector_msg, wth);
-            } else {
-              vector_asc_process_classic_can_frame(column, &vector_msg, wth);
-            }
-            break;
-          default:
-            break;
-        }
-        column = strtok(NULL, " ");
+          } else if (strcmp(column, "CAN") == 0) {
+            columnIndex = Channel;
+          } else {
+            char* interface_name = wmem_strdup_printf(NULL, "interface%s", column);
+            vector_msg.interface_id = wtap_socketcan_find_or_create_new_interface(wth, interface_name);
+            wmem_free(NULL, interface_name);
+            columnIndex = CanID;
+          }
+          break;
+        case CanID:
+          if (isFd) {
+            vector_asc_process_fd_can_frame(column, &vector_msg, wth);
+          } else {
+            vector_asc_process_classic_can_frame(column, &vector_msg, wth);
+          }
+          break;
+        default:
+          break;
       }
+      column = strtok(NULL, VECTOR_ASC_DELIMITERS);
     }
+
+    if (skip_line)
+      continue;
 
     return wtap_socketcan_gen_packet(wth, rec, &vector_msg, "vector-asc", err, err_info);
   }
@@ -585,7 +619,6 @@ clean_asc_state(vector_asc_state_t* state)
 static void vector_asc_close(void* tap_data)
 {
   clean_asc_state((vector_asc_state_t*)tap_data);
-  free_month_regexes();
 }
 
 wtap_open_return_val

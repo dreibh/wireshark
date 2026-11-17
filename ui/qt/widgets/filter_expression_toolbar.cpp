@@ -40,8 +40,20 @@ static const char *dfe_menu_ = "filter_menu";
 struct filter_expression_data
 {
     FilterExpressionToolBar* toolbar;
-    bool actions_added;
+    bool needs_separator;
 };
+
+// Space toolbar buttons, including dropdowns, but never their menu entries.
+static void addToolbarAction(filter_expression_data *data, QAction *action)
+{
+    if (data->needs_separator) {
+        QFrame *sep = new QFrame();
+        sep->setEnabled(false);
+        data->toolbar->addWidget(sep);
+    }
+    data->toolbar->addAction(action);
+    data->needs_separator = true;
+}
 
 FilterExpressionToolBar::FilterExpressionToolBar(QWidget * parent) :
     DragDropToolBar(parent)
@@ -133,7 +145,7 @@ void FilterExpressionToolBar::filterExpressionsChanged()
     struct filter_expression_data data;
 
     data.toolbar = this;
-    data.actions_added = false;
+    data.needs_separator = false;
 
     // Hiding and showing seems to be the only way to get the layout to
     // work correctly in some cases. See bug 14121 for details.
@@ -399,7 +411,7 @@ QMenu * FilterExpressionToolBar::findParentMenu(const QStringList tree, void *fe
         // Change the auto created QToolButton inside the QToolBar pop-up
         // behavior. Only auto created tool buttons will show up in the
         // extension menu at narrow widths (#19887.)
-        data->toolbar->addAction(menuAction);
+        addToolbarAction(data, menuAction);
         QWidget* menuWidget = data->toolbar->widgetForAction(menuAction);
         QToolButton* menuButton = qobject_cast<QToolButton*>(menuWidget);
         if (menuButton != nullptr) {
@@ -444,6 +456,17 @@ bool FilterExpressionToolBar::filter_expression_add_action(const void *key _U_, 
         }
     }
 
+    // A "---" label with no expression represents a separator, not a filter.
+    if (label.trimmed() == QStringLiteral("---") && fe->expression[0] == '\0') {
+        if (parentMenu) {
+            parentMenu->addSeparator();
+        } else {
+            data->toolbar->addSeparator();
+            data->needs_separator = false;
+        }
+        return false;
+    }
+
     QAction *dfb_action = new QAction(label, data->toolbar);
     if (strlen(fe->comment) > 0)
     {
@@ -464,20 +487,10 @@ bool FilterExpressionToolBar::filter_expression_add_action(const void *key _U_, 
     if (parentMenu) {
         parentMenu->addAction(dfb_action);
     } else {
-        /* Only add a visual separator between toolbar-level buttons.
-         * Submenu items must not create separators because disabled
-         * QFrame widgets still occupy ~1 px on the toolbar, causing
-         * progressively wider gaps when many submenu entries exist. */
-        if (data->actions_added) {
-            QFrame *sep = new QFrame();
-            sep->setEnabled(false);
-            data->toolbar->addWidget(sep);
-        }
-        data->toolbar->addAction(dfb_action);
+        addToolbarAction(data, dfb_action);
     }
 
     connect(dfb_action, &QAction::triggered, data->toolbar, &FilterExpressionToolBar::filterClicked);
-    data->actions_added = true;
     return false;
 }
 

@@ -168,8 +168,16 @@ static int ett_json;
 static int ett_geoip_info;
 
 static expert_field ei_sinsp_capture_unreadable;
+static expert_field ei_sinsp_extract_failed;
 
 static int container_io_tap;
+
+static const char *
+sinsp_last_error_str(sinsp_source_info_t *ssi)
+{
+    const char *err = get_sinsp_source_last_error(ssi);
+    return err ? err : "unknown error";
+}
 
 static bool pref_show_internal;
 
@@ -502,23 +510,23 @@ create_source_hfids(bridge_info* bi)
     }
 
     if (bi->visible_fields) {
-        bi->hf = (hf_register_info*)wmem_alloc(wmem_epan_scope(), bi->visible_fields * sizeof(hf_register_info));
-        bi->hf_ids = (int*)wmem_alloc0(wmem_epan_scope(), bi->visible_fields * sizeof(int));
-        bi->field_ids = (int*)wmem_alloc(wmem_epan_scope(), bi->visible_fields * sizeof(int));
-        bi->field_flags = (uint32_t*)wmem_alloc(wmem_epan_scope(), bi->visible_fields * sizeof(uint32_t));
+        bi->hf = wmem_alloc_array(wmem_epan_scope(), hf_register_info, bi->visible_fields);
+        bi->hf_ids = wmem_alloc0_array(wmem_epan_scope(), int, bi->visible_fields);
+        bi->field_ids = wmem_alloc_array(wmem_epan_scope(), int, bi->visible_fields);
+        bi->field_flags = wmem_alloc_array(wmem_epan_scope(), uint32_t, bi->visible_fields);
 
         if (bi->addr_fields) {
-            bi->hf_id_to_addr_id = (int *)wmem_alloc(wmem_epan_scope(), bi->visible_fields * sizeof(int));
-            bi->hf_v4 = (hf_register_info*)wmem_alloc(wmem_epan_scope(), bi->addr_fields * sizeof(hf_register_info));
-            bi->hf_v4_ids = (int*)wmem_alloc0(wmem_epan_scope(), bi->addr_fields * sizeof(int));
-            bi->hf_v6 = (hf_register_info*)wmem_alloc(wmem_epan_scope(), bi->addr_fields * sizeof(hf_register_info));
-            bi->hf_v6_ids = (int*)wmem_alloc0(wmem_epan_scope(), bi->addr_fields * sizeof(int));
+            bi->hf_id_to_addr_id = wmem_alloc_array(wmem_epan_scope(), int, bi->visible_fields);
+            bi->hf_v4 = wmem_alloc_array(wmem_epan_scope(), hf_register_info, bi->addr_fields);
+            bi->hf_v4_ids = wmem_alloc0_array(wmem_epan_scope(), int, bi->addr_fields);
+            bi->hf_v6 = wmem_alloc_array(wmem_epan_scope(), hf_register_info, bi->addr_fields);
+            bi->hf_v6_ids = wmem_alloc0_array(wmem_epan_scope(), int, bi->addr_fields);
             bi->hf_geoip = (hf_register_info*)wmem_alloc(wmem_epan_scope(), bi->addr_fields * GEOIP_FIELD_COUNT * sizeof(hf_register_info));
             bi->hf_geoip_ids = (int*)wmem_alloc0(wmem_epan_scope(), bi->addr_fields * GEOIP_FIELD_COUNT * sizeof(int));
         }
 
         if (bi->num_conversation_filters) {
-            bi->conversation_filters = (conv_filter_info *)wmem_alloc(wmem_epan_scope(), bi->num_conversation_filters * sizeof (conv_filter_info));
+            bi->conversation_filters = wmem_alloc_array(wmem_epan_scope(), conv_filter_info, bi->num_conversation_filters);
         }
 
         uint32_t fld_cnt = 0;
@@ -1335,7 +1343,11 @@ dissect_sinsp_enriched(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void
     bool rc = extract_syscall_source_fields(sinsp_span, bi->ssi, pinfo->fd->num, &sinsp_fields, &sinsp_fields_count, &sinsp_evt_info);
 
     if (!rc) {
-        REPORT_DISSECTOR_BUG("Falco plugin %s extract error: %s", get_sinsp_source_name(bi->ssi), get_sinsp_source_last_error(bi->ssi));
+        // libsinsp rejects malformed events (e.g. a parameter length that does
+        // not match the event type); that is bad packet data, not a dissector bug.
+        proto_tree_add_expert_format(tree, pinfo, &ei_sinsp_extract_failed, tvb, 0, 0,
+                                     "Falco plugin %s extract error: %s", get_sinsp_source_name(bi->ssi), sinsp_last_error_str(bi->ssi));
+        return tvb_captured_length(tvb);
     }
 
     if (sinsp_fields_count == 0) {
@@ -1654,7 +1666,7 @@ dissect_sinsp_plugin(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* 
 
     const uint8_t* payload = tvb_get_ptr(tvb, 0, payload_len);
 
-    plugin_field_extract_t *sinsp_fields = (plugin_field_extract_t*) wmem_alloc(pinfo->pool, sizeof(plugin_field_extract_t) * bi->visible_fields);
+    plugin_field_extract_t *sinsp_fields = wmem_alloc_array(pinfo->pool, plugin_field_extract_t, bi->visible_fields);
     for (uint32_t fld_idx = 0; fld_idx < bi->visible_fields; fld_idx++) {
         header_field_info* hfinfo = &(bi->hf[fld_idx].hfinfo);
         plugin_field_extract_t *sfe = &sinsp_fields[fld_idx];
@@ -1668,7 +1680,9 @@ dissect_sinsp_plugin(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* 
     bool rc = extract_plugin_source_fields(bi->ssi, pinfo->num, payload, payload_len, pinfo->pool, sinsp_fields, bi->visible_fields);
 
     if (!rc) {
-        REPORT_DISSECTOR_BUG("Falco plugin %s extract error: %s", get_sinsp_source_name(bi->ssi), get_sinsp_source_last_error(bi->ssi));
+        proto_tree_add_expert_format(fb_tree, pinfo, &ei_sinsp_extract_failed, tvb, 0, 0,
+                                     "Falco plugin %s extract error: %s", get_sinsp_source_name(bi->ssi), sinsp_last_error_str(bi->ssi));
+        return payload_len;
     }
 
     for (uint32_t idx = 0; idx < bi->num_conversation_filters; idx++) {
@@ -2036,6 +2050,9 @@ proto_register_falcoplugin(void)
         { &ei_sinsp_capture_unreadable,
           { "falcoevents.capture_unreadable", PI_UNDECODED, PI_WARN,
             "libsinsp couldn't open this capture file, so Falco event fields aren't available", EXPFILL }},
+        { &ei_sinsp_extract_failed,
+          { "falcoevents.extract_failed", PI_MALFORMED, PI_ERROR,
+            "Falco plugin field extraction failed", EXPFILL }},
     };
     expert_module_t *expert_falco_events = expert_register_protocol(proto_falco_events);
     expert_register_field_array(expert_falco_events, ei, array_length(ei));

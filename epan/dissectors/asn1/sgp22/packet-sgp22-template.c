@@ -14,6 +14,7 @@
 
 #include <epan/packet.h>
 #include <epan/expert.h>
+#include <epan/proto_data.h>
 #include <epan/oids.h>
 
 #include "packet-ber.h"
@@ -42,9 +43,13 @@ static int ett_sgp22_mccMnc;
 #include "packet-sgp22-ett.c"
 
 static expert_field ei_sgp22_bsp_segment_short;
+static expert_field ei_sgp22_bsp_nesting;
+
+#define SGP22_MAX_BPP_NESTING 4
 
 static dissector_handle_t sgp22_handle;
 static dissector_table_t sgp22_request_table;
+static dissector_table_t sgp22_response_table;
 
 static const value_string sgp22_tag_vals[] = {
   { 0x4F, "isdpAid" },
@@ -160,12 +165,92 @@ static void sgp22_bsp_reassemble(asn1_ctx_t *actx, sgp22_bpp_t *bpp)
 
     if ((seq == SGP22_BSP_SEQ_88) && (tvb_reported_length(next_tvb) > 2)) {
       /* The '88' segments are MACed only, not encrypted (SGP.22 2.5.4.3). */
+      unsigned depth = p_get_proto_depth(actx->pinfo, proto_sgp22);
+      if (depth >= SGP22_MAX_BPP_NESTING) {
+        expert_add_info(actx->pinfo, actx->created_item, &ei_sgp22_bsp_nesting);
+        continue;
+      }
+      p_set_proto_depth(actx->pinfo, proto_sgp22, depth + 1);
       dissector_try_uint(sgp22_request_table, tvb_get_ntohs(next_tvb, 0), next_tvb, actx->pinfo, bpp->tree[seq]);
+      p_set_proto_depth(actx->pinfo, proto_sgp22, depth);
     }
   }
 }
 
 #include "packet-sgp22-fn.c"
+
+unsigned get_rsp_tag(tvbuff_t *tvb, uint32_t *tag)
+{
+  unsigned offset = 0;
+
+  /* The dissector tables use the raw identifier octets as key, e.g. 0xBF22.
+   * All RSP tags are one or two octets. */
+  *tag = tvb_get_uint8(tvb, offset++);
+  if ((*tag & 0x1F) == 0x1F) {
+    *tag = (*tag << 8) | tvb_get_uint8(tvb, offset++);
+  }
+
+  return offset;
+}
+
+bool is_rsp_asn1_header(tvbuff_t *tvb, uint32_t *tag)
+{
+  uint32_t length = 0;
+  unsigned offset;
+
+  offset = get_rsp_tag(tvb, tag);
+  offset = get_ber_length(tvb, offset, &length, NULL);
+
+  return ((offset + length) == tvb_reported_length(tvb));
+}
+
+bool is_sgp22_request(tvbuff_t *tvb)
+{
+  uint32_t tag;
+
+  if (!is_rsp_asn1_header(tvb, &tag)) {
+    return false;
+  }
+
+  return dissector_get_uint_handle(sgp22_request_table, tag) != NULL;
+}
+
+bool is_sgp22_response(tvbuff_t *tvb)
+{
+  uint32_t tag;
+
+  if (!is_rsp_asn1_header(tvb, &tag)) {
+    return false;
+  }
+
+  return dissector_get_uint_handle(sgp22_response_table, tag) != NULL;
+}
+
+static int dissect_sgp22_table(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, dissector_table_t table)
+{
+  proto_item *sgp22_ti;
+  proto_tree *sgp22_tree;
+  uint32_t tag = 0;
+
+  col_set_str(pinfo->cinfo, COL_PROTOCOL, "SGP.22");
+
+  sgp22_ti = proto_tree_add_item(tree, proto_sgp22, tvb, 0, -1, ENC_NA);
+  sgp22_tree = proto_item_add_subtree(sgp22_ti, ett_sgp22);
+
+  get_rsp_tag(tvb, &tag);
+
+  return dissector_try_uint(table, tag, tvb, pinfo, sgp22_tree);
+}
+
+int dissect_sgp22_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
+{
+  return dissect_sgp22_table(tvb, pinfo, tree, sgp22_request_table);
+}
+
+int dissect_sgp22_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
+{
+  return dissect_sgp22_table(tvb, pinfo, tree, sgp22_response_table);
+}
 
 static int dissect_sgp22(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
@@ -237,6 +322,9 @@ void proto_register_sgp22(void)
     { &ei_sgp22_bsp_segment_short,
       { "sgp22.bsp.segment_too_short", PI_MALFORMED, PI_ERROR,
         "BSP segment is too short to hold a C-MAC", EXPFILL }},
+    { &ei_sgp22_bsp_nesting,
+      { "sgp22.bsp.nesting_too_deep", PI_MALFORMED, PI_ERROR,
+        "Nested BoundProfilePackage is too deep", EXPFILL }},
   };
 
   expert_module_t *expert_sgp22;
@@ -250,7 +338,10 @@ void proto_register_sgp22(void)
   sgp22_handle = register_dissector("sgp22", dissect_sgp22, proto_sgp22);
 
   sgp22_request_table = register_dissector_table("sgp22.request", "SGP.22 Request", proto_sgp22, FT_UINT16, BASE_HEX);
-  register_dissector_table("sgp22.response", "SGP.22 Response", proto_sgp22, FT_UINT16, BASE_HEX);
+  sgp22_response_table = register_dissector_table("sgp22.response", "SGP.22 Response", proto_sgp22, FT_UINT16, BASE_HEX);
+
+  register_ber_syntax_dissector("SGP.22 Request", proto_sgp22, dissect_sgp22_request);
+  register_ber_syntax_dissector("SGP.22 Response", proto_sgp22, dissect_sgp22_response);
 }
 
 void proto_reg_handoff_sgp22(void)

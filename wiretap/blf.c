@@ -2501,6 +2501,7 @@ blf_read_flexrayrcvmessageex(blf_params_t *params, int *err, char **err_info, in
 
     uint16_t payload_length;
     uint16_t payload_length_valid;
+    uint16_t headerCrc;
     uint8_t  tmpbuf[7];
     int      frheadersize = sizeof(frheader);
     unsigned caplen, len;
@@ -2541,12 +2542,7 @@ blf_read_flexrayrcvmessageex(blf_params_t *params, int *err, char **err_info, in
     }
 
     /* Measurement Header */
-    /* TODO: It seems that this format support both channels at the same time!? */
-    if (frheader.channelMask == BLF_FLEXRAYRCVMSG_CHANNELMASK_A) {
-        tmpbuf[0] = BLF_FLEXRAYDATA_FRAME;
-    } else {
-        tmpbuf[0] = BLF_FLEXRAYDATA_FRAME | BLF_FLEXRAYDATA_CHANNEL_B;
-    }
+    tmpbuf[0] = BLF_FLEXRAYDATA_FRAME;
 
     /* Error Flags */
     tmpbuf[1] = 0;
@@ -2571,14 +2567,34 @@ blf_read_flexrayrcvmessageex(blf_params_t *params, int *err, char **err_info, in
     }
 
     tmpbuf[3] = 0x00ff & frheader.frameId;
-    tmpbuf[4] = (0xfe & frheader.payloadLength) | ((frheader.headerCrc1 & 0x0400) >> 10);
-    tmpbuf[5] = (0x03fc & frheader.headerCrc1) >> 2;
-    tmpbuf[6] = ((0x0003 & frheader.headerCrc1) << 6) | (0x3f & frheader.cycle);
 
-    ws_buffer_assure_space(&params->rec->data, sizeof(tmpbuf) + payload_length_valid);
-    ws_buffer_append(&params->rec->data, tmpbuf, sizeof(tmpbuf));
     caplen = sizeof(tmpbuf) + payload_length_valid;
     len = sizeof(tmpbuf) + payload_length;
+
+    /* XXX - The format supports both Channel A and B in a single entry, but
+     * we have no way to represent that in the FlexRay header, nor we can
+     * create two different packets from the same entry.
+     * Keep only channel A in that case.
+     */
+    if (frheader.channelMask & BLF_FLEXRAYRCVMSG_CHANNELMASK_A) {
+        headerCrc = frheader.headerCrc1;
+    }
+    else if (frheader.channelMask & BLF_FLEXRAYRCVMSG_CHANNELMASK_B) {
+        headerCrc = frheader.headerCrc2;
+
+        tmpbuf[0] |= BLF_FLEXRAYDATA_CHANNEL_B;
+    }
+    else {
+        ws_debug("FlexRay channel mask not recognized.");
+        return false;
+    }
+
+    tmpbuf[4] = (0xfe & frheader.payloadLength) | ((headerCrc & 0x0400) >> 10);
+    tmpbuf[5] = (0x03fc & headerCrc) >> 2;
+    tmpbuf[6] = ((0x0003 & headerCrc) << 6) | (0x3f & frheader.cycle);
+
+    ws_buffer_assure_space(&params->rec->data, caplen);
+    ws_buffer_append(&params->rec->data, tmpbuf, sizeof(tmpbuf));
 
     if (payload_length_valid > 0 && !blf_read_bytes(params, data_start + frheadersize, ws_buffer_end_ptr(&params->rec->data), payload_length_valid, err, err_info)) {
         ws_debug("copying flexray payload failed");
@@ -2586,7 +2602,7 @@ blf_read_flexrayrcvmessageex(blf_params_t *params, int *err, char **err_info, in
     }
     ws_buffer_increase_length(&params->rec->data, payload_length_valid);
 
-    blf_init_rec(params, flags, object_timestamp, WTAP_ENCAP_FLEXRAY, frheader.channelMask, UINT16_MAX, caplen, len);
+    blf_init_rec(params, flags, object_timestamp, WTAP_ENCAP_FLEXRAY, frheader.channel, UINT16_MAX, caplen, len);
     blf_add_direction_option(params, frheader.dir);
 
     return true;
@@ -3379,6 +3395,14 @@ blf_read_apptextmessage(blf_params_t *params, int *err, char **err_info, int64_t
         return BLF_APPTEXT_FAILED;
     }
     fix_endianness_blf_apptext_header(&apptextheader);
+
+    if (apptextheader.textLength > object_length - (data_start - block_start) - (int)sizeof(apptextheader)) {
+        *err = WTAP_ERR_BAD_FILE;
+        *err_info = ws_strdup_printf("blf: APP_TEXT: text length %u is larger than the object",
+                                     apptextheader.textLength);
+        ws_debug("text length larger than the object");
+        return BLF_APPTEXT_FAILED;
+    }
 
     if (metadata_info->valid && apptextheader.source != BLF_APPTEXT_METADATA) {
         /* If we're in the middle of a sequence of metadata objects,
@@ -4272,6 +4296,8 @@ blf_finalize_file_header(wtap_dumper *wdh, int *err) {
     blf_write_date_to_blf_header(fileheader, true, writer_data->start_time);
     blf_write_date_to_blf_header(fileheader, false, writer_data->end_time);
 
+    /* Save the length before the header is converted to little-endian. */
+    uint32_t header_length = fileheader->header_length;
     fix_endianness_blf_fileheader(fileheader);
 
     /* seek to start of file */
@@ -4280,7 +4306,7 @@ blf_finalize_file_header(wtap_dumper *wdh, int *err) {
         return false;
     }
 
-    if (!wtap_dump_file_write(wdh, fileheader, fileheader->header_length, err)) {
+    if (!wtap_dump_file_write(wdh, fileheader, header_length, err)) {
         return false;
     }
 
@@ -4557,9 +4583,11 @@ static bool blf_dump_ethernet(wtap_dumper *wdh, const wtap_rec *rec, int *err, c
         return false;
     }
     ethheader.res = 0;
+    /* Save the length before the header is converted to little-endian. */
+    uint16_t payload_length = ethheader.payloadlength;
     fix_endianness_blf_ethernetframeheader(&ethheader);
 
-    if (!blf_dump_objheader(wdh, err, obj_timestamp, BLF_OBJTYPE_ETHERNET_FRAME, sizeof(blf_ethernetframeheader_t) + ethheader.payloadlength)) {
+    if (!blf_dump_objheader(wdh, err, obj_timestamp, BLF_OBJTYPE_ETHERNET_FRAME, sizeof(blf_ethernetframeheader_t) + payload_length)) {
         return false;
     }
 
@@ -4567,12 +4595,12 @@ static bool blf_dump_ethernet(wtap_dumper *wdh, const wtap_rec *rec, int *err, c
         return false;
     }
 
-    if (!wtap_dump_file_write(wdh, &(pd[offset]), ethheader.payloadlength, err)) {
+    if (!wtap_dump_file_write(wdh, &(pd[offset]), payload_length, err)) {
         return false;
     }
 
     /* Add strange padding to 4 bytes. */
-    uint8_t padding_needed = (sizeof(blf_ethernetframeheader_t) + ethheader.payloadlength) % 4;
+    uint8_t padding_needed = (sizeof(blf_ethernetframeheader_t) + payload_length) % 4;
     return blf_write_add_padding(wdh, err, padding_needed);
 }
 

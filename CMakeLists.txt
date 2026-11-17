@@ -2566,28 +2566,6 @@ if(USE_REPOSITORY)
 		ws_add_runtime_dlls(${_falco_plugin_dlls} ONLY_FOR stratoshark)
 	endif()
 
-	if (SMI_FOUND)
-		# Wireshark.nsi wants SMI_DIR which is the base SMI directory
-		get_filename_component(SMI_DIR ${SMI_DLL_DIR} DIRECTORY)
-
-		# Copy and install the directories of SMI modules (MIBs, PIBs and YANG
-		# modules) that we use, including their subdirectories, such as
-		# mibs/iana and mibs/ietf. This is the same layout as in the NSIS
-		# installer. We search the snmp directory recursively for modules.
-		cmake_path(SET _snmp_install_dir NORMALIZE "${CMAKE_INSTALL_BINDIR}/snmp")
-		foreach(_mib_dir mibs pibs yang)
-			add_custom_command(TARGET copy_cli_dlls PRE_BUILD
-				COMMAND ${CMAKE_COMMAND} -E copy_directory
-					"${SMI_SHARE_DIR}/${_mib_dir}"
-					"${_dll_output_dir}/snmp/${_mib_dir}"
-			)
-			install(DIRECTORY "${SMI_SHARE_DIR}/${_mib_dir}"
-				DESTINATION "${_snmp_install_dir}"
-			)
-		endforeach()
-
-	endif(SMI_FOUND)
-
 	# Third party DLLs, registered by our Find modules using
 	# ws_add_runtime_dlls(), and their PDBs.
 	get_property(_runtime_dll_targets GLOBAL PROPERTY WS_RUNTIME_DLL_TARGETS)
@@ -2636,6 +2614,52 @@ if(USE_REPOSITORY)
 			WORKING_DIRECTORY "${_dll_output_dir}"
 		)
 	endif()
+endif()
+
+if(WIN32 AND SMI_FOUND)
+	# The NSIS and WiX installers package the SMI modules copied below
+	# if SMI_DIR, the base SMI directory, is set.
+	get_filename_component(SMI_DIR "${SMI_SHARE_DIR}" DIRECTORY)
+
+	# Copy and install the directories of SMI modules (MIBs, PIBs and YANG
+	# modules) that we use, including their subdirectories, such as
+	# mibs/iana and mibs/ietf. This is the same layout as in the NSIS
+	# installer. We search the snmp directory recursively for modules.
+	# Do this for MSYS2 as well: someone installing from an NSIS package
+	# probably won't have the libraries in the same paths as the builder,
+	# and its libsmi was built with a default path that a native Windows
+	# program can't use even if installed into the MSYS2 runtime.
+	# XXX - For the same reason, we might want to install the modules on
+	# macOS if ENABLE_APPLICATION_BUNDLE is true.
+	add_custom_target(copy_smi_modules)
+	set_target_properties(copy_smi_modules PROPERTIES FOLDER "Copy Tasks")
+	# Install them in the data file directory, which is the program
+	# directory on Windows and <prefix>/share/wireshark in the MSYS2
+	# runtime.
+	if (ENABLE_SEPARATE_PROJECT_NAME)
+		cmake_path(SET _snmp_install_dir NORMALIZE "${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/snmp")
+	else()
+		cmake_path(SET _snmp_install_dir NORMALIZE "${CMAKE_INSTALL_DATADIR}/snmp")
+	endif()
+	foreach(_mib_dir mibs pibs yang)
+		# Skip directories without modules: MSYS2's libsmi has only
+		# empty subdirectories in pibs. The installers package what is
+		# copied here.
+		file(GLOB_RECURSE _smi_module_files LIST_DIRECTORIES false
+			"${SMI_SHARE_DIR}/${_mib_dir}/*"
+		)
+		if(_smi_module_files)
+			add_custom_command(TARGET copy_smi_modules PRE_BUILD
+				COMMAND ${CMAKE_COMMAND} -E copy_directory
+					"${SMI_SHARE_DIR}/${_mib_dir}"
+					"$<TARGET_FILE_DIR:wsutil>/snmp/${_mib_dir}"
+			)
+			install(DIRECTORY "${SMI_SHARE_DIR}/${_mib_dir}"
+				DESTINATION "${_snmp_install_dir}"
+			)
+		endif()
+	endforeach()
+	add_dependencies(epan copy_smi_modules)
 endif()
 
 # List of extra dependencies for the "copy_data_files" target
@@ -3287,8 +3311,8 @@ if(BUILD_wireshark AND QT_FOUND)
 		$<$<BOOL:${WIN32}>:uxtheme.lib>
 		$<$<BOOL:${WIN32}>:dwmapi.lib>
 		${SPEEXDSP_LIBRARIES}
-		${ZLIB_LIBRARIES}
-		${ZLIBNG_LIBRARIES}
+		$<TARGET_NAME_IF_EXISTS:ZLIB::ZLIB>
+		$<TARGET_NAME_IF_EXISTS:ZLIBNG::ZLIBNG>
 		${MINIZIP_LIBRARIES}
 	)
 
@@ -3407,8 +3431,8 @@ if(BUILD_stratoshark AND QT_FOUND)
 		$<$<BOOL:${WIN32}>:uxtheme.lib>
 		$<$<BOOL:${WIN32}>:dwmapi.lib>
 		${SPEEXDSP_LIBRARIES}
-		${ZLIB_LIBRARIES}
-		${ZLIBNG_LIBRARIES}
+		$<TARGET_NAME_IF_EXISTS:ZLIB::ZLIB>
+		$<TARGET_NAME_IF_EXISTS:ZLIBNG::ZLIBNG>
 		${MINIZIP_LIBRARIES}
 	)
 
@@ -3742,8 +3766,8 @@ if(BUILD_text2pcap)
 		wsutil
 		ui
 		epan
-		${ZLIB_LIBRARIES}
-		${ZLIBNG_LIBRARIES}
+		$<TARGET_NAME_IF_EXISTS:ZLIB::ZLIB>
+		$<TARGET_NAME_IF_EXISTS:ZLIBNG::ZLIBNG>
 	)
 	set(text2pcap_FILES
 		app/wireshark_flavor.c
@@ -3761,8 +3785,8 @@ if(BUILD_mergecap)
 	set(mergecap_LIBS
 		ui
 		wiretap
-		${ZLIB_LIBRARIES}
-		${ZLIBNG_LIBRARIES}
+		$<TARGET_NAME_IF_EXISTS:ZLIB::ZLIB>
+		$<TARGET_NAME_IF_EXISTS:ZLIBNG::ZLIBNG>
 		${CMAKE_DL_LIBS}
 	)
 	set(mergecap_FILES
@@ -3780,8 +3804,8 @@ if(BUILD_reordercap)
 	set(reordercap_LIBS
 		ui
 		wiretap
-		${ZLIB_LIBRARIES}
-		${ZLIBNG_LIBRARIES}
+		$<TARGET_NAME_IF_EXISTS:ZLIB::ZLIB>
+		$<TARGET_NAME_IF_EXISTS:ZLIBNG::ZLIBNG>
 		${CMAKE_DL_LIBS}
 	)
 	set(reordercap_FILES
@@ -3800,8 +3824,8 @@ if(BUILD_capinfos)
 		ui
 		wiretap
 		wsutil
-		${ZLIB_LIBRARIES}
-		${ZLIBNG_LIBRARIES}
+		$<TARGET_NAME_IF_EXISTS:ZLIB::ZLIB>
+		$<TARGET_NAME_IF_EXISTS:ZLIBNG::ZLIBNG>
 		GCrypt::GCrypt
 		${CMAKE_DL_LIBS}
 	)
@@ -3821,8 +3845,8 @@ if(BUILD_captype)
 		ui
 		wiretap
 		wsutil
-		${ZLIB_LIBRARIES}
-		${ZLIBNG_LIBRARIES}
+		$<TARGET_NAME_IF_EXISTS:ZLIB::ZLIB>
+		$<TARGET_NAME_IF_EXISTS:ZLIBNG::ZLIBNG>
 		${CMAKE_DL_LIBS}
 	)
 	set(captype_FILES
@@ -3840,8 +3864,8 @@ if(BUILD_editcap)
 	set(editcap_LIBS
 		ui
 		wiretap
-		${ZLIB_LIBRARIES}
-		${ZLIBNG_LIBRARIES}
+		$<TARGET_NAME_IF_EXISTS:ZLIB::ZLIB>
+		$<TARGET_NAME_IF_EXISTS:ZLIBNG::ZLIBNG>
 		GCrypt::GCrypt
 		${CMAKE_DL_LIBS}
 	)

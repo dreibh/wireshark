@@ -1195,9 +1195,7 @@ dissect_nfq_attrs(tvbuff_t *tvb, void *data, struct packet_netlink_data *nl_data
 		case WS_NFQA_HWADDR:
 			if (len >= 4) {
 				uint16_t addrlen;
-
-				proto_tree_add_item(tree, hf_nfq_hwaddr_len, tvb, offset, 2, ENC_BIG_ENDIAN);
-				addrlen = tvb_get_ntohs(tvb, offset);
+				proto_tree_add_item_ret_uint16(tree, hf_nfq_hwaddr_len, tvb, offset, 2, ENC_BIG_ENDIAN, &addrlen);
 				offset += 2;
 				proto_tree_add_item(tree, hf_padding, tvb, offset, 2, ENC_NA);
 				offset += 2;
@@ -1314,7 +1312,7 @@ dissect_netfilter_ulog(tvbuff_t *tvb, netlink_netfilter_info_t *info, struct pac
 		case WS_NFULNL_MSG_PACKET:
 			/* Note that NFLOG dissects the nfgenmsg header */
 			next_tvb = tvb_new_subset_remaining(tvb, offset);
-			call_dissector(nflog_handle, next_tvb, info->pinfo, tree);
+			call_dissector_with_data(nflog_handle, next_tvb, info->pinfo, tree, nl_data);
 			offset = tvb_reported_length(tvb);
 			break;
 
@@ -3428,7 +3426,7 @@ proto_reg_handoff_netlink_netfilter(void)
 {
 	dissector_add_uint("netlink.protocol", WS_NETLINK_NETFILTER, netlink_netfilter);
 
-	nflog_handle = find_dissector_add_dependency("nflog", proto_netlink_netfilter);
+	nflog_handle = find_dissector_add_dependency("nflog_netlink", proto_netlink_netfilter);
 	ethertype_table = find_dissector_table("ethertype");
 }
 

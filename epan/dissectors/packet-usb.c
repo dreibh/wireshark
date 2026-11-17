@@ -1790,13 +1790,14 @@ void proto_reg_handoff_usb(void);
 /* USB address handling */
 static int usb_addr_to_str(const address* addr, char *buf, int buf_len _U_)
 {
-    const uint8_t *addrp = (const uint8_t *)addr->data;
+    usb_address_t usb_addr;
 
-    if(pletohu32(&addrp[0])==0xffffffff){
+    memcpy(&usb_addr, addr->data, sizeof usb_addr);
+    if (usb_addr.device == 0xffffffff) {
         (void) g_strlcpy(buf, "host", buf_len);
     } else {
-        snprintf(buf, buf_len, "%u.%u.%u", pletohu16(&addrp[8]),
-                        pletohu32(&addrp[0]), pletohu32(&addrp[4]) & 0x0f);
+        snprintf(buf, buf_len, "%u.%u.%u", usb_addr.bus_id,
+                        usb_addr.device, usb_addr.endpoint & 0x0f);
     }
 
     return (int)(strlen(buf)+1);
@@ -1985,7 +1986,7 @@ get_usb_iface_conv_info(packet_info *pinfo, uint8_t interface_num)
     conversation_t *conversation;
     uint32_t if_port;
 
-    if_port = GUINT32_TO_LE(INTERFACE_PORT | interface_num);
+    if_port = INTERFACE_PORT | interface_num;
 
     if (pinfo->srcport == NO_ENDPOINT) {
         conversation = get_usb_conversation(pinfo, &pinfo->src, &pinfo->dst, pinfo->srcport, if_port);
@@ -2006,11 +2007,11 @@ get_existing_usb_ep_conv_info(packet_info* pinfo, uint16_t bus_id, uint16_t devi
     conversation_t  *conversation;
     usb_conv_info_t *usb_conv_info = NULL;
 
-    src_addr->bus_id   = GUINT16_TO_LE(bus_id);
-    src_addr->device   = GUINT16_TO_LE(device_address);
-    src_addr->endpoint = GUINT32_TO_LE(endpoint);
+    src_addr->bus_id   = bus_id;
+    src_addr->device   = device_address;
+    src_addr->endpoint = endpoint;
 
-    dst_addr->bus_id   = GUINT16_TO_LE(bus_id);
+    dst_addr->bus_id   = bus_id;
     dst_addr->device   = 0xffffffff;
     dst_addr->endpoint = NO_ENDPOINT;
 
@@ -2491,7 +2492,7 @@ dissect_usb_string_descriptor(packet_info *pinfo _U_, proto_tree *parent_tree,
     } else {
         /* UTF-16 string */
         /* handle case of host requesting only substring */
-        uint8_t len_str = MIN(len-2, usb_trans_info->setup.wLength -2);
+        uint8_t len_str = (usb_trans_info->setup.wLength >= 2) ? MIN(len-2, usb_trans_info->setup.wLength - 2) : 0;
         proto_tree_add_item(tree, hf_usb_bString, tvb, offset, len_str, ENC_UTF_16 | ENC_LITTLE_ENDIAN);
         offset += len_str;
     }
@@ -2560,7 +2561,22 @@ dissect_usb_interface_descriptor(packet_info *pinfo, proto_tree *parent_tree,
         alternate_setting.interfaceSubclass = tvb_get_uint8(tvb, offset+1);
         alternate_setting.interfaceProtocol = tvb_get_uint8(tvb, offset+2);
         alternate_setting.interfaceNum = interface_num;
-        wmem_array_append_one(usb_trans_info->interface_info->alt_settings, alternate_setting);
+        /* Keep one entry per bAlternateSetting (at most 256 entries) so
+         * that SET_INTERFACE does not scan an unbounded array. */
+        {
+            wmem_array_t *alts = usb_trans_info->interface_info->alt_settings;
+            unsigned alt_idx, alt_count = wmem_array_get_count(alts);
+
+            for (alt_idx = 0; alt_idx < alt_count; alt_idx++) {
+                usb_alt_setting_t *as = (usb_alt_setting_t *)wmem_array_index(alts, alt_idx);
+                if (as->altSetting == alternate_setting.altSetting) {
+                    *as = alternate_setting;
+                    break;
+                }
+            }
+            if (alt_idx == alt_count)
+                wmem_array_append_one(alts, alternate_setting);
+        }
 
         if (alt_setting == 0) {
             /* By default let's assume alternate setting 0 will be used */
@@ -2836,7 +2852,7 @@ dissect_usb_endpoint_descriptor(packet_info *pinfo, proto_tree *parent_tree,
              */
             usb_addr->bus_id = ((const usb_address_t *)(pinfo->src.data))->bus_id;
             usb_addr->device = ((const usb_address_t *)(pinfo->src.data))->device;
-            usb_addr->endpoint = GUINT32_TO_LE(endpoint);
+            usb_addr->endpoint = endpoint;
             set_address(&tmp_addr, usb_address_type, USB_ADDR_LEN, (char *)usb_addr);
             conversation = get_usb_conversation(pinfo, &tmp_addr, &pinfo->dst, usb_addr->endpoint, pinfo->destport);
         }
@@ -4204,7 +4220,7 @@ try_dissect_next_protocol(proto_tree *tree, tvbuff_t *next_tvb, packet_info *pin
                     usb_address_t *dst_addr = wmem_new0(pinfo->pool, usb_address_t);
                     dst_addr->bus_id = urb->bus_id;
                     dst_addr->device = urb->device_address;
-                    dst_addr->endpoint = dst_endpoint = GUINT32_TO_LE(endpoint);
+                    dst_addr->endpoint = dst_endpoint = endpoint;
                     set_address(&endpoint_addr, usb_address_type, USB_ADDR_LEN, (char *)dst_addr);
 
                     conversation = get_usb_conversation(pinfo, &pinfo->src, &endpoint_addr, pinfo->srcport, dst_endpoint);
@@ -4213,7 +4229,7 @@ try_dissect_next_protocol(proto_tree *tree, tvbuff_t *next_tvb, packet_info *pin
                     usb_address_t *src_addr = wmem_new0(pinfo->pool, usb_address_t);
                     src_addr->bus_id = urb->bus_id;
                     src_addr->device = urb->device_address;
-                    src_addr->endpoint = src_endpoint = GUINT32_TO_LE(endpoint);
+                    src_addr->endpoint = src_endpoint = endpoint;
                     set_address(&endpoint_addr, usb_address_type, USB_ADDR_LEN, (char *)src_addr);
 
                     conversation  = get_usb_conversation(pinfo, &endpoint_addr, &pinfo->dst, src_endpoint, pinfo->destport);
@@ -4726,17 +4742,17 @@ usb_set_addr(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, uint16_t bus_i
         /* request */
         src_addr->device   = 0xffffffff;
         src_addr->endpoint = NO_ENDPOINT;
-        dst_addr->device   = GUINT16_TO_LE(device_address);
-        dst_addr->endpoint = GUINT32_TO_LE(endpoint);
+        dst_addr->device   = device_address;
+        dst_addr->endpoint = endpoint;
     } else {
         /* response */
-        src_addr->device   = GUINT16_TO_LE(device_address);
-        src_addr->endpoint = GUINT32_TO_LE(endpoint);
+        src_addr->device   = device_address;
+        src_addr->endpoint = endpoint;
         dst_addr->device   = 0xffffffff;
         dst_addr->endpoint = NO_ENDPOINT;
     }
-    src_addr->bus_id = GUINT16_TO_LE(bus_id);
-    dst_addr->bus_id = GUINT16_TO_LE(bus_id);
+    src_addr->bus_id = bus_id;
+    dst_addr->bus_id = bus_id;
 
     set_address(&pinfo->net_src, usb_address_type, USB_ADDR_LEN, (char *)src_addr);
     copy_address_shallow(&pinfo->src, &pinfo->net_src);
@@ -5405,16 +5421,19 @@ static int freebsd_collect_frame_data(proto_tree *tree, tvbuff_t *tvb,
             tvbuff_t *chunk = tvb_new_subset_length(tvb, offset, framelen);
             proto_tree_add_item(frame_tree, hf_usb_frame_data, tvb, offset,
                                 framelen, ENC_NA);
-            if (data_frame_count == 0) {
+            if (tvb_captured_length(chunk) == 0) {
+                /* Empty members are dropped by the composite; don't count them. */
+            } else if (data_frame_count == 0) {
                 assembled = chunk;
+                data_frame_count++;
             } else {
                 if (data_frame_count == 1) {
                     composite = tvb_new_composite();
                     tvb_composite_append(composite, assembled);
                 }
                 tvb_composite_append(composite, chunk);
+                data_frame_count++;
             }
-            data_frame_count++;
             offset += WS_ROUNDUP_4(framelen);
         }
         proto_item_set_end(ti, tvb, offset);
@@ -5799,7 +5818,7 @@ dissect_usb_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent,
         urb_type = tvb_get_uint8(tvb, 8);
         endpoint = tvb_get_uint8(tvb, 10);
         device_address = (uint16_t)tvb_get_uint8(tvb, 11);
-        bus_id = tvb_get_letohs(tvb, 12);
+        bus_id = tvb_get_uint16(tvb, 12, ENC_HOST_ENDIAN);
         break;
 
     case USB_HEADER_USBPCAP:

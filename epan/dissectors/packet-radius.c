@@ -1226,6 +1226,7 @@ radius_tlv(radius_attr_info_t *a, proto_tree *tree, packet_info *pinfo _U_, tvbu
 	while (len > 0) {
 		radius_attr_info_t *dictionary_entry = NULL;
 		uint32_t tlv_type;
+		radius_attr_type_t tlv_code;
 		uint32_t tlv_length;
 
 		proto_item *tlv_item;
@@ -1254,8 +1255,12 @@ radius_tlv(radius_attr_info_t *a, proto_tree *tree, packet_info *pinfo _U_, tvbu
 
 		len -= tlv_length;
 
-		if (a->tlvs_by_id)
-			dictionary_entry = (radius_attr_info_t *)g_hash_table_lookup(a->tlvs_by_id, GUINT_TO_POINTER(tlv_type));
+		if (a->tlvs_by_id) {
+			/* The TLVs are keyed by the code as add_tlv() in radius_dict.l builds it */
+			memset(&tlv_code, 0, sizeof(tlv_code));
+			tlv_code.u8_code[0] = tlv_type;
+			dictionary_entry = (radius_attr_info_t *)g_hash_table_lookup(a->tlvs_by_id, GUINT_TO_POINTER(tlv_code.value));
+		}
 
 		if (!dictionary_entry) {
 			dictionary_entry = &no_dictionary_entry;
@@ -1337,6 +1342,7 @@ add_avp_to_tree(proto_tree *avp_tree, proto_item *avp_item, packet_info *pinfo, 
 		} else {
 			tvbuff_t *tvb_decrypted = NULL;
 			uint8_t *buffer;
+			unsigned decrypted_start = 0;
 
 			switch (dictionary_entry->encrypt) {
 			case 1: /* encrypted like User-Password as defined in RFC 2865 */
@@ -1373,6 +1379,7 @@ add_avp_to_tree(proto_tree *avp_tree, proto_item *avp_item, packet_info *pinfo, 
 				/* first byte contains length of decrypted data */
 				avp_length = (buffer[0] < avp_length) ? buffer[0] : avp_length -1;
 				add_new_data_source(pinfo, tvb_decrypted, "Decrypted Data");
+				decrypted_start = 1;
 				dictionary_entry->type(dictionary_entry, avp_tree, pinfo, tvb_decrypted, 1, avp_length, avp_item);
 			break;
 
@@ -1391,8 +1398,8 @@ add_avp_to_tree(proto_tree *avp_tree, proto_item *avp_item, packet_info *pinfo, 
 			break;
 			}
 
-			if (dictionary_entry->type == radius_string && tvb_decrypted && !tvb_utf_8_isprint(tvb_decrypted, 0, avp_length)) {
-				proto_tree_add_expert_format(avp_tree, pinfo, &ei_radius_shared_secret, tvb_decrypted, 0, avp_length, "non-UTF8, shared secret may be incorrect");
+			if (dictionary_entry->type == radius_string && tvb_decrypted && !tvb_utf_8_isprint(tvb_decrypted, decrypted_start, avp_length)) {
+				proto_tree_add_expert_format(avp_tree, pinfo, &ei_radius_shared_secret, tvb_decrypted, decrypted_start, avp_length, "non-UTF8, shared secret may be incorrect");
 			}
 		}
 	} else {
@@ -1531,6 +1538,12 @@ dissect_attribute_value_pairs(proto_tree *tree, packet_info *pinfo, tvbuff_t *tv
 		if (avp_is_extended && avp_length < 3) {
 			proto_tree_add_expert_format(tree, pinfo, &ei_radius_invalid_length, tvb, offset, 0,
 						   "Extended AVP too short: length %u < 3", avp_length);
+			break;  /* exit outer loop, then cleanup & return */
+		}
+
+		if (avp_is_extended && RADIUS_ATTR_TYPE_IS_EXTENDED_LONG(avp_type0) && avp_length < 4) {
+			proto_tree_add_expert_format(tree, pinfo, &ei_radius_invalid_length, tvb, offset, 0,
+						   "Long Extended AVP too short: length %u < 4", avp_length);
 			break;  /* exit outer loop, then cleanup & return */
 		}
 
@@ -1770,6 +1783,7 @@ dissect_attribute_value_pairs(proto_tree *tree, packet_info *pinfo, tvbuff_t *tv
 
 				offset += avp_vsa_len;
 			} /* while (offset < max_offset) */
+			offset = max_offset;
 			continue;  /* while (length > 0) */
 		}
 
@@ -2388,9 +2402,12 @@ register_attrs(void *k _U_, void *v, void *p)
 	unsigned len_hf = 2;
 	hfett_t *ri = (hfett_t *)p;
 
-	for(i=0; abbrev[i]; i++) {
+	/* Skip the "radius." prefix; a '.' in the attribute name is not valid
+	 * in a filter name (empty or repeated components). */
+	for(i=(int)strlen("radius."); abbrev[i]; i++) {
 		if (abbrev[i] == '-') abbrev[i] = '_';
 		if (abbrev[i] == '/') abbrev[i] = '_';
+		if (abbrev[i] == '.') abbrev[i] = '_';
 	}
 
 	hfri[0].p_id = &(a->hf);
@@ -2573,7 +2590,7 @@ radius_register_avp_dissector(uint32_t vendor_id, uint32_t _attribute_id, radius
 	if (!dictionary_entry) {
 		dictionary_entry = g_new(radius_attr_info_t, 1);
 
-		dictionary_entry->name = ws_strdup_printf("Unknown-Attribute-%u", attribute_id.value);
+		dictionary_entry->name = ws_strdup_printf("Unknown-Attribute-%u", _attribute_id);
 		dictionary_entry->code = attribute_id;
 		dictionary_entry->encrypt = 0;
 		dictionary_entry->type = NULL;

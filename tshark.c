@@ -882,7 +882,7 @@ about_folders(void)
     /* SMI MIBs/PIBs */
     path = oid_get_default_mib_path(application_configuration_environment_prefix());
 
-    resultArray = g_strsplit(path, G_SEARCHPATH_SEPARATOR_S, 20);
+    resultArray = g_strsplit(path, G_SEARCHPATH_SEPARATOR_S, 0);
 
     for(i = 0; resultArray[i]; i++)
         printf("%-21s\t%s\n", "MIB/PIB path:", g_strstrip(resultArray[i]));
@@ -1272,7 +1272,13 @@ main(int argc, char *argv[])
     while ((opt = ws_getopt_long(argc, argv, optstring, long_options, NULL)) != -1) {
         switch (opt) {
             case 'C':        /* Configuration Profile */
-                profile_name = g_strdup(ws_optarg);
+                g_free(profile_name);
+                profile_name = profile_canonical_name(ws_optarg);
+                if (profile_name == NULL) {
+                    cmdarg_err("Configuration Profile \"%s\" does not exist", ws_optarg);
+                    exit_status = WS_EXIT_INVALID_OPTION;
+                    goto clean_exit;
+                }
                 break;
             case LONGOPT_GLOBAL_PROFILE:
                 use_global_profile = true;
@@ -1521,6 +1527,7 @@ main(int argc, char *argv[])
 #endif
                 break;
             case 'w':        /* Write to file x */
+                g_free(output_file_name);
                 output_file_name = g_strdup(ws_optarg);
 #ifdef HAVE_LIBPCAP
                 exit_status = capture_opts_add_opt(application_configuration_environment_prefix(), &global_capture_opts, opt, ws_optarg);
@@ -2587,6 +2594,7 @@ main(int argc, char *argv[])
         exp_pdu_filename = output_file_name;
         output_file_name = NULL;
 #ifdef HAVE_LIBPCAP
+        g_free(global_capture_opts.save_file);
         global_capture_opts.save_file = NULL;
 #endif
         if (exp_pdu_filename == NULL) {
@@ -4029,12 +4037,6 @@ process_cap_file_second_pass(capture_file *cf, wtap_dumper *pdh,
                     status = PASS_WRITE_ERROR;
                     break;
                 }
-                /* Stop reading if we hit a stop condition */
-                if (max_write_packet_count > 0 && write_framenum >= max_write_packet_count) {
-                    ws_debug("tshark: max_write_packet_count (%d) reached", max_write_packet_count);
-                    *err = 0; /* This is not an error */
-                    break;
-                }
             }
             break;
 
@@ -4050,6 +4052,16 @@ process_cap_file_second_pass(capture_file *cf, wtap_dumper *pdh,
                silently quit; stop processing packets. */
             got_printing_error = true;
             status = PASS_PRINT_ERROR;
+            break;
+        }
+        /* Stop reading if we got an error writing the packet. */
+        if (status == PASS_WRITE_ERROR) {
+            break;
+        }
+        /* Stop reading if we hit a stop condition */
+        if (pdh != NULL && max_write_packet_count > 0 && write_framenum >= max_write_packet_count) {
+            ws_debug("tshark: max_write_packet_count (%d) reached", max_write_packet_count);
+            *err = 0; /* This is not an error */
             break;
         }
     }
@@ -4187,6 +4199,10 @@ process_cap_file_single_pass(capture_file *cf, wtap_dumper *pdh,
                the error, unless it was EPIPE, in which case we just
                silently quit; tell the capture child to stop. */
             got_printing_error = true;
+            break;
+        }
+        /* Stop reading if we got an error writing the packet. */
+        if (status == PASS_WRITE_ERROR) {
             break;
         }
         /* Stop reading if we hit a stop condition */

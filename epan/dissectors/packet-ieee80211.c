@@ -19520,8 +19520,8 @@ const value_string ieee80211_rsn_cipher_vals[] = {
 #define AKMS_FT_FILS_SHA256       0x000FAC10
 #define AKMS_FT_FILS_SHA384       0x000FAC11
 #define AKMS_OWE                  0x000FAC12
-#define AKMS_SAE_GROUP_DEPEND     0x000FAC18
-#define AKMS_FT_SAE_GROUP_DEPEND  0x000FAC19
+#define AKMS_SAE_EXT_KEY          0x000FAC18
+#define AKMS_FT_SAE_EXT_KEY       0x000FAC19
 #define AKMS_EPPKE                0x000FAC1D
 
 static const value_string ieee80211_rsn_keymgmt_vals[] = {
@@ -19547,8 +19547,8 @@ static const value_string ieee80211_rsn_keymgmt_vals[] = {
   {19, "FT using PSK (SHA384)"},
   {20, "PSK (SHA384)"},
   {21, "PASN"},
-  {24, "SAE (GROUP-DEPEND)"},
-  {25, "FT using SAE (GROUP-DEPEND)"},
+  {24, "SAE (EXT-KEY)"},
+  {25, "FT using SAE (EXT-KEY)"},
   {29, "EPPKE"},
   {0, NULL}
 };
@@ -22932,7 +22932,7 @@ static bool is_ft_akm_suite(uint32_t akm_suite)
     case AKMS_FT_IEEE802_1X_SHA384:
     case AKMS_FT_FILS_SHA256:
     case AKMS_FT_FILS_SHA384:
-    case AKMS_FT_SAE_GROUP_DEPEND:
+    case AKMS_FT_SAE_EXT_KEY:
       return true;
     default:
       return false;
@@ -24005,8 +24005,8 @@ static uint16_t determine_mic_len(packet_info *pinfo, bool assoc_frame,
       /* For OWE the length of MIC depends on the selected group */
       *group_depend = true;
       eapol_key_mic_len = get_mic_len_owe(conversation_data->owe_group);
-    } else if (conversation_data->last_akm_suite == AKMS_SAE_GROUP_DEPEND ||
-               conversation_data->last_akm_suite == AKMS_FT_SAE_GROUP_DEPEND) {
+    } else if (conversation_data->last_akm_suite == AKMS_SAE_EXT_KEY ||
+               conversation_data->last_akm_suite == AKMS_FT_SAE_EXT_KEY) {
       *group_depend = true;
       *defaulted = true;
     }
@@ -24020,8 +24020,8 @@ static uint16_t determine_mic_len(packet_info *pinfo, bool assoc_frame,
       /* For OWE the length of MIC depends on the selected group */
       *group_depend = true;
       eapol_key_mic_len = get_mic_len_owe(packet_data->owe_group);
-    } else if (packet_data->last_akm_suite == AKMS_SAE_GROUP_DEPEND ||
-               packet_data->last_akm_suite == AKMS_FT_SAE_GROUP_DEPEND) {
+    } else if (packet_data->last_akm_suite == AKMS_SAE_EXT_KEY ||
+               packet_data->last_akm_suite == AKMS_FT_SAE_EXT_KEY) {
       *group_depend = true;
       *defaulted = true;
     }
@@ -29260,7 +29260,7 @@ dissect_multi_link_per_sta(tvbuff_t *tvb, packet_info *pinfo _U_,
                            int *found_link_id)
 {
   proto_tree *subelt_tree = NULL, *sta_info_tree = NULL;
-  int offset = 0;
+  int offset = 0, sta_info_offset;
   int len = tvb_captured_length_remaining(tvb, offset);
   uint16_t sta_control = tvb_get_uint16(tvb, offset, ENC_LITTLE_ENDIAN);
   uint8_t sta_info_len = 0;
@@ -29288,6 +29288,7 @@ dissect_multi_link_per_sta(tvbuff_t *tvb, packet_info *pinfo _U_,
       return len;
     }
 
+    sta_info_offset = offset;
     sta_info_len = tvb_get_uint8(tvb, offset);
     sta_info_tree = proto_tree_add_subtree(subelt_tree, tvb, offset,
                                            sta_info_len,
@@ -29348,6 +29349,9 @@ dissect_multi_link_per_sta(tvbuff_t *tvb, packet_info *pinfo _U_,
                       hf_ieee80211_eht_sta_profile_bss_params_change_count,
                       tvb, offset, 1, ENC_NA);
       offset += 1;
+    }
+    if (offset < sta_info_offset + sta_info_len) {
+      offset = sta_info_offset + sta_info_len;
     }
     break;
   case PROBE_MULTI_LINK:
@@ -29453,6 +29457,7 @@ dissect_multi_link_per_sta(tvbuff_t *tvb, packet_info *pinfo _U_,
       return len;
     }
 
+    sta_info_offset = offset;
     sta_info_len = tvb_get_uint8(tvb, offset);
     sta_info_tree = proto_tree_add_subtree(subelt_tree, tvb, offset, sta_info_len,
                                            ett_eht_multi_link_per_sta_info,
@@ -29503,6 +29508,9 @@ dissect_multi_link_per_sta(tvbuff_t *tvb, packet_info *pinfo _U_,
                           hf_ieee80211_eht_sta_profile_info_bitmap,
                           tvb, offset, bitmap_size, ENC_NA);
       offset += bitmap_size;
+    }
+    if (offset < sta_info_offset + sta_info_len) {
+      offset = sta_info_offset + sta_info_len;
     }
     break;
   case TDLS_MULTI_LINK:
@@ -29711,6 +29719,7 @@ dissect_multi_link(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
   uint16_t present = multi_link_control >> 4;
   int elt = 0, hf_index;
   wmem_strbuf_t *link_id_list = wmem_strbuf_create(pinfo->pool);
+  int info_offset;
 
   control = proto_tree_add_item(tree, hf_ieee80211_eht_multi_link_control, tvb,
                                 offset, 2, ENC_LITTLE_ENDIAN);
@@ -29799,6 +29808,7 @@ dissect_multi_link(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
     return;
   }
   offset += 2;
+  info_offset = offset;
 
   switch (multi_link_type) {
   case BASIC_MULTI_LINK:
@@ -29958,6 +29968,9 @@ dissect_multi_link(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
     /* We should not reach here as we filtered out non-valid values above */
     DISSECTOR_ASSERT_NOT_REACHED();
   }
+  /* Detect unknown/reserved subfields to avoid malformed */
+  if (offset < info_offset + common_info_len)
+    offset = info_offset + common_info_len;
 
   /* Handle the link info. It is 0 or more subelements */
   while (tvb_reported_length_remaining(tvb, offset)) {

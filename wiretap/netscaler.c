@@ -867,6 +867,7 @@ wtap_open_return_val nstrace_open(wtap *wth, int *err, char **err_info)
         {
             return WTAP_OPEN_ERROR;
         }
+        nstrace->current_page_file_offset = 0;
 
         /* Read the first page of data */
         if (!nstrace_read_page(wth, err, err_info)) {
@@ -1162,6 +1163,7 @@ static bool nstrace_set_start_time(wtap *wth, int file_version, int *err,
         TIMEDEFV##ver((rec),fp,type);\
         FULLPART##SIZEDEFV##ver((rec),type,ver);\
         TRACE_V##ver##_REC_LEN_OFF((rec),v##ver##_##fullpart,type,pktrace##fullpart##_v##ver);\
+        (rec)->rec_header.packet_header.pseudo_header.nstr.rec_type = NSPR_HEADER_VERSION##HEADERVER;\
         /* Make sure the record is entirely contained in the page */\
         if ((nstrace_buflen - nstrace_buf_offset) < (rec)->rec_header.packet_header.caplen) {\
             *err = WTAP_ERR_BAD_FILE;\
@@ -1569,28 +1571,37 @@ static bool nstrace_read_v20(wtap *wth, wtap_rec *rec,
         }\
         nst_dataSize = nspr_getv20recordsize(hdp);\
         rec_size = nst_dataSize - nstrace_tmpbuff_off;\
-        nsg_nextPageOffset = ((nstrace_buf_offset + rec_size) >= (unsigned)nstrace->nstrace_buflen) ?\
-        ((nstrace_buf_offset + rec_size) - (NSPR_PAGESIZE_TRACE - 1)) : 0;\
-        /* Copy record data */\
-        while (nsg_nextPageOffset) {\
+        /* Copy record data, reading the next page while the record */\
+        /* reaches the end of the current one (even exactly) */\
+        while (nstrace_buf_offset + rec_size >= nstrace_buflen) {\
             /* Copy everything from this page */\
-            while (nstrace_buf_offset < nstrace->nstrace_buflen) {\
+            while (nstrace_buf_offset < nstrace_buflen) {\
                 nstrace_tmpbuff[nstrace_tmpbuff_off++] = nstrace_buf[nstrace_buf_offset++];\
             }\
             nstrace->current_page_file_offset += nstrace_buflen;\
-            nstrace_buflen = NSPR_PAGESIZE_TRACE;\
             /* Read the next page */\
             bytes_read = file_read(nstrace_buf, NSPR_PAGESIZE_TRACE, wth->fh);\
+            if (bytes_read < 0) {\
+                *err = file_error(wth->fh, err_info);\
+                g_free(nstrace_tmpbuff);\
+                return false;\
+            }\
             if ( !file_eof(wth->fh) && bytes_read != NSPR_PAGESIZE_TRACE) {\
                 g_free(nstrace_tmpbuff);\
                 return false;\
-            } else {\
-                nstrace_buf_offset = 0;\
             }\
+            nstrace_buf_offset = 0;\
             nstrace_buflen = bytes_read;\
             rec_size = nst_dataSize - nstrace_tmpbuff_off;\
-            nsg_nextPageOffset = ((nstrace_buf_offset + rec_size) >= (unsigned)nstrace->nstrace_buflen) ?\
-            ((nstrace_buf_offset + rec_size) - (NSPR_PAGESIZE_TRACE- 1)): 0;\
+            if (nstrace_buflen == 0) {\
+                if (rec_size != 0) {\
+                    /* The record continues past the end of the file */\
+                    *err = WTAP_ERR_SHORT_READ;\
+                    g_free(nstrace_tmpbuff);\
+                    return false;\
+                }\
+                break;\
+            }\
         } \
         /* Copy the rest of the record */\
         while (nstrace_tmpbuff_off < nst_dataSize) {\
@@ -1613,7 +1624,7 @@ static bool nstrace_read_v30(wtap *wth, wtap_rec *rec,
     uint32_t nstrace_buf_offset = nstrace->nstrace_buf_offset;
     uint32_t nstrace_buflen = nstrace->nstrace_buflen;
     uint8_t* nstrace_tmpbuff;
-    uint32_t nstrace_tmpbuff_off=0,nst_dataSize=0,rec_size=0,nsg_nextPageOffset=0;
+    uint32_t nstrace_tmpbuff_off=0,nst_dataSize=0,rec_size=0;
     nspr_hd_v20_t *hdp;
     int bytes_read = 0;
 
@@ -1961,9 +1972,9 @@ static bool nstrace_seek_read_v20(wtap *wth, int64_t seek_off,
         wtap_setup_packet_rec((rec), (wth)->file_encap);\
         (rec)->block = wtap_block_create(WTAP_BLOCK_PACKET);\
         TIMEDEFV##ver((rec),fp,type);\
-        SETETHOFFSET_##ver(rec);\
         FULLPART##SIZEDEFV##ver((rec),fp,ver);\
         TRACE_V##ver##_REC_LEN_OFF((rec),enumprefix,type,structname);\
+        SETETHOFFSET_##ver(rec);\
         (rec)->rec_header.packet_header.pseudo_header.nstr.rec_type = NSPR_HEADER_VERSION##HEADERVER;\
         return true;\
     }while(0)
@@ -2242,7 +2253,6 @@ nstrace_add_abstime(wtap_dumper *wdh, const wtap_rec *rec,
     if (nstrace->version == NSTRACE_1_0)
     {
         uint16_t val16;
-        uint32_t reltime;
         uint32_t abstime;
         nspr_abstime_v10_t abs10;
 
@@ -2252,8 +2262,7 @@ nstrace_add_abstime(wtap_dumper *wdh, const wtap_rec *rec,
         val16 = GUINT16_TO_LE(nspr_abstime_v10_s);
         memcpy(abs10.phd.ph_RecordSize, &val16, sizeof abs10.phd.ph_RecordSize);
 
-        memcpy(&reltime, ((const nspr_pktracefull_v10_t *)pd)->fp_RelTimeHr, sizeof reltime);
-        nsg_creltime = ns_hrtime2nsec(reltime);
+        nsg_creltime = ns_hrtime2nsec(pletohu32(((const nspr_pktracefull_v10_t *)pd)->fp_RelTimeHr));
 
         memset(abs10.abs_RelTime, 0, sizeof abs10.abs_RelTime);
         abstime = GUINT32_TO_LE((uint32_t)rec->ts.secs - (uint32_t)(nsg_creltime/1000000000));
@@ -2269,15 +2278,13 @@ nstrace_add_abstime(wtap_dumper *wdh, const wtap_rec *rec,
     } else if ((nstrace->version == NSTRACE_2_0) ||
         (nstrace->version == NSTRACE_3_0) ||
         (nstrace->version == NSTRACE_3_5))    {
-        uint32_t reltime;
         uint32_t abstime;
         nspr_abstime_v20_t abs20;
 
         abs20.abs_RecordType = NSPR_ABSTIME_V20;
         abs20.abs_RecordSize = nspr_abstime_v20_s;
 
-        memcpy(&reltime, ((const nspr_pktracefull_v20_t *)pd)->fp_RelTimeHr, sizeof reltime);
-        nsg_creltime = ns_hrtime2nsec(reltime);
+        nsg_creltime = ns_hrtime2nsec(pletohu32(((const nspr_pktracefull_v20_t *)pd)->fp_RelTimeHr));
 
         memset(abs20.abs_RelTime, 0, sizeof abs20.abs_RelTime);
         abstime = GUINT32_TO_LE((uint32_t)rec->ts.secs - (uint32_t)(nsg_creltime/1000000000));
@@ -2303,7 +2310,7 @@ nstrace_add_abstime(wtap_dumper *wdh, const wtap_rec *rec,
 /* Write a record for a packet to a dump file.
    Returns true on success, false on failure. */
 static bool nstrace_dump(wtap_dumper *wdh, const wtap_rec *rec,
-    int *err, char **err_info _U_)
+    int *err, char **err_info)
 {
     nstrace_dump_t *nstrace = (nstrace_dump_t *)wdh->priv;
     const uint8_t *pd;
@@ -2440,7 +2447,11 @@ static bool nstrace_dump(wtap_dumper *wdh, const wtap_rec *rec,
         break;
 
     default:
-        ws_assert_not_reached();
+        /* Not a NetScaler trace record, e.g. from a file format without
+         * the NetScaler pseudo-header. */
+        *err = WTAP_ERR_UNWRITABLE_REC_DATA;
+        *err_info = ws_strdup_printf("nstrace: unknown record version 0x%02x",
+            rec->rec_header.packet_header.pseudo_header.nstr.rec_type);
         return false;
     }
 

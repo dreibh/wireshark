@@ -1078,6 +1078,14 @@ Selecting _Show in toolbar_ causes the button to be shown in the toolbar besides
 
 The _Button Label_ is the text shown on the button in the toolbar.
 The use of a double slash causes the button to create a dropdown list to allow grouping of multiple buttons, e.g. TCP//Syn and TCP//Res.
+Dropdown buttons use the same toolbar spacing as standalone filter buttons; adding entries inside a dropdown does not add toolbar spacing.
+
+To add a separator, create an entry here with `---` as the _Button Label_ and leave the _Filter Expression_ empty.
+Use a group prefix to place the separator inside a dropdown list, e.g. `TCP//---`, or `TCP//Flags//---` for a nested list.
+An entry labeled `---` without a group prefix adds a separator to the toolbar.
+Place the entry between the filters you want to separate using btn:[⌃] and btn:[⌄].
+Separators can be hidden with _Show in toolbar_ or removed like other entries.
+A `---` label with a nonempty filter expression remains a normal filter button.
 
 The _Filter Expression_ is the <<ChWorkBuildDisplayFilterSection,display filter expression>> entered into the display filter text entry when the button is clicked.
 
@@ -1291,7 +1299,8 @@ The file is made of sections:
 The four accent colors `accent.success`, `accent.warning`, `accent.error` and `accent.info` mark states, for example a valid or an invalid display filter.
 * `expert`, `packets`, `conversation`, `palette` and `filter` are optional.
 They set the expert information backgrounds, the packet list states (selected, marked, ignored), the “Follow Stream” client and server colors, the general window, list and selection colors, and the display filter highlighting.
-* `separator`, `graphs` and `fonts` are optional as well.
+* `border`, `graphs` and `fonts` are optional as well.
+`border.field` sets the frame color of text fields, such as the display filter bar, and `border.separator` the color of the dividers between sections.
 
 Every color has two values: one for the light and one for the dark appearance.
 The _Appearance mode_ preference (see <<ChCustPrefsThemeSection>>) decides which of the two is in use.
@@ -1711,6 +1720,11 @@ the Configuration Profiles dialog box as shown in
 <<ChCustGUIConfigProfilesPage>>. It is also possible to click in the “Profile”
 part of the statusbar to popup a menu with available Configuration Profiles
 (<<ChUseWiresharkStatusbarProfile>>).
+
+Profiles can be organized in a hierarchy, where a profile can contain other
+profiles. Drag and drop a profile in the Configuration Profiles dialog to move
+it. Nested profiles are named by their path, for example “Customers/ACME”,
+which can also be used with the `-C` command line option.
 
 Configuration files stored in each profile include:
 

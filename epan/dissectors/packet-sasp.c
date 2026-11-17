@@ -508,7 +508,6 @@ static void dissect_dereg_req(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pay
     uint16_t         gmd_cnt, i;
     proto_tree      *dereg_req_data;
     uint8_t          reason_flag;
-    static bool      first_flag         = true;
     wmem_strbuf_t   *reasonflags_strbuf = wmem_strbuf_create(pinfo->pool);
     static const char *fstr[] = {"No Reason", "Learned & Purposeful" };
 
@@ -527,10 +526,9 @@ static void dissect_dereg_req(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pay
     reason_flag = tvb_get_uint8(tvb, offset);
 
     if ((reason_flag & SASP_DEREG_REQ_REASON_LEARNED) == 0)
-        wmem_strbuf_append_printf(reasonflags_strbuf, "%s%s", first_flag ? "" : ", ", fstr[0]);
+        wmem_strbuf_append_printf(reasonflags_strbuf, "%s", fstr[0]);
     else
-        wmem_strbuf_append_printf(reasonflags_strbuf, "%s%s", first_flag ? "" : ", ", fstr[1]);
-    first_flag = false;
+        wmem_strbuf_append_printf(reasonflags_strbuf, "%s", fstr[1]);
 
     /*dereg_req_reason_flag =*/
     proto_tree_add_uint_format(dereg_req_data, hf_dereg_req_reason_flag, tvb,
@@ -577,10 +575,8 @@ static void dissect_sendwt(tvbuff_t *tvb, packet_info* pinfo, proto_tree *pay_lo
     proto_tree_add_item(sendwt_tree, hf_sasp_sendwt_sz, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
-    gwed_cnt = tvb_get_ntohs(tvb, offset);
-
     /* Group Wt Entry Data Count */
-    proto_tree_add_item(sendwt_tree, hf_sasp_sendwt_gwedcnt, tvb, offset, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint16(sendwt_tree, hf_sasp_sendwt_gwedcnt, tvb, offset, 2, ENC_BIG_ENDIAN, &gwed_cnt);
     offset += 2;
 
     for (i=0; i<gwed_cnt; i++)
@@ -739,10 +735,8 @@ static uint32_t dissect_grp_memdatacomp(tvbuff_t *tvb, packet_info* pinfo, proto
     proto_tree_add_item(grp_memdatacomp_tree, hf_sasp_grp_memdatacomp_sz, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
-    mem_cnt = tvb_get_ntohs(tvb, offset);
-
     /* Group MEM Data Count*/
-    proto_tree_add_item(grp_memdatacomp_tree, hf_sasp_grp_memdatacomp_cnt, tvb, offset, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint16(grp_memdatacomp_tree, hf_sasp_grp_memdatacomp_cnt, tvb, offset, 2, ENC_BIG_ENDIAN, &mem_cnt);
     offset += 2;
 
     offset = dissect_grpdatacomp(tvb, grp_memdatacomp_tree, offset);

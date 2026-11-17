@@ -22,6 +22,7 @@
 #include <ui/qt/widgets/pinned_column_view.h>
 #include <ui/qt/widgets/pinned_row_view.h>
 #include <ui/qt/models/pinned_rows_model.h>
+#include "capture_event.h"
 
 #include <QElapsedTimer>
 #include <QMenu>
@@ -215,8 +216,17 @@ public:
 
     /**
      * @brief Handles the event when the capture file has finished reading.
+     * @param context What kind of read finished: CaptureEvent::File for
+     * a newly opened file, CaptureEvent::Reload or CaptureEvent::Rescan.
      */
-    void captureFileReadFinished();
+    void captureFileReadFinished(CaptureEvent::Context context);
+
+    /**
+     * @brief Handles the event when the capture file is about to be closed
+     * and reopened to reload the same records, so that the pinned packets
+     * are kept for the reload.
+     */
+    void captureFileReloadPending() { reload_pending_ = true; }
 
     /**
      * @brief Sets the column delegate for the view.
@@ -926,9 +936,9 @@ private:
 
     // Number of leftmost columns currently frozen/pinned, or 0.
     int pinned_column_boundary_;
-    // The frozen-column boundary held across a clear() so redissection can
-    // restore it; see captureFileReadFinished().
-    int saved_pinned_column_boundary_;
+    // The file is being closed and reopened to reload it, so keep
+    // pinned_rows_model_'s saved pins; see setCaptureFile().
+    bool reload_pending_;
 
     // Overlay view showing the frozen leftmost columns for all rows.
     PinnedColumnView *pinned_column_view_;

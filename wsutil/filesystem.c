@@ -1546,6 +1546,39 @@ profile_register_persconffile(const char *filename)
  * XXX - what about stuff that shouldn't be shared between machines,
  * such as plugins in the form of shared loadable images?
  */
+#ifdef _WIN32
+/*
+ * If the program is in a PortableApps.com package, return the package's
+ * Data directory, which is where the PortableApps.com Launcher points
+ * WIRESHARK_APPDATA; otherwise return NULL. The programs are in
+ * App\<name>, next to App\AppInfo\appinfo.ini, which the PortableApps.com
+ * Format requires. The Data directory might not exist yet, if the launcher
+ * hasn't been run; it's created when something is saved there, like any
+ * other personal configuration directory.
+ */
+static char *
+get_portableapps_data_dir(void)
+{
+    const char *progfile = get_progfile_dir();
+    char *app_dir, *appinfo, *package_dir;
+    char *data_dir = NULL;
+
+    if (progfile == NULL)
+        return NULL;
+
+    app_dir = g_path_get_dirname(progfile);
+    appinfo = g_build_filename(app_dir, "AppInfo", "appinfo.ini", (char *)NULL);
+    if (g_ascii_strcasecmp(get_basename(app_dir), "App") == 0 && file_exists(appinfo)) {
+        package_dir = g_path_get_dirname(app_dir);
+        data_dir = g_build_filename(package_dir, "Data", (char *)NULL);
+        g_free(package_dir);
+    }
+    g_free(appinfo);
+    g_free(app_dir);
+    return data_dir;
+}
+#endif
+
 static const char *
 get_persconffile_dir_no_profile(const char* app_env_var_prefix)
 {
@@ -1568,11 +1601,8 @@ get_persconffile_dir_no_profile(const char* app_env_var_prefix)
 #ifdef _WIN32
     if (env == NULL) {
         /*
-         * The PortableApps launcher sets this environment variable.
-         * XXX - That's only for the GUI. We don't have launchers/batch
-         * scripts for the command line tools, and just package the same
-         * binaries as built for NSIS and WiX, so if the user is running
-         * tshark from the PortableApps directory, how do we tell? (#20095)
+         * The PortableApps.com Launcher sets this environment variable
+         * when it starts Wireshark.
          */
         env = g_getenv("WIRESHARK_APPDATA");
     }
@@ -1583,6 +1613,16 @@ get_persconffile_dir_no_profile(const char* app_env_var_prefix)
     }
 
 #if defined(_WIN32)
+    /*
+     * The launcher only starts Wireshark, but the command line tools
+     * in the package, such as TShark, should use the same directory
+     * when they're run directly. (#20095)
+     */
+    persconffile_dir = get_portableapps_data_dir();
+    if (persconffile_dir != NULL) {
+        goto return_dir;
+    }
+
     /*
      * Use %APPDATA% or %USERPROFILE%, so that configuration
      * files are stored in the user profile, rather than in
@@ -1840,7 +1880,78 @@ profile_exists(const char* app_env_var_prefix, const char *profilename, bool glo
     return exists;
 }
 
+char *
+profile_canonical_name(const char *profilename)
+{
+    if (!profilename)
+        return NULL;
+
+    /* Drop empty parts, e.g. from a trailing separator added by tab completion */
+    char **parts = g_strsplit_set(profilename, "/" G_DIR_SEPARATOR_S, -1);
+    GString *name = g_string_new(NULL);
+    bool valid = true;
+    for (char **part = parts; *part; part++) {
+        if (**part == '\0')
+            continue;
+        if (strcmp(*part, ".") == 0 || strcmp(*part, "..") == 0)
+            valid = false;
+        if (name->len > 0)
+            g_string_append_c(name, '/');
+        g_string_append(name, *part);
+    }
+    g_strfreev(parts);
+
+    if (!valid || name->len == 0) {
+        g_string_free(name, TRUE);
+        return NULL;
+    }
+    return g_string_free(name, FALSE);
+}
+
+bool
+copy_global_profile(const char* app_env_var_prefix, const char *profilename, char **err_info)
+{
+    char **parts = g_strsplit(profilename, "/", -1);
+    GString *name = g_string_new(NULL);
+    bool ok = true;
+
+    /* Copy the global parents without a personal profile as well, as their
+     * directories are created, and would hide the global parents */
+    for (char **part = parts; ok && *part; part++) {
+        if (name->len > 0)
+            g_string_append_c(name, '/');
+        g_string_append(name, *part);
+
+        if (profile_exists(app_env_var_prefix, name->str, false) ||
+            !profile_exists(app_env_var_prefix, name->str, true))
+            continue;
+
+        char *pf_dir_path, *pf_dir_path2, *pf_filename;
+        if (create_persconffile_profile(app_env_var_prefix, name->str, &pf_dir_path) == -1) {
+            *err_info = ws_strdup_printf("Can't create directory\n\"%s\":\n%s.",
+                    pf_dir_path, g_strerror(errno));
+            g_free(pf_dir_path);
+            ok = false;
+        } else if (copy_persconffile_profile(app_env_var_prefix, name->str, name->str, true,
+                    &pf_filename, &pf_dir_path, &pf_dir_path2) == -1) {
+            *err_info = ws_strdup_printf("Can't copy file \"%s\" in directory\n\"%s\" to\n\"%s\":\n%s.",
+                    pf_filename, pf_dir_path2, pf_dir_path, g_strerror(errno));
+            g_free(pf_filename);
+            g_free(pf_dir_path);
+            g_free(pf_dir_path2);
+            ok = false;
+        }
+    }
+
+    g_strfreev(parts);
+    g_string_free(name, TRUE);
+    return ok;
+}
+
+/* Delete a profile directory, including sub-profiles. Symbolic links are
+ * removed, not followed. */
 static int
+// NOLINTNEXTLINE(misc-no-recursion)
 delete_directory (const char *directory, char **pf_dir_path_return)
 {
     WS_DIR *dir;
@@ -1852,14 +1963,15 @@ delete_directory (const char *directory, char **pf_dir_path_return)
         while ((file = ws_dir_read_name(dir)) != NULL) {
             filename = ws_strdup_printf ("%s%s%s", directory, G_DIR_SEPARATOR_S,
                             ws_dir_get_name(file));
-            if (test_for_directory(filename) != EISDIR) {
+            if (g_file_test(filename, G_FILE_TEST_IS_SYMLINK) || test_for_directory(filename) != EISDIR) {
                 ret = ws_remove(filename);
-#if 0
             } else {
-                /* The user has manually created a directory in the profile directory */
-                /* I do not want to delete the directory recursively yet */
                 ret = delete_directory (filename, pf_dir_path_return);
-#endif
+                if (ret != 0) {
+                    /* The error path has already been returned */
+                    g_free (filename);
+                    break;
+                }
             }
             if (ret != 0) {
                 /* XXX - Should we always return the directory name? The message
@@ -1998,6 +2110,11 @@ rename_persconffile_profile(const char* app_env_var_prefix, const char *fromname
     char *to_dir = get_persconffile_dir(app_env_var_prefix, toname, NULL);
     int ret = 0;
 
+    /* Create the parent directory when moving a profile into a new parent */
+    char *to_parent = g_path_get_dirname(to_dir);
+    g_mkdir_with_parents(to_parent, 0755);
+    g_free(to_parent);
+
     ret = ws_rename (from_dir, to_dir);
     if (ret != 0) {
         *pf_from_dir_path_return = from_dir;
@@ -2095,7 +2212,7 @@ create_persconffile_profile(const char* app_env_var_prefix, const char *profilen
             }
         }
         g_free(pf_dir_path_copy);
-        ret = ws_mkdir(pf_dir_path, 0755);
+        ret = g_mkdir_with_parents(pf_dir_path, 0755);
 #else
         ret = g_mkdir_with_parents(pf_dir_path, 0755);
 #endif
@@ -2542,6 +2659,12 @@ typedef struct {
 static bool
 files_identical_key(const void* fname, file_hash_key *key)
 {
+    /*
+     * The key is hashed and compared as bytes, so zero the padding, such
+     * as between a 32-bit dev_t and a 64-bit ino_t on macOS.
+     */
+    memset(key, 0, sizeof(*key));
+
     /* Two different implementations, because st_ino isn't filled in with
      * a meaningful value on Windows. Use the Windows API and FILE_ID_INFO
      * instead.

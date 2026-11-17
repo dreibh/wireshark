@@ -1415,6 +1415,22 @@ tcpip_endpoint_packet(void *pit, packet_info *pinfo, epan_dissect_t *edt _U_, co
     return TAP_PACKET_REDRAW;
 }
 
+static tap_packet_status
+mptcpip_endpoint_packet(void *pit, packet_info *pinfo, epan_dissect_t *edt _U_, const void *vip, tap_flags_t flags)
+{
+    conv_hash_t *hash = (conv_hash_t*) pit;
+    hash->flags = flags;
+
+    /* The MPTCP tap passes the TCP analysis, not the TCP header */
+    const struct tcp_analysis *tcpd=(const struct tcp_analysis *)vip;
+    const mptcp_meta_flow_t *meta=(const mptcp_meta_flow_t *)tcpd->fwd->mptcp_subflow->meta;
+
+    add_endpoint_table_data(hash, &meta->ip_src, meta->sport, true, 1, pinfo->fd->pkt_len, &tcp_endpoint_dissector_info, ENDPOINT_TCP);
+    add_endpoint_table_data(hash, &meta->ip_dst, meta->dport, false, 1, pinfo->fd->pkt_len, &tcp_endpoint_dissector_info, ENDPOINT_TCP);
+
+    return TAP_PACKET_REDRAW;
+}
+
 static bool
 tcp_filter_valid(packet_info *pinfo, void *user_data _U_)
 {
@@ -4452,7 +4468,10 @@ mptcp_analysis_dsn_lookup(packet_info *pinfo , tvbuff_t *tvb,
         }
 
         convert = (mapping->extended_dsn) ? DSN_CONV_NONE : DSN_CONV_32_TO_64;
-        DISSECTOR_ASSERT(mptcp_map_relssn_to_rawdsn(mapping, relseq, &rawdsn));
+        if (!mptcp_map_relssn_to_rawdsn(mapping, relseq, &rawdsn)) {
+            expert_add_info(pinfo, parent_tree, &ei_mptcp_mapping_missing);
+            return;
+        }
     }
 
     /* Make sure we have the 64bit raw DSN */
@@ -4630,6 +4649,9 @@ tcp_sequence_number_analysis_print_push_bytes_sent(packet_info * pinfo _U_,
     }
 }
 
+/* Maximum number of duplicate frames listed in the tree */
+#define TCP_DEDUP_MAX_LISTED 64
+
 static void
 tcp_sequence_number_analysis_print_packet_count(packet_info *pinfo,
                                                 tvbuff_t *tvb,
@@ -4671,23 +4693,23 @@ tcp_sequence_number_analysis_print_packet_count(packet_info *pinfo,
     proto_item_set_generated(dedup_item);
     dedup_tree = proto_item_add_subtree(dedup_item, ett_tcp_analysis_dedup);
 
-    for (unsigned i = 0; i < nframes; i++) {
+    /* Bound the work and the tree size for large groups of duplicates. */
+    unsigned nshow = (nframes > TCP_DEDUP_MAX_LISTED) ? TCP_DEDUP_MAX_LISTED : nframes;
+
+    for (unsigned i = 0; i < nshow; i++) {
         uint32_t fnum = *(uint32_t *)wmem_array_index(ta->dup_frame_list, i);
         proto_item *fi = proto_tree_add_uint(dedup_tree, hf_tcp_analysis_dedup_frame,
                                              tvb, 0, 0, fnum);
         proto_item_set_generated(fi);
-        if (i == 0)
+        if (i == 0) {
             proto_item_append_text(fi, " (original)");
-    }
-
-    /* Append frame list to the parent node label for at-a-glance visibility */
-    for (unsigned i = 0; i < nframes; i++) {
-        uint32_t fnum = *(uint32_t *)wmem_array_index(ta->dup_frame_list, i);
-        if (i == 0)
             proto_item_append_text(dedup_item, ": %u", fnum);
-        else
+        } else {
             proto_item_append_text(dedup_item, ", %u", fnum);
+        }
     }
+    if (nshow < nframes)
+        proto_item_append_text(dedup_item, ", ... (%u more)", nframes - nshow);
 }
 
 static void
@@ -5178,7 +5200,7 @@ msp_add_out_of_order(packet_info *pinfo, struct tcp_multisegment_pdu *msp, struc
                 tvb_data, 0,
                 pinfo, msp->first_frame, msp,
                 fd->seq - msp->seq, fd->len,
-                msp->nxtpdu, fd->frame);
+                true, fd->frame);
         } else {
             /* No MSP in progress, so create one starting
              * at the sequence number of segment received
@@ -5193,7 +5215,7 @@ msp_add_out_of_order(packet_info *pinfo, struct tcp_multisegment_pdu *msp, struc
             fragment_add_out_of_order(&tcp_reassembly_table,
                         tvb_data, 0, pinfo, msp->first_frame,
                         msp, fd->seq - msp->seq, fd->len,
-                        msp->nxtpdu, fd->frame);
+                        true, fd->frame);
             has_unfinished_msp = true;
         }
         updated_maxnextseq = false;
@@ -6454,6 +6476,10 @@ dissect_tcpopt_tfo_payload(tvbuff_t *tvb, int offset, unsigned optlen,
     struct tcpheader *tcph = (struct tcpheader*)data;
     struct tcp_analysis *tcpd;
 
+    /* Called through the "tcp.option" table without a TCP header? */
+    if (!tcph)
+        return;
+
     if (optlen == 2) {
         /* Fast Open Cookie Request */
         proto_tree_add_item(exp_tree, hf_tcp_option_fast_open_cookie_request,
@@ -6697,6 +6723,10 @@ dissect_tcpopt_sack_perm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
     unsigned offset = 0;
     struct tcpheader *tcph = (struct tcpheader *)data;
 
+    /* Called through the "tcp.option" table without a TCP header? */
+    if (!tcph)
+        return 0;
+
     item = proto_tree_add_item(tree, proto_tcp_option_sack_perm, tvb, offset, -1, ENC_NA);
     exp_tree = proto_item_add_subtree(item, ett_tcp_option_sack_perm);
 
@@ -6727,8 +6757,14 @@ dissect_tcpopt_mss(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
     struct tcp_analysis *tcpd;
 
     /* find the conversation for this TCP session and its stored data */
-    conversation_t *stratconv = find_conversation_strat(pinfo, CONVERSATION_TCP, 0, false);
-    tcpd=get_tcp_conversation_data_idempotent(stratconv);
+    conversation_t *stratconv;
+
+    /* Called through the "tcp.option" table without a TCP header? */
+    if (!tcph)
+        return 0;
+
+    stratconv = find_conversation_strat(pinfo, CONVERSATION_TCP, 0, false);
+    tcpd = stratconv ? get_tcp_conversation_data_idempotent(stratconv) : NULL;
 
     item = proto_tree_add_item(tree, proto_tcp_option_mss, tvb, offset, -1, ENC_NA);
     exp_tree = proto_item_add_subtree(item, ett_tcp_option_mss);
@@ -6773,7 +6809,7 @@ dissect_tcpopt_wscale(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void*
 
     /* find the conversation for this TCP session and its stored data */
     conversation_t *stratconv = find_conversation_strat(pinfo, CONVERSATION_TCP, 0, false);
-    tcpd=get_tcp_conversation_data_idempotent(stratconv);
+    tcpd = stratconv ? get_tcp_conversation_data_idempotent(stratconv) : NULL;
 
     wscale_pi = proto_tree_add_item(tree, proto_tcp_option_wscale, tvb, offset, -1, ENC_NA);
     wscale_tree = proto_item_add_subtree(wscale_pi, ett_tcp_option_wscale);
@@ -6840,7 +6876,7 @@ dissect_tcpopt_sack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
     if(tcp_analyze_seq) {
         /* find the conversation for this TCP session and its stored data */
         conversation_t *stratconv = find_conversation_strat(pinfo, CONVERSATION_TCP, 0, false);
-        tcpd=get_tcp_conversation_data_idempotent(stratconv);
+        tcpd = stratconv ? get_tcp_conversation_data_idempotent(stratconv) : NULL;
 
         if (tcpd) {
             if (tcp_relative_seq) {
@@ -7297,6 +7333,10 @@ dissect_tcpopt_mptcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
     struct tcp_analysis *tcpd = NULL;
     struct mptcp_analysis* mptcpd = NULL;
     struct tcpheader *tcph = (struct tcpheader *)data;
+
+    /* Called through the "tcp.option" table without a TCP header? */
+    if (!tcph)
+        return 0;
 
     /* There may be several MPTCP options per packet, don't duplicate the structure */
     struct mptcpheader* mph = tcph->th_mptcp;
@@ -7857,7 +7897,9 @@ dissect_tcpopt_scps(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
     int         offset = 0, optlen = tvb_reported_length(tvb);
 
     conversation_t *stratconv = find_conversation_strat(pinfo, CONVERSATION_TCP, 0, false);
-    tcpd=get_tcp_conversation_data_idempotent(stratconv);
+    tcpd = stratconv ? get_tcp_conversation_data_idempotent(stratconv) : NULL;
+    if (!tcpd)
+        return tvb_captured_length(tvb);
 
     /* check direction and get ua lists */
     direction=cmp_address(&pinfo->src, &pinfo->dst);
@@ -7948,9 +7990,9 @@ dissect_tcpopt_scps(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
          * a community (or more likely vendor) defined format beyond that, so
          * at least for now, we only parse the standardized portion of the option.
          */
-        uint8_t local_offset = 2;
+        int local_offset = 2;
         uint8_t binding_space;
-        uint8_t extended_cap_length;
+        unsigned extended_cap_length;
 
         if (!flow->scps_capable) {
             /* There was no SCPS capabilities option preceding this */
@@ -8036,7 +8078,7 @@ dissect_tcpopt_user_to(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
  * Transport Protocol (SCPS-TP)" Section 3.5 for definition of the SNACK option
  */
 static int
-dissect_tcpopt_snack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_tcpopt_snack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 {
     struct tcp_analysis *tcpd=NULL;
     uint32_t relative_hole_offset;
@@ -8049,6 +8091,11 @@ dissect_tcpopt_snack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
     proto_item *hidden_item, *tf;
     proto_tree *field_tree;
     proto_item *length_item;
+    struct tcpheader *tcph = (struct tcpheader *)data;
+
+    /* Called through the "tcp.option" table without a TCP header? */
+    if (!tcph)
+        return 0;
 
     tf = proto_tree_add_item(tree, proto_tcp_option_snack, tvb, offset, -1, ENC_NA);
     field_tree = proto_item_add_subtree(tf, ett_tcp_option_snack);
@@ -8062,7 +8109,9 @@ dissect_tcpopt_snack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
         return tvb_captured_length(tvb);
 
     conversation_t *stratconv = find_conversation_strat(pinfo, CONVERSATION_TCP, 0, false);
-    tcpd=get_tcp_conversation_data_idempotent(stratconv);
+    tcpd = stratconv ? get_tcp_conversation_data_idempotent(stratconv) : NULL;
+    if (!tcpd)
+        return tvb_captured_length(tvb);
 
     /* The SNACK option reports missing data with a granularity of segments. */
     proto_tree_add_item_ret_uint(field_tree, hf_tcp_option_snack_offset,
@@ -8071,11 +8120,8 @@ dissect_tcpopt_snack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
     proto_tree_add_item_ret_uint(field_tree, hf_tcp_option_snack_size,
                                       tvb, offset + 4, 2, ENC_BIG_ENDIAN, &relative_hole_size);
 
-    ack   = tvb_get_ntohl(tvb, 8);
-
-    if (tcp_analyze_seq && tcp_relative_seq) {
-        ack -= tcpd->rev->base_seq;
-    }
+    /* The ACK number is in the TCP header (relative if so configured). */
+    ack = tcph->th_ack;
 
     /* To aid analysis, we can use a simple but generally effective heuristic
      * to report the most likely boundaries of the missing data.  If the
@@ -10178,8 +10224,11 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
            packet, are willing to allow subdissectors to request reassembly
            on it. */
 
-        if (tcp_check_checksum) {
-            /* We haven't turned checksum checking off; checksum it. */
+        if (tcp_check_checksum &&
+            (pinfo->src.type == AT_IPv4 || pinfo->src.type == AT_IPv6 ||
+             pinfo->src.type == AT_ILNP_NID)) {
+            /* We haven't turned checksum checking off, and we have an
+               address type for the pseudo-header; checksum it. */
 
             /* When using Large Send Offload for large TCP packets, Microsoft
              * uses zero for the length field in the partial checksum
@@ -12021,7 +12070,7 @@ proto_register_tcp(void)
         "Ports for which the dissector will to be chosen based on the client port instead of the server port",
         &tcp_clientport_dissectors_range, 65535);
 
-    register_conversation_table(proto_mptcp, false, mptcpip_conversation_packet, tcpip_endpoint_packet);
+    register_conversation_table(proto_mptcp, false, mptcpip_conversation_packet, mptcpip_endpoint_packet);
     register_follow_stream(proto_tcp, "tcp_follow", tcp_follow_conv_filter, tcp_follow_index_filter, tcp_follow_address_filter,
                             tcp_port_to_display, follow_tcp_tap_listener, get_tcp_stream_count, NULL);
 
