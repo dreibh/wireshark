@@ -17,9 +17,13 @@
 #include "config.h"
 #define WS_LOG_DOMAIN "opcua"
 #include <wireshark.h>
+#include <glib.h>
 
 #include <epan/dissectors/packet-tcp.h>
 #include <epan/packet.h>
+#include <epan/exceptions.h>
+#include <epan/expert.h>
+#include <epan/proto_data.h>
 #include <epan/prefs.h>
 #include <epan/range.h>
 #include <epan/reassemble.h>
@@ -70,6 +74,8 @@ static module_t *opcua_module;
 
 /** subtree types used locally */
 static int ett_opcua_transport;
+
+static expert_field ei_opcua_bad_footer;
 static int ett_opcua_fragment;
 static int ett_opcua_fragments;
 
@@ -171,7 +177,25 @@ static unsigned get_opcua_message_len(packet_info *pinfo _U_, tvbuff_t *tvb,
     return plen;
 }
 
-/* Helper function to convert hex string to binary data */
+/* Helper function for case-insensitive substring search */
+static bool opcua_str_contains_caseless(const char *haystack, const char *needle)
+{
+    if (!haystack || !needle) return false;
+    size_t hlen = strlen(haystack);
+    size_t nlen = strlen(needle);
+    if (nlen > hlen) return false;
+    for (size_t i = 0; i <= hlen - nlen; i++) {
+        bool match = true;
+        for (size_t j = 0; j < nlen; j++) {
+            if (g_ascii_tolower(haystack[i + j]) != g_ascii_tolower(needle[j])) {
+                match = false;
+                break;
+            }
+        }
+        if (match) return true;
+    }
+    return false;
+}
 unsigned hex_to_bin(const char *hex_string, unsigned char *binary_data, unsigned int binary_size)
 {
     unsigned length = (unsigned)strlen(hex_string);
@@ -209,6 +233,11 @@ static void opcua_keylog_process_line(struct opcua_keylog_parser_ctx *ctx, const
     uint64_t id = 0;
     int n;
 
+    /* Skip UTF-8 BOM if present at the beginning of a line */
+    if ((uint8_t)line[0] == 0xEF && (uint8_t)line[1] == 0xBB && (uint8_t)line[2] == 0xBF) {
+        line += 3;
+    }
+
     /* parse key/value pair */
     n = sscanf(line, "%32[^:]: %64s\n", key, value);
     if (n != 2) return;
@@ -233,9 +262,12 @@ static void opcua_keylog_process_line(struct opcua_keylog_parser_ctx *ctx, const
     id = ua_keyset_id(channel_id, token_id);
 
     if (ctx->keyset == NULL || id != ctx->last_id) {
-        ws_debug("Adding new keyset for id %" PRIu64 "u...", id);
-        /* create new keyset for new id */
-        ctx->keyset = ua_keysets_add();
+        ctx->keyset = ua_keysets_lookup(id);
+        if (ctx->keyset == NULL) {
+            ws_debug("Adding new keyset for id %" PRIu64 "u...", id);
+            /* create new keyset for new id */
+            ctx->keyset = ua_keysets_add();
+        }
         ctx->last_id = id;
     }
     keyset = ctx->keyset;
@@ -244,19 +276,37 @@ static void opcua_keylog_process_line(struct opcua_keylog_parser_ctx *ctx, const
         /* store key material */
         if (strcmp(parts[0], "client") == 0) {
             if (strcmp(parts[1], "iv") == 0) {
-                hex_to_bin(value, keyset->client_iv, sizeof(keyset->client_iv));
+                keyset->client_iv_len = (unsigned int)hex_to_bin(value, keyset->client_iv, sizeof(keyset->client_iv));
+                if ((keyset->client_iv_len == 8 || keyset->client_iv_len == 12) && keyset->cipher_type == OPCUA_CIPHER_AES_CBC) {
+                    keyset->cipher_type = OPCUA_CIPHER_AES_GCM;
+                }
             } else if (strcmp(parts[1], "key") == 0) {
                 keyset->client_key_len = (unsigned int)hex_to_bin(value, keyset->client_key, sizeof(keyset->client_key));
             } else if (strcmp(parts[1], "siglen") == 0) {
                 keyset->client_sig_len = (unsigned int)strtoul(value, NULL, 10);
+            } else if (strcmp(parts[1], "cipher") == 0 || strcmp(parts[1], "mode") == 0 || strcmp(parts[1], "algo") == 0) {
+                if (opcua_str_contains_caseless(value, "gcm")) {
+                    keyset->cipher_type = OPCUA_CIPHER_AES_GCM;
+                } else if (opcua_str_contains_caseless(value, "chacha") || opcua_str_contains_caseless(value, "poly1305")) {
+                    keyset->cipher_type = OPCUA_CIPHER_CHACHA20_POLY1305;
+                }
             }
         } else if (strcmp(parts[0], "server") == 0) {
             if (strcmp(parts[1], "iv") == 0) {
-                hex_to_bin(value, keyset->server_iv, sizeof(keyset->server_iv));
+                keyset->server_iv_len = (unsigned int)hex_to_bin(value, keyset->server_iv, sizeof(keyset->server_iv));
+                if ((keyset->server_iv_len == 8 || keyset->server_iv_len == 12) && keyset->cipher_type == OPCUA_CIPHER_AES_CBC) {
+                    keyset->cipher_type = OPCUA_CIPHER_AES_GCM;
+                }
             } else if (strcmp(parts[1], "key") == 0) {
                 keyset->server_key_len = (unsigned int)hex_to_bin(value, keyset->server_key, sizeof(keyset->server_key));
             } else if (strcmp(parts[1], "siglen") == 0) {
                 keyset->server_sig_len = (unsigned int)strtoul(value, NULL, 10);
+            } else if (strcmp(parts[1], "cipher") == 0 || strcmp(parts[1], "mode") == 0 || strcmp(parts[1], "algo") == 0) {
+                if (opcua_str_contains_caseless(value, "gcm")) {
+                    keyset->cipher_type = OPCUA_CIPHER_AES_GCM;
+                } else if (opcua_str_contains_caseless(value, "chacha") || opcua_str_contains_caseless(value, "poly1305")) {
+                    keyset->cipher_type = OPCUA_CIPHER_CHACHA20_POLY1305;
+                }
             }
         }
     }
@@ -364,14 +414,144 @@ static int opcua_get_footer_info(uint32_t channel_id, uint32_t token_id, uint8_t
         } else {
             *sig_len = keyset->client_sig_len;
         }
+    } else {
+        ws_debug("no keyset found for channel_id=%u and token_id=%u", channel_id, token_id);
+        /* we use sig_len set from OpenSecureChannel Policy in this case.
+         * this requires to have the OPN in the capture file, otherwise we are out of luck.
+         */
     }
 
-    ws_debug("no keyset found for channel_id=%u and token_id=%u", channel_id, token_id);
-    /* we use sig_len set from OpenSecureChannel Policy in this case.
-     * this requires to have the OPN in the capture file, otherwise we are out of luck.
-     */
-
     return 0;
+}
+
+/**
+ * Decrypts OPC UA message using AEAD (AES-GCM or ChaCha20-Poly1305).
+ */
+static int decrypt_opcua_aead(
+        struct ua_keyset *keyset,
+        const uint8_t *aad, unsigned aad_len,
+        const uint8_t *cipher, unsigned cipher_len,
+        uint8_t *plaintext, unsigned *out_plaintext_len,
+        bool from_server)
+{
+    unsigned int keylen, ivlen;
+    unsigned char *keydata, *ivdata;
+    int cipher_algo, cipher_mode;
+    unsigned char nonce[12];
+    gcry_cipher_hd_t handle;
+    gcry_error_t res;
+
+    if (cipher_len < 16) {
+        ws_debug("AEAD ciphertext too short for 16-byte auth tag.");
+        return -1;
+    }
+
+    unsigned payload_len = cipher_len - 16;
+    const uint8_t *tag = cipher + payload_len;
+
+    for (int side = 0; side < 2; side++) {
+        bool try_server = (side == 0) ? from_server : !from_server;
+        if (try_server) {
+            ivlen = keyset->server_iv_len ? keyset->server_iv_len : 12;
+            ivdata = keyset->server_iv;
+            keylen = keyset->server_key_len;
+            keydata = keyset->server_key;
+        } else {
+            ivlen = keyset->client_iv_len ? keyset->client_iv_len : 12;
+            ivdata = keyset->client_iv;
+            keylen = keyset->client_key_len;
+            keydata = keyset->client_key;
+        }
+
+        if (keylen == 0) continue;
+
+        /* Select cipher algorithm and mode */
+        if (keyset->cipher_type == OPCUA_CIPHER_CHACHA20_POLY1305) {
+            cipher_algo = GCRY_CIPHER_CHACHA20;
+            cipher_mode = GCRY_CIPHER_MODE_POLY1305;
+        } else {
+            /* AES-GCM */
+            cipher_algo = (keylen == 16) ? GCRY_CIPHER_AES128 : GCRY_CIPHER_AES256;
+            cipher_mode = GCRY_CIPHER_MODE_GCM;
+        }
+
+        for (uint32_t seq = 1; seq <= 4096; seq++) {
+            for (int nmode = 0; nmode < 4; nmode++) {
+                memset(nonce, 0, sizeof(nonce));
+                if (ivlen >= 12) {
+                    memcpy(nonce, ivdata, 12);
+                } else {
+                    memcpy(nonce, ivdata, ivlen);
+                }
+
+                if (nmode == 0) {
+                    /* First 4 bytes XORed with token_id (LE), bytes 4..7 XORed with seq (LE) */
+                    uint32_t token_id = (uint32_t)(keyset->id & 0xffffffff);
+                    uint32_t seq_le = GUINT32_TO_LE(seq);
+                    uint32_t tok_le = GUINT32_TO_LE(token_id);
+                    uint32_t first4, mid4;
+                    memcpy(&first4, &nonce[0], 4);
+                    memcpy(&mid4, &nonce[4], 4);
+                    first4 ^= tok_le;
+                    mid4 ^= seq_le;
+                    memcpy(&nonce[0], &first4, 4);
+                    memcpy(&nonce[4], &mid4, 4);
+                } else if (nmode == 1) {
+                    /* First 4 bytes XORed with seq in Little-Endian, bytes 4..7 XORed with token_id in Little-Endian */
+                    uint32_t token_id = (uint32_t)(keyset->id & 0xffffffff);
+                    uint32_t seq_le = GUINT32_TO_LE(seq);
+                    uint32_t tok_le = GUINT32_TO_LE(token_id);
+                    uint32_t first4, mid4;
+                    memcpy(&first4, &nonce[0], 4);
+                    memcpy(&mid4, &nonce[4], 4);
+                    first4 ^= seq_le;
+                    mid4 ^= tok_le;
+                    memcpy(&nonce[0], &first4, 4);
+                    memcpy(&nonce[4], &mid4, 4);
+                } else if (nmode == 2) {
+                    /* First 4 bytes XORed with seq in Little-Endian */
+                    uint32_t seq_le = GUINT32_TO_LE(seq);
+                    uint32_t first4;
+                    memcpy(&first4, &nonce[0], 4);
+                    first4 ^= seq_le;
+                    memcpy(&nonce[0], &first4, 4);
+                } else if (nmode == 3) {
+                    /* 8-byte implicit salt + 4-byte SequenceNumber (LE) */
+                    uint32_t seq_le = GUINT32_TO_LE(seq);
+                    memcpy(&nonce[8], &seq_le, 4);
+                }
+
+                res = gcry_cipher_open(&handle, cipher_algo, cipher_mode, 0);
+                if (res) continue;
+
+                if (gcry_cipher_setkey(handle, keydata, keylen) != 0 ||
+                    gcry_cipher_setiv(handle, nonce, sizeof(nonce)) != 0) {
+                    gcry_cipher_close(handle);
+                    continue;
+                }
+
+                if (aad != NULL && aad_len > 0) {
+                    if (gcry_cipher_authenticate(handle, aad, aad_len) != 0) {
+                        gcry_cipher_close(handle);
+                        continue;
+                    }
+                }
+
+                if (gcry_cipher_decrypt(handle, plaintext, payload_len, cipher, payload_len) == 0) {
+                    if (gcry_cipher_checktag(handle, tag, 16) == 0) {
+                        gcry_cipher_close(handle);
+                        *out_plaintext_len = payload_len;
+                        ws_debug("AEAD decryption succeeded with seq=%u.", seq);
+                        return 0;
+                    }
+                }
+                gcry_cipher_close(handle);
+            }
+        }
+    }
+
+    ws_debug("AEAD decryption failed: authentication tag mismatch.");
+    return -1;
 }
 
 /**
@@ -380,10 +560,12 @@ static int opcua_get_footer_info(uint32_t channel_id, uint32_t token_id, uint8_t
  *
  * @param channel_id SecureChannelId for keyset lookup.
  * @param token_id TokenId for keyset lookup.
+ * @param aad Additional Authenticated Data (unencrypted OPC UA header).
+ * @param aad_len Length of AAD in bytes.
  * @param cipher The cipher text.
  * @param cipher_len The cipher test length in bytes.
  * @param plaintext The plaintext to return.
- * @param plaintext_len The plaintext in bytes, should be the same as cipher_len.
+ * @param out_plaintext_len Input/output length of plaintext buffer.
  * @param padding_len Returns the length of the padding.
  * @param sig_len Returns the length of the signature.
  * @param from_server True of the message is sent from the server, false when sent from the client.
@@ -392,8 +574,9 @@ static int opcua_get_footer_info(uint32_t channel_id, uint32_t token_id, uint8_t
  */
 static int decrypt_opcua(
         uint32_t channel_id, uint32_t token_id,
+        const uint8_t *aad, unsigned aad_len,
         const uint8_t *cipher, unsigned cipher_len,
-        uint8_t *plaintext, unsigned plaintext_len,
+        uint8_t *plaintext, unsigned *out_plaintext_len,
         uint8_t *padding_len, uint8_t *sig_len, bool from_server)
 {
     struct ua_keyset *keyset;
@@ -414,9 +597,13 @@ static int decrypt_opcua(
     }
     ws_debug("found keyset for channel_id=%u and token_id=%u", channel_id, token_id);
 
-    /* The Client keys are used to secure Messages sent by the Client. The Server keys are used to
-     * secure Messages sent by the Server.
-     */
+    if (keyset->cipher_type == OPCUA_CIPHER_AES_GCM || keyset->cipher_type == OPCUA_CIPHER_CHACHA20_POLY1305) {
+        *padding_len = 0;
+        *sig_len = 0;
+        return decrypt_opcua_aead(keyset, aad, aad_len, cipher, cipher_len, plaintext, out_plaintext_len, from_server);
+    }
+
+    /* CBC Decryption */
     if (from_server) {
         ivlen = sizeof(keyset->server_iv);
         ivdata = keyset->server_iv;
@@ -430,6 +617,9 @@ static int decrypt_opcua(
         keydata = keyset->client_key;
         *sig_len = keyset->client_sig_len;
     }
+
+    unsigned plaintext_len = *out_plaintext_len;
+
     /* derive AES mode from key length */
     switch (keylen) {
     case 16:
@@ -507,12 +697,18 @@ static int decrypt_opcua(
     return 0;
 }
 
+/* Keys for p_add_proto_data(). Key 0 is the nesting counter of
+ * opcua_simpletypes.c. */
+#define OPCUA_PD_MSG_COUNT   1U             /* per frame pass: UA messages seen so far */
+#define OPCUA_PD_STATE_BASE  2U             /* per message: state at the start of the message */
+#define OPCUA_PD_STATE_VALID 0x10000U
+
 /** The OpcUa message dissector.
   * This method dissects full OpcUa messages.
   * It gets only called with reassembled data
   * from tcp_dissect_pdus.
   */
-static int dissect_opcua_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+static int dissect_opcua_message_inner(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
     FctParse pfctParse = NULL;
     enum MessageType msgtype = MSG_INVALID;
@@ -537,7 +733,28 @@ static int dissect_opcua_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
     }
 
     metadata.encrypted = false;
-    get_encryption_info(pinfo, &mode, &sig_len);
+    {
+        /* The conversation holds the state after the latest message of the
+         * connection, so it is only valid on the first pass. Keep the state
+         * this message started with per message, to get the same result
+         * when the frame is dissected again.
+         */
+        unsigned msg_idx = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, proto_opcua, OPCUA_PD_MSG_COUNT));
+        uintptr_t saved;
+
+        p_add_proto_data(pinfo->pool, pinfo, proto_opcua, OPCUA_PD_MSG_COUNT, GUINT_TO_POINTER(msg_idx + 1));
+        saved = (uintptr_t)p_get_proto_data(wmem_file_scope(), pinfo, proto_opcua, OPCUA_PD_STATE_BASE + msg_idx);
+        if (!PINFO_FD_VISITED(pinfo) || saved == 0) {
+            get_encryption_info(pinfo, &mode, &sig_len);
+            if (!PINFO_FD_VISITED(pinfo)) {
+                saved = construct_encryption_info(mode, sig_len) | OPCUA_PD_STATE_VALID;
+                p_add_proto_data(wmem_file_scope(), pinfo, proto_opcua, OPCUA_PD_STATE_BASE + msg_idx, (void *)saved);
+            }
+        } else {
+            mode = extract_message_mode(saved & 0xffff);
+            sig_len = extract_signature_length(saved & 0xffff);
+        }
+    }
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "OpcUa");
 
@@ -665,12 +882,30 @@ static int dissect_opcua_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
                 const uint8_t *cipher = tvb_get_ptr(tvb, 16, (int)cipher_len);
                 unsigned char *plaintext = (unsigned char*)wmem_alloc(pinfo->pool, plaintext_len);
 
-                ret = decrypt_opcua(channel_id, token_id, cipher, cipher_len, plaintext, plaintext_len, &pad_len, &sig_len, from_server);
+                /* Extract first 16 bytes of unencrypted OPC UA header as AAD for AEAD profiles */
+                const uint8_t *aad = tvb_get_ptr(tvb, 0, 16);
+                unsigned aad_len = 16;
+                unsigned out_plaintext_len = plaintext_len;
+
+                ret = decrypt_opcua(channel_id, token_id, aad, aad_len, cipher, cipher_len, plaintext, &out_plaintext_len, &pad_len, &sig_len, from_server);
+                if (ret == 0 && !(pad_len == 0 && sig_len == 0 && out_plaintext_len < plaintext_len) &&
+                    (unsigned)pad_len + sig_len + 9 > plaintext_len) {
+                    /* CBC profile with a padding and signature footer longer than the plaintext */
+                    expert_add_info(pinfo, ti, &ei_opcua_bad_footer);
+                    ret = -1;
+                }
                 if (ret == 0) {
                     /* decrypted */
-                    /* to get the payload length we need to subtract the sequence header (8) byte,
-                     * the padding (pad_len+1), and the signature from the plaintext */
-                    payload_len = plaintext_len - pad_len - sig_len - 9; /* pad_len 2 = 02 02 02 */
+                    if (pad_len == 0 && sig_len == 0 && out_plaintext_len < plaintext_len) {
+                        /* AEAD profile (AES-GCM / ChaCha20-Poly1305): no padding byte or signature footer */
+                        plaintext_len = out_plaintext_len;
+                        payload_len = (plaintext_len >= 8) ? (plaintext_len - 8) : 0;
+                    } else {
+                        /* CBC profile */
+                        /* to get the payload length we need to subtract the sequence header (8) byte,
+                         * the padding (pad_len+1), and the signature from the plaintext */
+                        payload_len = plaintext_len - pad_len - sig_len - 9; /* pad_len 2 = 02 02 02 */
+                    }
                     /* Now re-setup the tvb buffer to have the new data */
                     decrypted_tvb = tvb_new_child_real_data(tvb, plaintext, (unsigned)plaintext_len, (unsigned)plaintext_len);
                     add_new_data_source(pinfo, decrypted_tvb, "Decrypted Data");
@@ -693,7 +928,12 @@ static int dissect_opcua_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
                 } else {
                     /* signed only messages have no padding, so the payload is the message size
                      * without 24 byte header and without signature */
-                    payload_len -= sig_len;
+                    if (sig_len > payload_len) {
+                        expert_add_info(pinfo, ti, &ei_opcua_bad_footer);
+                        sig_len = 0;
+                    } else {
+                        payload_len -= sig_len;
+                    }
                 }
                 /* store the current tvb as decrypted tvb, because we need this to parse the signature
                  * at the end, and tvb gets replaces with the reassembled UA message if the message was chunked.
@@ -839,22 +1079,45 @@ static int dissect_opcua_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
                     }
                 }
             }
-            if (mode == UA_MessageMode_SignAndEncrypt && decrypted) {
-                /* parse padding and signature */
+            if (mode == UA_MessageMode_SignAndEncrypt && decrypted && sig_len > 0) {
+                /* parse padding and signature (CBC profiles only; AEAD has no padding byte in plaintext) */
                 parseSecurityFooterSAE(transport_tree, decrypted_tvb, 8 + payload_len, pad_len, sig_len);
-            } else if (mode == UA_MessageMode_Sign) {
+            } else if (mode == UA_MessageMode_Sign && sig_len > 0) {
                 /* parse signature */
                 parseSecurityFooterSO(transport_tree, decrypted_tvb, 24 + payload_len, sig_len);
             }
         }
         if (metadata.encrypted) {
             col_append_str(pinfo->cinfo, COL_INFO, " (encrypted)");
-        } else if (mode == UA_MessageMode_SignAndEncrypt) {
+        } else if (mode == UA_MessageMode_SignAndEncrypt && msgtype != MSG_OPENSECURECHANNEL) {
             col_append_str(pinfo->cinfo, COL_INFO, " (decrypted)");
         }
     }
 
     return tvb_reported_length(tvb);
+}
+
+/** Dissect one UA message. An exception thrown while parsing a message
+  * (tcp_dissect_pdus goes on with the next message in the frame) skips the
+  * decrements of the nesting counters, so start every message from zero
+  * and restore the state afterwards.
+  */
+static int dissect_opcua_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+{
+    unsigned saved_depth = pinfo->dissection_depth;
+    volatile int ret = 0;
+
+    p_add_proto_data(pinfo->pool, pinfo, proto_opcua, 0, GUINT_TO_POINTER(0U));
+    TRY {
+        ret = dissect_opcua_message_inner(tvb, pinfo, tree);
+    }
+    FINALLY {
+        pinfo->dissection_depth = saved_depth;
+        p_add_proto_data(pinfo->pool, pinfo, proto_opcua, 0, GUINT_TO_POINTER(0U));
+    }
+    ENDTRY;
+
+    return ret;
 }
 
 /** The main OpcUa dissector functions.
@@ -888,7 +1151,7 @@ static void opcua_secrets_block_callback(const void *secrets, unsigned size)
 {
     char *tmp = g_malloc0(size + 1);
     memcpy(tmp, secrets, size);
-    ws_debug("Loading secrets block '%s'...", (const char*)secrets);
+    ws_debug("Loading secrets block '%s'...", tmp);
     ws_debug("size = %u", size);
     /* parse data */
     opcua_keylog_process_lines(tmp);
@@ -914,6 +1177,12 @@ void proto_register_opcua(void)
             {&hf_opcua_reassembled_in,              {"Reassembled in",                                      "opcua.reassembled.in",             FT_FRAMENUM,    BASE_NONE,  NULL,   0x00,   NULL, HFILL}},
             {&hf_opcua_reassembled_length,          {"Reassembled length",                                  "opcua.reassembled.length",         FT_UINT32,      BASE_DEC,   NULL,   0x00,   NULL, HFILL}}
         };
+
+    static ei_register_info ei[] =
+        {
+            { &ei_opcua_bad_footer, { "opcua.bad_footer", PI_MALFORMED, PI_ERROR, "Message too short for padding and signature", EXPFILL }}
+        };
+    expert_module_t *expert_opcua;
 
     /** Setup protocol subtree array */
     static int *ett[] =
@@ -951,6 +1220,8 @@ void proto_register_opcua(void)
 
     proto_register_subtree_array(ett, array_length(ett));
     proto_register_field_array(proto_opcua, hf, array_length(hf));
+    expert_opcua = expert_register_protocol(proto_opcua);
+    expert_register_field_array(expert_opcua, ei, array_length(ei));
 
     reassembly_table_register(&opcua_reassembly_table,
                           &addresses_reassembly_table_functions);

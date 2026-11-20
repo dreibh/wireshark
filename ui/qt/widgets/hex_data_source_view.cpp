@@ -91,6 +91,9 @@ HexDataSourceView::HexDataSourceView(const QByteArray &data, packet_char_enc enc
     selection_start_(-1),
     selection_end_(-1),
     selecting_(false),
+    pending_scroll_start_(-1),
+    pending_scroll_len_(0),
+    pending_scroll_anchor_(-1),
     context_byte_offset_(-1),
     cursor_byte_(-1),
     hovered_annotation_index_(-1),
@@ -395,8 +398,19 @@ void HexDataSourceView::markField(int start, int length, bool scroll_to, bool ho
         field_start_ = start;
         field_len_ = length;
     }
-    if (scroll_to) {
-        scrollToByte(start);
+    if (scroll_to && !hover) {
+        if (selecting_) {
+            // The field was selected by pressing the mouse on one of its
+            // bytes here. Scrolling now would move a different byte under
+            // the mouse, which a drag or the release would then extend the
+            // selection to, so wait until the release, and don't scroll at
+            // all if it turns out to be a drag.
+            pending_scroll_start_ = start;
+            pending_scroll_len_ = length;
+            pending_scroll_anchor_ = cursor_byte_;
+        } else {
+            scrollToField(start, length, start);
+        }
     }
     viewport()->update();
 }
@@ -594,12 +608,19 @@ void HexDataSourceView::mousePressEvent (QMouseEvent *event) {
     // - Triggers selectedFieldChanged in ProtoTree, which clears the
     //   selection and selects the corresponding (or no) item.
 
-    const int byte_offset = byteOffsetAtPixel(event->pos(), true);
+    // Snap a press between or just outside the byte columns to the
+    // nearest byte, but treat one in the offset column or past the right
+    // of the bytes as outside them.
+    const int byte_offset = pixelOutsideBytePanels(event->pos()) ? -1 : byteOffsetAtPixel(event->pos(), true);
+    setFocus(Qt::MouseFocusReason);
     if (byte_offset < 0) {
+        // Clear the selection (unless extending it), but don't start a
+        // drag from outside the bytes.
+        updateSelection(byte_offset, event->modifiers() & Qt::ShiftModifier, true);
+        viewport()->update();
         return;
     }
 
-    setFocus(Qt::MouseFocusReason);
     selecting_ = true;
     setUpdatesEnabled(false);
     updateSelection(byte_offset, event->modifiers() & Qt::ShiftModifier, true);
@@ -640,12 +661,20 @@ void HexDataSourceView::mouseMoveEvent(QMouseEvent *event)
 void HexDataSourceView::mouseReleaseEvent(QMouseEvent *event)
 {
     if (event && event->button() == Qt::LeftButton) {
+        // Only extend a selection that the press started; a press
+        // outside the bytes doesn't start one.
+        const bool was_selecting = selecting_;
         selecting_ = false;
         int byte_offset = byteOffsetAtPixel(event->pos(), true);
-        if (byte_offset >= 0) {
+        if (was_selecting && byte_offset >= 0) {
             updateSelection(byte_offset, true, false);
             viewport()->update();
         }
+        // A click (released on the byte it pressed), not a drag.
+        if (pending_scroll_start_ >= 0 && byte_offset == pending_scroll_anchor_) {
+            scrollToField(pending_scroll_start_, pending_scroll_len_, pending_scroll_anchor_);
+        }
+        pending_scroll_start_ = -1;
     }
 
     QAbstractScrollArea::mouseReleaseEvent(event);
@@ -1066,11 +1095,14 @@ int HexDataSourceView::hexColumnAtX(int x, bool allow_fuzzy)
     const int byte_units = hexCharsPerByte() + 1;
     const int group_units = separator_interval_ * byte_units + 1;
     int unit = rel / em_width_;
-    int col = (unit / group_units) * separator_interval_ + qMin((unit % group_units) / byte_units, separator_interval_ - 1);
-    if (col >= row_width_) {
-        return allow_fuzzy ? row_width_ - 1 : -1;
+    // The last byte's region ends half a space past its digits, like the
+    // others; the space after it isn't a separator.
+    const int last_col = row_width_ - 1;
+    const int end_unit = (last_col / separator_interval_) * group_units + (last_col % separator_interval_ + 1) * byte_units;
+    if (unit >= end_unit) {
+        return allow_fuzzy ? last_col : -1;
     }
-    return col;
+    return (unit / group_units) * separator_interval_ + qMin((unit % group_units) / byte_units, separator_interval_ - 1);
 }
 
 int HexDataSourceView::textPanelX()
@@ -1147,6 +1179,20 @@ int HexDataSourceView::annotationIndexIntersecting(int start, int length) const
 void HexDataSourceView::updateSelection(int byte_offset, bool extend, bool emit_signal)
 {
     if (byte_offset < 0 || byte_offset >= data_.size()) {
+        if (extend) {
+            // Dragging or shift-clicking outside the bytes; leave the
+            // selection as it is.
+            return;
+        }
+        // Clicking outside the bytes clears the selection, and selects
+        // no field.
+        selection_anchor_ = -1;
+        selection_start_ = -1;
+        selection_end_ = -1;
+        cursor_byte_ = -1;
+        if (emit_signal) {
+            emit byteSelected(-1);
+        }
         return;
     }
 
@@ -1193,6 +1239,42 @@ void HexDataSourceView::updateAnnotationToolTip(int byte_offset, const QPoint &g
 void HexDataSourceView::scrollToByte(int byte)
 {
     verticalScrollBar()->setValue(byte / row_width_);
+}
+
+void HexDataSourceView::scrollToField(int start, int length, int anchor)
+{
+    const int data_len = static_cast<int>(data_.size());
+    if (start < 0 || start >= data_len || row_width_ <= 0 || line_height_ <= 0) {
+        return;
+    }
+    length = qBound(1, length, data_len - start);
+    if (anchor < start || anchor >= start + length) {
+        anchor = start;
+    }
+
+    const int visible_rows = qMax(1, viewport()->height() / line_height_);
+    const int anchor_row = anchor / row_width_;
+    const int current_top = verticalScrollBar()->value();
+    const int max_top = verticalScrollBar()->maximum();
+
+    // Of the top rows that keep the anchor row visible, pick the one that
+    // shows the most bytes of the field, and of those the one closest to
+    // the current top row, i.e. the smallest scroll.
+    int best_top = current_top;
+    int best_bytes = -1;
+    int best_distance = 0;
+    for (int top = qMax(0, anchor_row - visible_rows + 1); top <= qMin(anchor_row, max_top); top++) {
+        const int first_byte = qMax(start, top * row_width_);
+        const int end_byte = qMin(start + length, (top + visible_rows) * row_width_);
+        const int bytes = qMax(0, end_byte - first_byte);
+        const int distance = qAbs(top - current_top);
+        if (bytes > best_bytes || (bytes == best_bytes && distance < best_distance)) {
+            best_top = top;
+            best_bytes = bytes;
+            best_distance = distance;
+        }
+    }
+    verticalScrollBar()->setValue(best_top);
 }
 
 // Offset character width
@@ -1287,6 +1369,37 @@ int HexDataSourceView::byteOffsetAtPixel(QPoint pos, bool allow_fuzzy)
         return -1;
     }
     return byte;
+}
+
+bool HexDataSourceView::pixelOutsideBytePanels(QPoint pos)
+{
+    if (em_width_ <= 0) {
+        return false;
+    }
+
+    int x = (horizontalScrollBar()->value() * em_width_) + pos.x();
+
+    if (x < offsetPixels()) {
+        return true;
+    }
+
+    // The hit regions of the last byte column extend half a space past
+    // its last digit in the hex panel (see hexColumnAtX()), and to the
+    // end of its character in the text panel (see textColumnAtX()).
+    // hexChars() includes the pad space after the last digit.
+    const int hex_right = hexPanelX() + (DataPrinter::hexChars() - 1) * em_width_ + em_width_ / 2;
+    if (show_ascii_) {
+        // The gutter between the hex and text panels.
+        if (show_hex_ && x >= hex_right && x < textPanelX()) {
+            return true;
+        }
+        int ascii_chars = row_width_ + ((row_width_ - 1) / separator_interval_);
+        return x >= textPanelX() + ascii_chars * em_width_;
+    }
+    if (show_hex_) {
+        return x >= hex_right;
+    }
+    return true;
 }
 
 void HexDataSourceView::setHexDisplayFormat(QAction *action)

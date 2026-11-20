@@ -320,6 +320,8 @@ extern "C" {
 #define WTAP_ENCAP_DECT_NR_TAP                  229
 #define WTAP_ENCAP_GSMTAP_UM                    230
 #define WTAP_ENCAP_DEKTEC_SDI                   231
+#define WTAP_ENCAP_DSA                          232
+#define WTAP_ENCAP_EDSA                         233
 
 /* After adding new item here, please also add new item to encap_table_base array */
 
@@ -2464,6 +2466,10 @@ int64_t wtap_read_so_far(wtap *wth);
  * @brief Get the size of the capture file.
  *
  * Returns the total file size in bytes. On failure, sets an error code.
+ *
+ * @note This is the size on disk, not the decompressed size if
+ * file_iscompressed() is true. It is also not reliable if @ref wtap->ispipe
+ * is true.
  *
  * @param wth Wiretap file handle.
  * @param err Pointer to an error code variable.

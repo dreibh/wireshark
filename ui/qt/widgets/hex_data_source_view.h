@@ -551,6 +551,10 @@ private:
     /**
      * @brief Update the byte selection and optionally notify the packet tree.
      *
+     * If @p byte_offset is outside the data, the selection is cleared
+     * (and @c byteSelected() is emitted with -1, selecting no field),
+     * unless @p extend is true, in which case nothing changes.
+     *
      * @param byte_offset The target byte offset.
      * @param extend      true to extend from the existing anchor.
      * @param emit_signal true to emit @c byteSelected().
@@ -573,6 +577,19 @@ private:
     void scrollToByte(int byte);
 
     /**
+     * @brief Scroll the minimum amount needed to show as much of a field
+     * as possible while keeping one of its bytes visible.
+     *
+     * If the field is already entirely visible, or as much of it as
+     * possible with @p anchor visible already is, nothing is scrolled.
+     *
+     * @param start  The first byte of the field.
+     * @param length The length of the field.
+     * @param anchor The byte that must remain visible, e.g. the clicked byte.
+     */
+    void scrollToField(int start, int length, int anchor);
+
+    /**
      * @brief Update scrollbar page steps, ranges, and single-step sizes.
      */
     void updateScrollbars();
@@ -587,6 +604,16 @@ private:
      * @return The zero-based byte offset, or -1 if the position is invalid.
      */
     int byteOffsetAtPixel(QPoint pos, bool allow_fuzzy = false);
+
+    /**
+     * @brief Check whether a viewport position is beside the bytes.
+     *
+     * @param pos Position in viewport (widget-local) coordinates.
+     * @return true if @p pos is in the offset column, in the gutter
+     *         between the hex and text panels, or to the right of the
+     *         last byte column of the rightmost shown panel.
+     */
+    bool pixelOutsideBytePanels(QPoint pos);
 
     /**
      * @brief Build the context menu with all byte-view actions.
@@ -672,6 +699,9 @@ private:
     int selection_start_;  /**< Smaller of anchor and end; the first selected byte. */
     int selection_end_;    /**< Larger of anchor and end; the last selected byte. */
     bool selecting_;       /**< true while a mouse-drag selection is in progress. */
+    int pending_scroll_start_;  /**< Field to scroll to when the press selecting it is released, or -1. */
+    int pending_scroll_len_;    /**< Length of the field to scroll to on release. */
+    int pending_scroll_anchor_; /**< The pressed byte, which must stay visible. */
     int context_byte_offset_;   /**< Byte offset saved at context-menu open time. */
     int cursor_byte_;           /**< Byte offset of the keyboard cursor. */
     int hovered_annotation_index_; /**< Index of the annotation under the cursor, or -1. */

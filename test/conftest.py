@@ -284,6 +284,7 @@ def features(cmd_tshark, make_env):
         have_nghttp2='+nghttp2' in tshark_v,
         have_nghttp3='+nghttp3' in tshark_v,
         have_kerberos='+Kerberos' in tshark_v,
+        have_mit_kerberos='Kerberos (MIT)' in tshark_v,
         have_gcrypt_1_10=gcry_m and gcry_ver >= (1, 10),
         have_gnutls='+GnuTLS' in tshark_v,
         have_pkcs11='PKCS#11' in tshark_v,
@@ -317,6 +318,13 @@ def capture_file(dirs):
     '''Returns the path to a capture file.'''
     def resolver(filename):
         return os.path.join(dirs.capture_dir, filename)
+    return resolver
+
+@pytest.fixture(scope='session')
+def key_file(dirs):
+    '''Returns the path to a key file.'''
+    def resolver(filename):
+        return os.path.join(dirs.key_dir, filename)
     return resolver
 
 @pytest.fixture
@@ -535,17 +543,6 @@ def tshark_fields(cmd_tshark, capture_file, test_env):
             cmd += ['-e', field]
         return subprocess.check_output(cmd, encoding='utf-8', env=test_env)
     return run
-
-
-@pytest.fixture
-def assert_frame_matches(tshark_fields):
-    '''Asserts that a display filter expression matches exactly the given
-    frame of a capture.'''
-    def check(filename, frame, expr):
-        stdout = tshark_fields(filename, f'frame.number == {frame} && {expr}')
-        assert stdout.strip() == str(frame), \
-            f'Frame {frame}: filter did not match: {expr}'
-    return check
 
 
 @pytest.fixture

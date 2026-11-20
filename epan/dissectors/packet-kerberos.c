@@ -172,6 +172,9 @@ typedef struct {
 	wmem_list_t *learnt_keys;
 	wmem_list_t *missing_keys;
 	uint32_t within_PA_TGS_REQ;
+	uint32_t nesting;
+	bool within_decrypted_kdc_rep;
+	bool key_limit_reported;
 	struct _kerberos_PA_FX_FAST_REQUEST {
 		bool defer;
 		tvbuff_t *tvb;
@@ -765,6 +768,11 @@ static expert_field ei_kerberos_missing_keytype;
 static expert_field ei_kerberos_decrypted_keytype;
 static expert_field ei_kerberos_learnt_keytype;
 static expert_field ei_kerberos_address;
+static expert_field ei_kerberos_address_len;
+static expert_field ei_krb_gssapi_bndlen;
+static expert_field ei_kerberos_pac_buffer;
+static expert_field ei_kerberos_nesting;
+static expert_field ei_kerberos_key_limit;
 static expert_field ei_krb_gssapi_dlglen;
 static expert_field ei_krb_gssapi_extlen;
 
@@ -892,6 +900,38 @@ typedef enum _KERBEROS_KRBFASTARMORTYPES_enum {
   KERBEROS_FX_FAST_RESERVED =   0,
   KERBEROS_FX_FAST_ARMOR_AP_REQUEST =   1
 } KERBEROS_KRBFASTARMORTYPES_enum;
+
+/*
+ * Kerberos messages and authorization data can contain other Kerberos
+ * messages (an AP-REQ in a PA-TGS-REQ or a FAST armor, a KRB-ERROR in
+ * a PA-FX-ERROR, an AD-IF-RELEVANT in an AD-IF-RELEVANT, ...). No
+ * real message nests more than a few levels, so don't go deeper than
+ * this. The counter is kept in the private data of the packet.
+ */
+#define KERBEROS_MAX_NESTING 16
+
+static bool
+kerberos_nesting_enter(asn1_ctx_t *actx, proto_tree *tree, tvbuff_t *tvb, unsigned offset)
+{
+	kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+
+	if (private_data->nesting >= KERBEROS_MAX_NESTING) {
+		proto_tree_add_expert(tree, actx->pinfo, &ei_kerberos_nesting, tvb, offset, -1);
+		return false;
+	}
+	private_data->nesting++;
+	return true;
+}
+
+static void
+kerberos_nesting_leave(asn1_ctx_t *actx)
+{
+	kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+
+	if (private_data->nesting > 0) {
+		private_data->nesting--;
+	}
+}
 
 static void
 call_kerberos_callbacks(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, int tag, kerberos_callbacks *cb)
@@ -1278,6 +1318,10 @@ key_to_hexstr_maxfour(const uint8_t *keyvalue, unsigned keylength)
 	char *keystr_end;
 	bool truncated = false;
 	unsigned len = keylength;
+	if (len == 0) {
+		/* a missing key */
+		return "no key";
+	}
 	if (len > 4U) {
 		len = 4U;
 		truncated = true;
@@ -1353,6 +1397,16 @@ static void insert_longterm_keys_into_key_map(wmem_map_t *key_map)
 	}
 }
 
+/*
+ * Every key we learn from the capture is kept, and tried for every
+ * encrypted part that follows. Real captures have a few thousand keys
+ * at most; don't let a crafted one make that quadratic. Keys from a
+ * keytab or a key log are not counted.
+ */
+#define KERBEROS_MAX_LEARNT_KEYS 10000
+#define KERBEROS_PROTO_DATA_KEY_LIMIT 1
+static unsigned kerberos_learnt_key_count;
+
 static void
 kerberos_key_list_append(wmem_list_t *key_list, enc_key_t *new_key)
 {
@@ -1378,6 +1432,8 @@ add_encryption_key(packet_info *pinfo,
 {
 	wmem_allocator_t *key_scope = NULL;
 	enc_key_t *new_key = NULL;
+	bool keep_key = false;
+	bool key_limit = false;
 	const char *methodl = "learnt";
 	const char *methodu = "Learnt";
 	proto_item *item = NULL;
@@ -1389,13 +1445,26 @@ add_encryption_key(packet_info *pinfo,
 		methodu = "Derived";
 	}
 
-	if(pinfo->fd->visited){
-		/*
-		 * We already processed this,
-		 * we can use a shortterm scope
-		 */
-		key_scope = pinfo->pool;
-	} else {
+	if (!pinfo->fd->visited) {
+		if (kerberos_learnt_key_count < KERBEROS_MAX_LEARNT_KEYS) {
+			keep_key = true;
+			kerberos_learnt_key_count++;
+		} else {
+			key_limit = true;
+			/* Remember it for the next pass over this frame. */
+			if (p_get_proto_data(wmem_file_scope(), pinfo, proto_kerberos,
+					     KERBEROS_PROTO_DATA_KEY_LIMIT) == NULL) {
+				p_add_proto_data(wmem_file_scope(), pinfo, proto_kerberos,
+						 KERBEROS_PROTO_DATA_KEY_LIMIT,
+						 GUINT_TO_POINTER(1));
+			}
+		}
+	} else if (p_get_proto_data(wmem_file_scope(), pinfo, proto_kerberos,
+				    KERBEROS_PROTO_DATA_KEY_LIMIT) != NULL) {
+		key_limit = true;
+	}
+
+	if (keep_key) {
 		/*
 		 * As long as we have enc_key_list, we need to
 		 * use wmem_epan_scope(), when that's gone
@@ -1403,6 +1472,12 @@ add_encryption_key(packet_info *pinfo,
 		 * how long we'll need the particular key.
 		 */
 		key_scope = wmem_epan_scope();
+	} else {
+		/*
+		 * We already processed this, or we don't remember
+		 * any more keys, we can use a shortterm scope
+		 */
+		key_scope = pinfo->pool;
 	}
 
 	new_key = wmem_new0(key_scope, enc_key_t);
@@ -1418,7 +1493,7 @@ add_encryption_key(packet_info *pinfo,
 	new_key->src1 = src1;
 	new_key->src2 = src2;
 
-	if(!pinfo->fd->visited){
+	if (keep_key) {
 		/*
 		 * Only keep it if we don't processed it before.
 		 */
@@ -1435,6 +1510,10 @@ add_encryption_key(packet_info *pinfo,
 			key_to_hexstr_maxfour((const uint8_t*)keyvalue, keylength));
 	if (item != NULL && key_hidden_item != NULL) {
 		proto_tree_move_item(key_tree, key_hidden_item, item);
+	}
+	if (key_limit && !private_data->key_limit_reported) {
+		private_data->key_limit_reported = true;
+		expert_add_info(pinfo, item, &ei_kerberos_key_limit);
 	}
 	if (src1 != NULL) {
 		enc_key_t *sek = src1;
@@ -1464,7 +1543,11 @@ save_encryption_key(tvbuff_t *tvb _U_, int offset _U_, int length _U_,
 		    int hf_index _U_)
 {
 	kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
-	const char *parent = proto_registrar_get_name(parent_hf_index);
+	/*
+	 * A bare EncASRepPart or EncTGSRepPart (not inside a decrypted
+	 * AS-REP or TGS-REP) has no parent field.
+	 */
+	const char *parent = parent_hf_index > 0 ? proto_registrar_get_name(parent_hf_index) : "unknown";
 	const char *element = proto_registrar_get_name(hf_index);
 	char *origin = wmem_strdup_printf(actx->pinfo->pool, "%s_%s", parent, element);
 
@@ -1479,6 +1562,14 @@ save_encryption_key(tvbuff_t *tvb _U_, int offset _U_, int length _U_,
 			   origin,
 			   NULL,
 			   NULL);
+}
+
+static void
+ignore_encryption_key(tvbuff_t *tvb _U_, int offset _U_, int length _U_,
+		      asn1_ctx_t *actx _U_, proto_tree *tree _U_,
+		      int parent_hf_index _U_,
+		      int hf_index _U_)
+{
 }
 
 static void
@@ -1861,6 +1952,16 @@ struct decrypt_krb5_with_cb_state {
 	enc_key_t *ek;
 };
 
+/*
+ * A key learnt in a later frame can't have been used in this one. Keys
+ * from a keytab or a key log have fd_num -1.
+ */
+static bool
+kerberos_key_from_later_frame(const enc_key_t *ek, const packet_info *pinfo)
+{
+	return ek->fd_num != -1 && (uint32_t)ek->fd_num > pinfo->num;
+}
+
 static void
 decrypt_krb5_with_cb_try_key(void *__key _U_, void *value, void *userdata)
 {
@@ -1879,6 +1980,13 @@ decrypt_krb5_with_cb_try_key(void *__key _U_, void *value, void *userdata)
 	if (state->ek != NULL) {
 		/*
 		 * we're done.
+		 */
+		return;
+	}
+
+	if (kerberos_key_from_later_frame(ek, state->pinfo)) {
+		/*
+		 * Don't use it in an earlier frame (on the second pass).
 		 */
 		return;
 	}
@@ -2499,6 +2607,7 @@ keytype_for_cksumtype(krb5_cksumtype checksum)
 }
 
 struct verify_krb5_pac_state {
+	const packet_info *pinfo;
 	int pacbuffer_length;
 	const uint8_t *pacbuffer;
 	krb5_pac pac;
@@ -2537,6 +2646,10 @@ verify_krb5_pac_try_server_key(void *__key _U_, void *value, void *userdata)
 		/*
 		 * we're done.
 		 */
+		return;
+	}
+
+	if (kerberos_key_from_later_frame(ek, state->pinfo)) {
 		return;
 	}
 
@@ -2718,6 +2831,18 @@ verify_krb5_pac_ticket_checksum(proto_tree *tree _U_,
 		return;
 	}
 
+	if (tep->authorization_data == NULL) {
+		missing_signing_key(tree, actx->pinfo, private_data,
+				    pactvb, state->ticket_checksum_type,
+				    state->kdc_ek->keytype,
+				    "No authorization data in the ticket",
+				    "kdc_checksum_key",
+				    1,
+				    0);
+		krb5_free_enc_tkt_part(keytab_krb5_ctx, tep);
+		return;
+	}
+
 	for (l0idx = 0; tep->authorization_data[l0idx]; l0idx++) {
 		krb5_authdata *adl0 = tep->authorization_data[l0idx];
 		krb5_authdata **decoded_container = NULL;
@@ -2758,6 +2883,19 @@ verify_krb5_pac_ticket_checksum(proto_tree *tree _U_,
 		if (ad_pac == NULL) {
 			krb5_free_authdata(keytab_krb5_ctx, decoded_container);
 			continue;
+		}
+
+		if (ad_pac->length == 0 || ad_pac->contents == NULL) {
+			missing_signing_key(tree, actx->pinfo, private_data,
+					    pactvb, state->ticket_checksum_type,
+					    state->kdc_ek->keytype,
+					    "Empty PAC in the ticket",
+					    "kdc_checksum_key",
+					    1,
+					    0);
+			krb5_free_authdata(keytab_krb5_ctx, decoded_container);
+			krb5_free_enc_tkt_part(keytab_krb5_ctx, tep);
+			return;
 		}
 
 		ad_pac->length = 1;
@@ -3068,6 +3206,7 @@ verify_krb5_pac(proto_tree *tree _U_, asn1_ctx_t *actx, tvbuff_t *pactvb)
 	unsigned longterm_count;
 	unsigned dsb_count;
 	struct verify_krb5_pac_state state = {
+		.pinfo = actx->pinfo,
 		.kdc_checksum = 0,
 	};
 
@@ -3262,7 +3401,8 @@ decrypt_krb5_data(proto_tree *tree _U_, packet_info *pinfo,
 		key.keyblock.keyvalue.data=ek->keyvalue;
 		ret = krb5_crypto_init(keytab_krb5_ctx, &(key.keyblock), (krb5_enctype)ENCTYPE_NULL, &crypto);
 		if(ret){
-			return NULL;
+			/* this key is not usable, try the next one */
+			continue;
 		}
 
 		/* pre-0.6.1 versions of Heimdal would sometimes change
@@ -3278,6 +3418,7 @@ decrypt_krb5_data(proto_tree *tree _U_, packet_info *pinfo,
 								NULL);
 		if((ret == 0) && (length>0)){
 			uint8_t *user_data;
+			size_t user_data_len = data.length;
 
 			used_encryption_key(tree, pinfo, zero_private,
 					    ek, usage, cryptotvb,
@@ -3285,11 +3426,15 @@ decrypt_krb5_data(proto_tree *tree _U_, packet_info *pinfo,
 
 			krb5_crypto_destroy(keytab_krb5_ctx, crypto);
 			/* return a private wmem_alloced blob to the caller */
-			user_data = wmem_memdup(pinfo->pool, data.data, (unsigned)data.length);
+			user_data = wmem_memdup(pinfo->pool, data.data, (unsigned)user_data_len);
+			krb5_data_free(&data);
 			if (datalen) {
-				*datalen = (int)data.length;
+				*datalen = (int)user_data_len;
 			}
 			return user_data;
+		}
+		if (ret == 0) {
+			krb5_data_free(&data);
 		}
 		krb5_crypto_destroy(keytab_krb5_ctx, crypto);
 	}
@@ -3837,6 +3982,7 @@ dissect_krb5_decrypt_KDC_REP_data (bool imp_tag _U_, tvbuff_t *tvb, unsigned off
 	uint8_t *plaintext = NULL;
 	int length;
 	tvbuff_t *next_tvb;
+	bool saved_within_decrypted_kdc_rep;
 
 	next_tvb=tvb_new_subset_remaining(tvb, offset);
 	length=tvb_captured_length_remaining(tvb, offset);
@@ -3939,7 +4085,14 @@ dissect_krb5_decrypt_KDC_REP_data (bool imp_tag _U_, tvbuff_t *tvb, unsigned off
 		/* Add the decrypted data to the data source list. */
 		add_new_data_source(actx->pinfo, child_tvb, "Krb5 KDC-REP");
 
+		/*
+		 * The encrypted padata (PA-KERB-KEY-LIST-REP) is only
+		 * trusted when it comes out of a decrypted KDC-REP.
+		 */
+		saved_within_decrypted_kdc_rep = private_data->within_decrypted_kdc_rep;
+		private_data->within_decrypted_kdc_rep = true;
 		offset=dissect_kerberos_Applications(false, child_tvb, 0, actx , tree, /* hf_index*/ -1);
+		private_data->within_decrypted_kdc_rep = saved_within_decrypted_kdc_rep;
 	}
 	return offset;
 }
@@ -4259,15 +4412,16 @@ dissect_kerberos_AD_TARGET_PRINCIPAL(bool implicit_tag _U_, tvbuff_t *tvb _U_,
 				     unsigned offset _U_, asn1_ctx_t *actx _U_,
 				     proto_tree *tree _U_, int hf_index _U_)
 {
-	int tp_offset, tp_len;
-	uint16_t bc;
+	int tp_len;
 
-	bc = tvb_reported_length_remaining(tvb, offset);
-	tp_offset = offset;
-	tp_len = bc;
+	tp_len = tvb_reported_length_remaining(tvb, offset);
+	if (tp_len < 0) {
+		tp_len = 0;
+	}
 	proto_tree_add_item(tree, hf_krb_ad_target_principal, tvb,
-			    tp_offset, tp_len,
+			    offset, tp_len,
 			    ENC_UTF_16 | ENC_LITTLE_ENDIAN);
+	offset += tp_len;
 
 	return offset;
 }
@@ -4288,6 +4442,11 @@ dissect_krb5_rfc1964_checksum(asn1_ctx_t *actx, proto_tree *tree, tvbuff_t *tvb)
 	offset += 4;
 
 	/* Bnd field */
+	if (len > (uint32_t)tvb_reported_length_remaining(tvb, offset)) {
+		proto_tree_add_expert_format_remaining(tree, actx->pinfo, &ei_krb_gssapi_bndlen, tvb, offset,
+				"Bnd length:%u exceeds bytes remaining:%d", len, tvb_reported_length_remaining(tvb, offset));
+		return offset;
+	}
 	proto_tree_add_item(tree, hf_krb_gssapi_bnd, tvb, offset, len, ENC_NA);
 	offset += len;
 
@@ -4615,6 +4774,24 @@ static int * const hf_krb_pac_upn_flags_fields[] = {
 	NULL
 };
 
+#ifdef HAVE_KERBEROS
+/*
+ * The names live as long as the key they belong to, so they are
+ * allocated on wmem_epan_scope(). Other keys may share the pointers
+ * (see save_EncAPRepPart_subkey()), so the previous value is not
+ * freed; only allocate when the name changes, as the PAC is dissected
+ * again on every pass.
+ */
+static void
+kerberos_set_pac_name(const char **dst, const char *value)
+{
+	if (*dst != NULL && strcmp(*dst, value) == 0) {
+		return;
+	}
+	*dst = wmem_strdup(wmem_epan_scope(), value);
+}
+#endif /* HAVE_KERBEROS */
+
 static unsigned
 dissect_krb5_PAC_UPN_DNS_INFO(proto_tree *parent_tree, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx)
 {
@@ -4663,7 +4840,7 @@ dissect_krb5_PAC_UPN_DNS_INFO(proto_tree *parent_tree, tvbuff_t *tvb, unsigned o
 		proto_tree_add_item_ret_uint16(tree, hf_krb_pac_upn_objectsid_len, tvb, offset, 2, ENC_LITTLE_ENDIAN, &objectsid_len);
 		offset+=2;
 		proto_tree_add_item_ret_uint16(tree, hf_krb_pac_upn_objectsid_offset, tvb, offset, 2, ENC_LITTLE_ENDIAN, &objectsid_offset);
-		/* offset+=2; */
+		offset+=2;
 	}
 
 	/* upn */
@@ -4686,33 +4863,40 @@ dissect_krb5_PAC_UPN_DNS_INFO(proto_tree *parent_tree, tvbuff_t *tvb, unsigned o
 #ifdef HAVE_KERBEROS
 	if (private_data->current_ticket_key != NULL) {
 		enc_key_t *ek = private_data->current_ticket_key;
+		const char *account_name;
+		const char *account_domain;
 
+		/*
+		 * Build the strings on the packet scope and copy them
+		 * to the key once.
+		 */
 		if (samaccountname_offset != 0 && samaccountname_len != 0) {
-			ek->pac_names.account_name = (char*)tvb_get_string_enc(wmem_epan_scope(),
-									tvb,
-									samaccountname_offset,
-									samaccountname_len,
-									ENC_UTF_16|ENC_LITTLE_ENDIAN);
+			account_name = (const char *)tvb_get_string_enc(actx->pinfo->pool,
+							  tvb,
+							  samaccountname_offset,
+							  samaccountname_len,
+							  ENC_UTF_16|ENC_LITTLE_ENDIAN);
 		} else {
-			ek->pac_names.account_name = (char*)tvb_get_string_enc(wmem_epan_scope(),
-									tvb,
-									upn_offset,
-									upn_len,
-									ENC_UTF_16|ENC_LITTLE_ENDIAN);
+			account_name = (const char *)tvb_get_string_enc(actx->pinfo->pool,
+							  tvb,
+							  upn_offset,
+							  upn_len,
+							  ENC_UTF_16|ENC_LITTLE_ENDIAN);
 		}
-		ek->pac_names.account_domain = (char*)tvb_get_string_enc(wmem_epan_scope(),
-								  tvb,
-								  dns_offset,
-								  dns_len,
-								  ENC_UTF_16|ENC_LITTLE_ENDIAN);
+		account_domain = (const char *)tvb_get_string_enc(actx->pinfo->pool,
+						    tvb,
+						    dns_offset,
+						    dns_len,
+						    ENC_UTF_16|ENC_LITTLE_ENDIAN);
+		kerberos_set_pac_name(&ek->pac_names.account_name, account_name);
+		kerberos_set_pac_name(&ek->pac_names.account_domain, account_domain);
 		if (sid_str != NULL) {
-			ek->pac_names.account_sid = wmem_strdup(wmem_epan_scope(),
-								sid_str);
+			kerberos_set_pac_name(&ek->pac_names.account_sid, sid_str);
 		}
 	}
 #endif /* HAVE_KERBEROS */
 
-	return dns_offset;
+	return offset;
 }
 
 static unsigned
@@ -4769,9 +4953,11 @@ dissect_krb5_PAC_DEVICE_INFO(proto_tree *parent_tree, tvbuff_t *tvb, unsigned of
 
 		/*
 		 * netlogon_dissect_PAC_DEVICE_INFO allocated on
-		 * wmem_epan_scope() for us
+		 * the packet scope, copy it to the key
 		 */
-		ek->pac_names.device_sid = device_sid;
+		if (device_sid != NULL) {
+			kerberos_set_pac_name(&ek->pac_names.device_sid, device_sid);
+		}
 	}
 #endif /* HAVE_KERBEROS */
 
@@ -4946,12 +5132,30 @@ dissect_krb5_PAC_FULL_CHECKSUM(proto_tree *parent_tree, tvbuff_t *tvb, unsigned 
 	return offset;
 }
 
+/*
+ * The PAC_INFO_BUFFERs we have dissected so far. Each type may be
+ * present once and the buffers must not overlap, otherwise a PAC with
+ * many entries pointing to the same big buffer makes us dissect that
+ * buffer again and again.
+ */
+#define PAC_MAX_BUFFER_TYPE 64
+struct pac_buffers_state {
+	uint64_t seen_types;
+	unsigned num_ranges;
+	struct {
+		uint32_t start;
+		uint32_t end;
+	} ranges[PAC_MAX_BUFFER_TYPE];
+};
+
 static unsigned
-dissect_krb5_AD_WIN2K_PAC_struct(proto_tree *tree, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx)
+dissect_krb5_AD_WIN2K_PAC_struct(proto_tree *tree, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx, struct pac_buffers_state *state)
 {
 	uint32_t pac_type;
 	uint32_t pac_size;
 	uint32_t pac_offset;
+	uint32_t pac_offset_high;
+	uint32_t pac_len = tvb_reported_length(tvb);
 	proto_item *it=NULL;
 	proto_tree *tr=NULL;
 	tvbuff_t *next_tvb;
@@ -4971,7 +5175,44 @@ dissect_krb5_AD_WIN2K_PAC_struct(proto_tree *tree, tvbuff_t *tvb, unsigned offse
 	/* offset to pac data */
 	pac_offset=tvb_get_letohl(tvb, offset);
 	proto_tree_add_uint(tr, hf_krb_w2k_pac_offset, tvb, offset, 4, pac_offset);
+	/* the offset is 64 bits, the high dword must be zero */
+	pac_offset_high=tvb_get_letohl(tvb, offset + 4);
 	offset += 8;
+
+	if (pac_offset_high != 0 || pac_offset > pac_len || pac_size > pac_len - pac_offset) {
+		expert_add_info_format(actx->pinfo, it, &ei_kerberos_pac_buffer,
+				       "PAC_INFO_BUFFER (offset %" PRIu64 " size %u) is outside of the PAC (length %u)",
+				       ((uint64_t)pac_offset_high << 32) | pac_offset,
+				       pac_size, pac_len);
+		return offset;
+	}
+
+	if (pac_type < PAC_MAX_BUFFER_TYPE) {
+		uint64_t type_bit = UINT64_C(1) << pac_type;
+		unsigned i;
+
+		if (state->seen_types & type_bit) {
+			expert_add_info_format(actx->pinfo, it, &ei_kerberos_pac_buffer,
+					       "Repeated PAC_INFO_BUFFER of type %u skipped", pac_type);
+			return offset;
+		}
+		state->seen_types |= type_bit;
+
+		if (pac_size != 0) {
+			for (i = 0; i < state->num_ranges; i++) {
+				if (pac_offset < state->ranges[i].end &&
+				    state->ranges[i].start < pac_offset + pac_size) {
+					expert_add_info_format(actx->pinfo, it, &ei_kerberos_pac_buffer,
+							       "PAC_INFO_BUFFER overlaps another buffer, skipped");
+					return offset;
+				}
+			}
+			/* At most one range per type, so this is bounded */
+			state->ranges[state->num_ranges].start = pac_offset;
+			state->ranges[state->num_ranges].end = pac_offset + pac_size;
+			state->num_ranges++;
+		}
+	}
 
 	next_tvb=tvb_new_subset_length(tvb, pac_offset, pac_size);
 	switch(pac_type){
@@ -5030,6 +5271,7 @@ dissect_krb5_AD_WIN2K_PAC(bool implicit_tag _U_, tvbuff_t *tvb, unsigned offset,
 	uint32_t entries;
 	uint32_t version;
 	uint32_t i;
+	struct pac_buffers_state *state = wmem_new0(actx->pinfo->pool, struct pac_buffers_state);
 
 #if defined(HAVE_MIT_KERBEROS) && defined(HAVE_KRB5_PAC_VERIFY)
 	verify_krb5_pac(tree, actx, tvb);
@@ -5046,7 +5288,7 @@ dissect_krb5_AD_WIN2K_PAC(bool implicit_tag _U_, tvbuff_t *tvb, unsigned offset,
 	offset += 4;
 
 	for(i=0;i<entries;i++){
-		offset=dissect_krb5_AD_WIN2K_PAC_struct(tree, tvb, offset, actx);
+		offset=dissect_krb5_AD_WIN2K_PAC_struct(tree, tvb, offset, actx, state);
 	}
 
 	return offset;
@@ -5277,6 +5519,11 @@ static const ber_sequence_t EncryptedTicketData_sequence[] = {
 
 static unsigned
 dissect_kerberos_EncryptedTicketData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+  /* Don't reuse the etype of a previous message */
+  private_data->etype = 0;
+
+
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    EncryptedTicketData_sequence, hf_index, ett_kerberos_EncryptedTicketData);
 
@@ -5393,13 +5640,15 @@ dissect_kerberos_CKSUMTYPE(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned of
 
 static unsigned
 dissect_kerberos_T_checksum(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  tvbuff_t *next_tvb;
+  tvbuff_t *next_tvb = NULL;
   kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
 
   switch(private_data->checksum_type){
   case KRB5_CHKSUM_GSSAPI:
     offset=dissect_ber_octet_string(false, actx, tree, tvb, offset, hf_index, &next_tvb);
-    dissect_krb5_rfc1964_checksum(actx, tree, next_tvb);
+    if (next_tvb != NULL) {
+      dissect_krb5_rfc1964_checksum(actx, tree, next_tvb);
+    }
     break;
   default:
     offset=dissect_ber_octet_string(false, actx, tree, tvb, offset, hf_index, NULL);
@@ -5419,6 +5668,10 @@ static const ber_sequence_t Checksum_sequence[] = {
 
 static unsigned
 dissect_kerberos_Checksum(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+  private_data->checksum_type = 0;
+
+
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    Checksum_sequence, hf_index, ett_kerberos_Checksum);
 
@@ -5478,12 +5731,20 @@ dissect_kerberos_T_keytype(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned of
 
 static unsigned
 dissect_kerberos_T_keyvalue(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  tvbuff_t *out_tvb;
+  tvbuff_t *out_tvb = NULL;
   kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
 
   offset = dissect_ber_octet_string(implicit_tag, actx, tree, tvb, offset, hf_index,
                                        &out_tvb);
 
+
+  private_data->key.keylength = 0;
+  private_data->key.keyvalue = NULL;
+  private_data->key_tvb = NULL;
+  if (out_tvb == NULL) {
+    /* The element is not an OCTET STRING */
+    return offset;
+  }
 
   /* XXX - Expert info if this length > KRB_MAX_KEY_LENGTH? */
   private_data->key.keylength = tvb_reported_length(out_tvb);
@@ -5508,6 +5769,10 @@ dissect_kerberos_EncryptionKey(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigne
 #ifdef HAVE_KERBEROS
   int start_offset = offset;
 #endif
+
+  /* Don't reuse the values of a previous EncryptionKey */
+  private_data->key = (kerberos_key_t) { .keytype = 0, };
+  private_data->key_tvb = NULL;
 
     offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    EncryptionKey_sequence, hf_index, ett_kerberos_EncryptionKey);
@@ -5643,6 +5908,10 @@ static const ber_sequence_t AuthorizationData_item_sequence[] = {
 
 static unsigned
 dissect_kerberos_AuthorizationData_item(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+  private_data->ad_type = 0;
+
+
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    AuthorizationData_item_sequence, hf_index, ett_kerberos_AuthorizationData_item);
 
@@ -5813,6 +6082,11 @@ dissect_kerberos_T_address(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned of
 
   switch(private_data->addr_type){
   case KERBEROS_ADDR_TYPE_IPV4:
+    if (len != 4) {
+      proto_tree_add_expert(tree, actx->pinfo, &ei_kerberos_address_len, tvb, offset, len);
+      address_str = NULL;
+      break;
+    }
     it=proto_tree_add_item(tree, hf_krb_address_ip, tvb, offset, 4, ENC_BIG_ENDIAN);
     address_str = tvb_ip_to_str(actx->pinfo->pool, tvb, offset);
     break;
@@ -5822,12 +6096,22 @@ dissect_kerberos_T_address(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned of
     int netbios_name_type;
     int netbios_name_len = (NETBIOS_NAME_LEN - 1)*4 + 1;
 
+    if (len != 16) {
+      proto_tree_add_expert(tree, actx->pinfo, &ei_kerberos_address_len, tvb, offset, len);
+      address_str = NULL;
+      break;
+    }
     netbios_name_type = process_netbios_name(tvb_get_ptr(tvb, offset, 16), netbios_name, netbios_name_len);
     address_str = wmem_strdup_printf(actx->pinfo->pool, "%s<%02x>", netbios_name, netbios_name_type);
     it=proto_tree_add_string_format(tree, hf_krb_address_netbios, tvb, offset, 16, netbios_name, "NetBIOS Name: %s (%s)", address_str, netbios_name_type_descr(netbios_name_type));
     }
     break;
   case KERBEROS_ADDR_TYPE_IPV6:
+    if (len != INET6_ADDRLEN) {
+      proto_tree_add_expert(tree, actx->pinfo, &ei_kerberos_address_len, tvb, offset, len);
+      address_str = NULL;
+      break;
+    }
     it=proto_tree_add_item(tree, hf_krb_address_ipv6, tvb, offset, INET6_ADDRLEN, ENC_NA);
     address_str = tvb_ip6_to_str(actx->pinfo->pool, tvb, offset);
     break;
@@ -5859,6 +6143,10 @@ static const ber_sequence_t HostAddress_sequence[] = {
 
 static unsigned
 dissect_kerberos_HostAddress(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+  private_data->addr_type = 0;
+
+
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    HostAddress_sequence, hf_index, ett_kerberos_HostAddress);
 
@@ -6173,6 +6461,10 @@ static const ber_sequence_t PA_DATA_sequence[] = {
 
 static unsigned
 dissect_kerberos_PA_DATA(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+  private_data->padata_type = 0;
+
+
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    PA_DATA_sequence, hf_index, ett_kerberos_PA_DATA);
 
@@ -6304,6 +6596,11 @@ static const ber_sequence_t EncryptedAuthorizationData_sequence[] = {
 
 static unsigned
 dissect_kerberos_EncryptedAuthorizationData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+  /* Don't reuse the etype of a previous message */
+  private_data->etype = 0;
+
+
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    EncryptedAuthorizationData_sequence, hf_index, ett_kerberos_EncryptedAuthorizationData);
 
@@ -6419,6 +6716,11 @@ static const ber_sequence_t EncryptedKDCREPData_sequence[] = {
 
 static unsigned
 dissect_kerberos_EncryptedKDCREPData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+  /* Don't reuse the etype of a previous message */
+  private_data->etype = 0;
+
+
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    EncryptedKDCREPData_sequence, hf_index, ett_kerberos_EncryptedKDCREPData);
 
@@ -6518,6 +6820,11 @@ static const ber_sequence_t EncryptedAuthenticator_sequence[] = {
 
 static unsigned
 dissect_kerberos_EncryptedAuthenticator(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+  /* Don't reuse the etype of a previous message */
+  private_data->etype = 0;
+
+
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    EncryptedAuthenticator_sequence, hf_index, ett_kerberos_EncryptedAuthenticator);
 
@@ -6578,6 +6885,11 @@ static const ber_sequence_t EncryptedAPREPData_sequence[] = {
 
 static unsigned
 dissect_kerberos_EncryptedAPREPData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+  /* Don't reuse the etype of a previous message */
+  private_data->etype = 0;
+
+
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    EncryptedAPREPData_sequence, hf_index, ett_kerberos_EncryptedAPREPData);
 
@@ -6697,6 +7009,11 @@ static const ber_sequence_t EncryptedKrbPrivData_sequence[] = {
 
 static unsigned
 dissect_kerberos_EncryptedKrbPrivData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+  /* Don't reuse the etype of a previous message */
+  private_data->etype = 0;
+
+
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    EncryptedKrbPrivData_sequence, hf_index, ett_kerberos_EncryptedKrbPrivData);
 
@@ -6755,6 +7072,11 @@ static const ber_sequence_t EncryptedKrbCredData_sequence[] = {
 
 static unsigned
 dissect_kerberos_EncryptedKrbCredData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+  /* Don't reuse the etype of a previous message */
+  private_data->etype = 0;
+
+
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    EncryptedKrbCredData_sequence, hf_index, ett_kerberos_EncryptedKrbCredData);
 
@@ -7319,9 +7641,15 @@ static const ber_choice_t Applications_choice[] = {
 
 static unsigned
 dissect_kerberos_Applications(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  if (!kerberos_nesting_enter(actx, tree, tvb, offset)) {
+    return tvb_reported_length(tvb);
+  }
+
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  Applications_choice, hf_index, ett_kerberos_Applications,
                                  NULL);
+
+  kerberos_nesting_leave(actx);
 
   return offset;
 }
@@ -7352,6 +7680,11 @@ static const ber_sequence_t PA_ENC_TIMESTAMP_sequence[] = {
 
 static unsigned
 dissect_kerberos_PA_ENC_TIMESTAMP(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+  /* Don't reuse the etype of a previous message */
+  private_data->etype = 0;
+
+
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    PA_ENC_TIMESTAMP_sequence, hf_index, ett_kerberos_PA_ENC_TIMESTAMP);
 
@@ -7419,7 +7752,13 @@ dissect_kerberos_ETYPE_INFO2(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned 
 
 static unsigned
 dissect_kerberos_AD_IF_RELEVANT(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  if (!kerberos_nesting_enter(actx, tree, tvb, offset)) {
+    return tvb_reported_length(tvb);
+  }
+
   offset = dissect_kerberos_AuthorizationData(implicit_tag, tvb, offset, actx, tree, hf_index);
+
+  kerberos_nesting_leave(actx);
 
   return offset;
 }
@@ -7650,7 +7989,12 @@ dissect_kerberos_PA_KERB_KEY_LIST_REP_item(bool implicit_tag _U_, tvbuff_t *tvb 
   kerberos_key_save_fn saved_encryption_key_fn = private_data->save_encryption_key_fn;
   private_data->save_encryption_key_parent_hf_index = hf_kerberos_kerbKeyListRep_key;
 #ifdef HAVE_KERBEROS
-  private_data->save_encryption_key_fn = save_encryption_key;
+  if (private_data->is_enc_padata && private_data->within_decrypted_kdc_rep) {
+    private_data->save_encryption_key_fn = save_encryption_key;
+  } else {
+    /* Don't learn keys from the cleartext of a capture */
+    private_data->save_encryption_key_fn = ignore_encryption_key;
+  }
 #endif
   offset = dissect_kerberos_PA_KERB_KEY_LIST_REP_Key(implicit_tag, tvb, offset, actx, tree, hf_index);
 
@@ -7920,6 +8264,10 @@ static const ber_sequence_t PA_AUTHENTICATION_SET_ELEM_sequence[] = {
 
 static unsigned
 dissect_kerberos_PA_AUTHENTICATION_SET_ELEM(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+  private_data->padata_type = 0;
+
+
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    PA_AUTHENTICATION_SET_ELEM_sequence, hf_index, ett_kerberos_PA_AUTHENTICATION_SET_ELEM);
 
@@ -8007,6 +8355,11 @@ static const ber_sequence_t EncryptedKrbFastReq_sequence[] = {
 
 static unsigned
 dissect_kerberos_EncryptedKrbFastReq(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+  /* Don't reuse the etype of a previous message */
+  private_data->etype = 0;
+
+
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    EncryptedKrbFastReq_sequence, hf_index, ett_kerberos_EncryptedKrbFastReq);
 
@@ -8070,6 +8423,11 @@ static const ber_sequence_t EncryptedKrbFastResponse_sequence[] = {
 
 static unsigned
 dissect_kerberos_EncryptedKrbFastResponse(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+  /* Don't reuse the etype of a previous message */
+  private_data->etype = 0;
+
+
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    EncryptedKrbFastResponse_sequence, hf_index, ett_kerberos_EncryptedKrbFastResponse);
 
@@ -8131,6 +8489,11 @@ static const ber_sequence_t EncryptedChallenge_sequence[] = {
 
 static unsigned
 dissect_kerberos_EncryptedChallenge(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+  /* Don't reuse the etype of a previous message */
+  private_data->etype = 0;
+
+
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    EncryptedChallenge_sequence, hf_index, ett_kerberos_EncryptedChallenge);
 
@@ -8672,6 +9035,7 @@ dissect_kerberos_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 	int krb_reclen = 0;
 
 	gbl_do_col_info=dci;
+	gbl_keytype = 0;
 
 	if (have_rm) {
 		krb_rm = tvb_get_ntohl(tvb, offset);
@@ -9166,6 +9530,8 @@ kerberos_secrets_cleanup(void)
 	enc_key_t *head;
 	enc_key_t **pp;
 	enc_key_t *ek;
+
+	kerberos_learnt_key_count = 0;
 
 	if (kerberos_dsb_keys == NULL) {
 		kerberos_dsb_decrypt = false;
@@ -10798,6 +11164,11 @@ void proto_register_kerberos(void) {
 		{ &ei_kerberos_decrypted_keytype, { "kerberos.decrypted_keytype", PI_SECURITY, PI_CHAT, "Decrypted keytype", EXPFILL }},
 		{ &ei_kerberos_learnt_keytype, { "kerberos.learnt_keytype", PI_SECURITY, PI_CHAT, "Learnt keytype", EXPFILL }},
 		{ &ei_kerberos_address, { "kerberos.address.unknown", PI_UNDECODED, PI_WARN, "KRB Address: I don't know how to parse this type of address yet", EXPFILL }},
+		{ &ei_kerberos_key_limit, { "kerberos.key_limit", PI_DECRYPTION, PI_WARN, "Too many learnt keys, not remembering this key", EXPFILL }},
+		{ &ei_kerberos_nesting, { "kerberos.nesting_too_deep", PI_MALFORMED, PI_ERROR, "Kerberos messages nested too deeply", EXPFILL }},
+		{ &ei_kerberos_pac_buffer, { "kerberos.pac_buffer.invalid", PI_MALFORMED, PI_ERROR, "Invalid PAC_INFO_BUFFER", EXPFILL }},
+		{ &ei_kerberos_address_len, { "kerberos.address.length_mismatch", PI_MALFORMED, PI_ERROR, "KRB Address: length does not match the address type", EXPFILL }},
+		{ &ei_krb_gssapi_bndlen, { "kerberos.gssapi.bndlen.error", PI_MALFORMED, PI_ERROR, "Bnd length exceeds bytes remaining", EXPFILL }},
 		{ &ei_krb_gssapi_dlglen, { "kerberos.gssapi.dlglen.error", PI_MALFORMED, PI_ERROR, "DlgLen exceeds bytes remaining", EXPFILL }},
 		{ &ei_krb_gssapi_extlen, { "kerberos.gssapi.extension.length.error", PI_MALFORMED, PI_ERROR, "Invalid GSSAPI extension length", EXPFILL }},
 	};

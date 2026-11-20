@@ -168,6 +168,7 @@ static int hf_oran_reserved_16bits;
 static int hf_oran_reserved_15bits;
 static int hf_oran_reserved_bit1;
 static int hf_oran_reserved_bit2;
+static int hf_oran_reserved_bit3;
 static int hf_oran_reserved_bit4;
 static int hf_oran_reserved_bit5;
 static int hf_oran_reserved_bits123;
@@ -409,6 +410,14 @@ static int hf_oran_num_ueid_se34;
 static int hf_oran_ueid_se34;
 static int hf_oran_num_port_list_index;
 static int hf_oran_chan_srs_port_mask;
+static int hf_oran_tpmi_phase_7;
+static int hf_oran_tpmi_phase_6;
+static int hf_oran_tpmi_phase_5;
+static int hf_oran_tpmi_phase_4;
+static int hf_oran_tpmi_phase_3;
+static int hf_oran_tpmi_phase_2;
+static int hf_oran_tpmi_phase_1;
+static int hf_oran_tpmi_phase_0;
 
 
 static int hf_oran_ready;
@@ -575,6 +584,12 @@ static int hf_oran_chan_type_sel;
 static int hf_oran_srs_meas_port_mask;
 static int hf_oran_srs_ue_port_wb_power;
 static int hf_oran_srs_ue_port_wb_sinr;
+
+static int hf_oran_srsRbgSize;
+static int hf_oran_srsNumRbg;
+static int hf_oran_srsTxComb;
+static int hf_oran_srsSymId;
+static int hf_oran_srsNumUe;
 
 /* Computed fields */
 static int hf_oran_c_eAxC_ID;
@@ -1159,6 +1174,14 @@ static const value_string tpmi_mode_vals[] = {
     { 0, NULL}
 };
 
+/* 7.7.34.7.3 */
+static const value_string tpmi_phase_vals[] = {
+    { 0, "no rotation applied" },
+    { 1, "rotation by pi/2 radians" },
+    { 2, "rotation by pi radians" },
+    { 3, "rotation by 3pi/2 radians" },
+    { 0, NULL}
+};
 
 /* Table 7.6.1-1 */
 static const value_string exttype_vals[] = {
@@ -1558,6 +1581,22 @@ static const value_string full_pwr_mode_vals[] = {
     { 1, "full power mode 0"},
     { 2, "full power mode 1"},
     { 3, "full power mode 2"},
+    { 0, NULL}
+};
+
+static const value_string srs_rbg_size_vals[] = {
+    { 0, "4 PRBs"},
+    { 1, "1 PRB"},
+    { 2, "2 PRBs"},
+    { 3, "reserved"},
+    { 0, NULL}
+};
+
+static const value_string srs_tx_comb_vals[] = {
+    { 0, "2 REs"},
+    { 1, "4 REs"},
+    { 2, "reserved"},
+    { 3, "reserved"},
     { 0, NULL}
 };
 
@@ -2176,7 +2215,7 @@ typedef struct {
     uint32_t previous_frame;
 
     /* sectionId -> expected_section_data_t*   */
-    /* Frame only covers one direction */
+    /* Frame only covers one downlink (no modulation compression in UL) */
     wmem_tree_t *expected_sections;
 
     /* List of u-plane frames (corresponding_uplane_frame*) corresponding to a c-plane frame */
@@ -3091,9 +3130,9 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
 
     /* These sections (ST0, ST1, ST2, ST3, ST5, ST9, ST10, ST11) are similar, so handle as common with per-type differences */
     if (((sectionType <= SEC_C_UE_SCHED) || (sectionType >= SEC_C_SINR_REPORTING)) &&
-         (sectionType != SEC_C_SLOT_CONTROL)) {
+         (sectionType != SEC_C_SLOT_CONTROL) && (sectionType != SEC_C_SRS_DESCRIPTION)) {
 
-        /* sectionID */
+        /* sectionID (12 bits) */
         proto_item *ti = proto_tree_add_item_ret_uint(c_section_tree, hf_oran_section_id, tvb, offset, 2, ENC_BIG_ENDIAN, &sectionId);
         if (sectionId == 4095) {
             proto_item_append_text(ti, " (not default coupling C/U planes using sectionId)");
@@ -3112,6 +3151,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
         if (sectionType != SEC_C_RRM_MEAS_REPORTS &&             /* Section Type 10 */
             sectionType != SEC_C_RRM_MEAS_REPORTS_NON_TIMING &&  /* Section Type 13 */
             sectionType != SEC_C_REQUEST_RRM_MEAS) {             /* Section Type 11 */
+
             unsigned int sym_inc;
             proto_item *sym_inc_ti = proto_tree_add_item_ret_uint(c_section_tree, hf_oran_symInc, tvb, offset, 1, ENC_NA, &sym_inc);
             if (sym_inc !=0 && (sectionType == SEC_C_SINR_REPORTING)) {  /* Section Type 9 */
@@ -3481,6 +3521,127 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
             }
         }
         proto_item_set_end(c_section_tree, tvb, offset);
+    }
+    else if (sectionType == SEC_C_SRS_DESCRIPTION) { /* Section Type 12 */
+        /* sectionID (12 bits) */
+        proto_item *ti = proto_tree_add_item_ret_uint(c_section_tree, hf_oran_section_id, tvb, offset, 2, ENC_BIG_ENDIAN, &sectionId);
+        if (sectionId == 4095) {
+            proto_item_append_text(ti, " (not default coupling C/U planes using sectionId)");
+        }
+        offset++;
+
+        if (tap_info->num_section_ids < MAX_SECTION_IDs) {
+            tap_info->section_ids[tap_info->num_section_ids++] = sectionId;
+        }
+
+        /* srsRbgSize (2 bits) */
+        proto_tree_add_item(c_section_tree, hf_oran_srsRbgSize, tvb, offset, 1, ENC_BIG_ENDIAN);
+
+        /* startPrbc (10 bits) */
+        proto_tree_add_item_ret_uint(c_section_tree, hf_oran_startPrbc, tvb, offset, 2, ENC_BIG_ENDIAN, &startPrbc);
+        offset += 2;
+
+        /* numPrbc */
+        numprbc_ti = proto_tree_add_item_ret_uint(c_section_tree, hf_oran_numPrbc, tvb, offset, 1, ENC_NA, &numPrbc);
+        if (numPrbc == 0) {
+            proto_item_append_text(numprbc_ti, " (all PRBs - configured as %u)", pref_data_plane_section_total_rbs);
+            /* TODO: should probably set to pref_data_plane_section_total_rbs, and define MAX_PRBS to > 273 ? */
+            numPrbc = MAX_PRBS;
+        }
+        offset += 1;
+
+        /* srsNumRbg (8 bits) */
+        proto_tree_add_item(c_section_tree, hf_oran_srsNumRbg, tvb, offset, 1, ENC_BIG_ENDIAN);
+        offset += 1;
+        /* srsTxComb (3 bits) */
+        proto_tree_add_item(c_section_tree, hf_oran_srsTxComb, tvb, offset, 1, ENC_BIG_ENDIAN);
+        /* reserved (1 bit) */
+        add_reserved_field(c_section_tree, hf_oran_reserved_bit3, tvb, offset, 1);
+        /* srsSymId (4 bits) */
+        proto_tree_add_item(c_section_tree, hf_oran_srsSymId, tvb, offset, 1, ENC_BIG_ENDIAN);
+        offset += 1;
+        /* reserved (16 bits) */
+        add_reserved_field(c_section_tree, hf_oran_reserved_16bits, tvb, offset, 2);
+        offset += 2;
+
+        /* ef (1 bit) */
+        /* reserved (1 bit) */
+        add_reserved_field(c_section_tree, hf_oran_reserved_bit1, tvb, offset, 1);
+        /* srsNumUe (6 bits) */
+        uint8_t srs_num_ue;
+        proto_tree_add_item_ret_uint8(c_section_tree, hf_oran_srsNumUe, tvb, offset, 1, ENC_BIG_ENDIAN, &srs_num_ue);
+        offset += 1;
+
+        /* TODO: subsections - one for each UE */
+        for (uint8_t ss=0; ss < srs_num_ue; ss++) {
+            /* TODO: create subsection subtree */
+
+            /* Reserved-struct (3 bits) */
+            /* srsUeIdApIdReset (1 bit) */
+            /* reserved (4 bits) */
+            add_reserved_field(c_section_tree, hf_oran_reserved_last_4bits, tvb, offset, 1);
+            offset += 1;
+            /* srsNumAp (4 bits) */
+            uint8_t num_ap = tvb_get_uint8(tvb, offset) >> 4;
+            /* srsTotalAp (4 bits) */
+            offset += 1;
+            /* srsSeqIq (2 bytes) */
+            offset += 2;
+            /* srsNumMultiSym (4 bits) */
+            /* srsIndexMultiSym (4 bits) */
+            offset += 1;
+            /* srsPatMultiSym (2 bits) */
+            /* srsCiUse (2 bits) */
+            /* srsSeqHopType (2 bits) */
+            /* srsFreqHopType (2 bits) */
+            offset += 1;
+            /* reserved (1 bit) */
+            add_reserved_field(c_section_tree, hf_oran_reserved_1bit, tvb, offset, 1);
+            /* srsNumFreqHops (7 bits) */
+            offset += 1;
+            /* reserved (1 bit) */
+            add_reserved_field(c_section_tree, hf_oran_reserved_1bit, tvb, offset, 1);
+            /* srsFreqHopIndex (7 bits) */
+            offset += 1;
+            /* reserved (2 bits) */
+            add_reserved_field(c_section_tree, hf_oran_reserved_2bits, tvb, offset, 1);
+            /* srsUsage (6 bits) */
+            offset += 1;
+            /* reserved (8 bits) */
+            offset += 1;
+            /* reserved (1 bit) */
+            add_reserved_field(c_section_tree, hf_oran_reserved_1bit, tvb, offset, 1);
+            /* srsPriorityRpt (5 bits) */
+            /* srsStartPrbCiRpt (9 bits) */
+            offset += 1;
+            /* srsStartPrbCiRpt (1 bit) */
+            offset += 1;
+            /* srsNumGrpCiRpt (8 bits) */
+            offset += 1;
+            /* srsGrpSizeCiRpt (8 bits) */
+            /* reserved (8 bits) */
+            add_reserved_field(c_section_tree, hf_oran_reserved_8bits, tvb, offset, 1);
+            offset += 1;
+            /* srsRrmMeasTrigger (2 bytes) */
+            offset += 2;
+
+            /* One entry (yellowy-green in Table 7.4.14-1) for each port for this UE */
+            for (uint8_t port = 0; port < num_ap; port++) {
+                /* TODO: create port entry subtree */
+                /* reserved (1 bit) */
+                add_reserved_field(c_section_tree, hf_oran_reserved_1bit, tvb, offset, 1);
+                /* srsUeIdApId (15 bits) */
+                offset += 2;
+                /* reserved (1 bit) */
+                add_reserved_field(c_section_tree, hf_oran_reserved_1bit, tvb, offset, 1);
+                /* srsRECO (3 bits) */
+                /* srsCR (4 bits) */
+                offset += 1;
+                /* reserved (8 bits) */
+                add_reserved_field(c_section_tree, hf_oran_reserved_8bits, tvb, offset, 1);
+                offset += 1;
+            }
+        }
     }
 
 
@@ -5656,7 +5817,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 offset += 1;
 
                 for (unsigned layer=0; layer < num_ueid; layer++) {
-                    /* TODO: TPMI data for layer */
+                    /* TPMI data for layer */
                     switch (tpmi_mode)  {
                         case 0:
                             /* srsPortMask (8 bits) */
@@ -5667,15 +5828,23 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                             /* srsPortMask (8 bits) */
                             proto_tree_add_item(extension_tree, hf_oran_chan_srs_port_mask, tvb, offset, 1, ENC_BIG_ENDIAN);
                             offset += 1;
-                            /* TODO: tpmiPhaseP7 (2 bits) */
-                            /* TODO: tpmiPhaseP6 (2 bits) */
-                            /* TODO: tpmiPhaseP5 (2 bits) */
-                            /* TODO: tpmiPhaseP4 (2 bits) */
+                            /* tpmiPhaseP7 (2 bits) */
+                            proto_tree_add_item(extension_tree, hf_oran_tpmi_phase_7, tvb, offset, 1, ENC_BIG_ENDIAN);
+                            /* tpmiPhaseP6 (2 bits) */
+                            proto_tree_add_item(extension_tree, hf_oran_tpmi_phase_6, tvb, offset, 1, ENC_BIG_ENDIAN);
+                            /* tpmiPhaseP5 (2 bits) */
+                            proto_tree_add_item(extension_tree, hf_oran_tpmi_phase_5, tvb, offset, 1, ENC_BIG_ENDIAN);
+                            /* tpmiPhaseP4 (2 bits) */
+                            proto_tree_add_item(extension_tree, hf_oran_tpmi_phase_4, tvb, offset, 1, ENC_BIG_ENDIAN);
                             offset += 1;
-                            /* TODO: tpmiPhaseP3 (2 bits) */
-                            /* TODO: tpmiPhaseP2 (2 bits) */
-                            /* TODO: tpmiPhaseP1 (2 bits) */
-                            /* TODO: tpmiPhaseP0 (2 bits) */
+                            /* tpmiPhaseP3 (2 bits) */
+                            proto_tree_add_item(extension_tree, hf_oran_tpmi_phase_3, tvb, offset, 1, ENC_BIG_ENDIAN);
+                            /* tpmiPhaseP2 (2 bits) */
+                            proto_tree_add_item(extension_tree, hf_oran_tpmi_phase_2, tvb, offset, 1, ENC_BIG_ENDIAN);
+                            /* tpmiPhaseP1 (2 bits) */
+                            proto_tree_add_item(extension_tree, hf_oran_tpmi_phase_1, tvb, offset, 1, ENC_BIG_ENDIAN);
+                            /* tpmiPhaseP0 (2 bits) */
+                            proto_tree_add_item(extension_tree, hf_oran_tpmi_phase_0, tvb, offset, 1, ENC_BIG_ENDIAN);
                             offset += 1;
                     }
 
@@ -5702,6 +5871,26 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
             }
 
             case 35: /* TODO: Codebook-based beamforming parameters */
+               /* cqiMode (2 bits) */
+               /* subbandSize (6 bits) */
+               offset += 1;
+               /* codebookId (4 bits) */
+               /* spatialConfigId (4 bits) */
+               offset += 1;
+               /* ueIdReset (1 bit) */
+               proto_tree_add_item(extension_tree, hf_oran_ueid_reset, tvb, offset, 1, ENC_BIG_ENDIAN);
+               /* reserved (3 bits) */
+               add_reserved_field(extension_tree, hf_oran_reserved_bits123, tvb, offset, 1);
+               /* p2aMappingType (4 bits) */
+               offset += 1;
+               /* reserved (8 bits) */
+               add_reserved_field(extension_tree, hf_oran_reserved_8bits, tvb, offset, 1);
+               offset += 1;
+
+               /* TODO: p2aMapping.. */
+                break;
+
+
 
             default:
             {
@@ -6118,7 +6307,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 default:
                     /* Anything else is not expected */
                     expert_add_info_format(pinfo, meas_type_id_ti, &ei_oran_unexpected_measTypeId,
-                                           "measTypeId %u (%s) not supported - only 1-6 are expected",
+                                           "measTypeId %u (%s) not supported - only 1-24 are expected",
                                            meas_type_id,
                                            val_to_str_const(meas_type_id, meas_type_id_vals, "reserved"));
                     break;
@@ -6940,8 +7129,11 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo,
             break;
         }
 
-        case SEC_C_RRM_MEAS_REPORTS:    /* Section Type 10 */
-        case SEC_C_REQUEST_RRM_MEAS:    /* Section Type 11 */
+        case SEC_C_RRM_MEAS_REPORTS:               /* Section Type 10 */
+        case SEC_C_REQUEST_RRM_MEAS:               /* Section Type 11 */
+        case SEC_C_SRS_DESCRIPTION:                /* Section Type 12 */
+        case SEC_C_RRM_MEAS_REPORTS_NON_TIMING:    /* Section Type 13 */
+        case SEC_C_CO_SCHEDULING_INFO:             /* Section Type 14 */
             /* reserved (16 bits) */
             add_reserved_field(section_tree, hf_oran_reserved_16bits, tvb, offset, 2);
             offset += 2;
@@ -9365,6 +9557,12 @@ proto_register_oran(void)
             NULL, 0x20,
             NULL, HFILL}
         },
+        { &hf_oran_reserved_bit3,
+          { "reserved", "oran_fh_cus.reserved",
+            FT_UINT8, BASE_HEX,
+            NULL, 0x10,
+            NULL, HFILL}
+        },
         { &hf_oran_reserved_bit4,
           { "reserved", "oran_fh_cus.reserved",
             FT_UINT8, BASE_HEX,
@@ -10848,6 +11046,55 @@ proto_register_oran(void)
             NULL, 0x0,
             "SRS antenna ports used for tx of UE layer", HFILL}
         },
+        /* 7.7.34.6.3 */
+        { &hf_oran_tpmi_phase_7,
+          { "tpmiPhase7", "oran_fh_cus.tpmiPhase7",
+            FT_UINT8, BASE_DEC,
+            VALS(tpmi_phase_vals), 0xc0,
+            NULL, HFILL}
+        },
+        { &hf_oran_tpmi_phase_6,
+          { "tpmiPhase6", "oran_fh_cus.tpmiPhase6",
+            FT_UINT8, BASE_DEC,
+            VALS(tpmi_phase_vals), 0x30,
+            NULL, HFILL}
+        },
+        { &hf_oran_tpmi_phase_5,
+          { "tpmiPhase5", "oran_fh_cus.tpmiPhase5",
+            FT_UINT8, BASE_DEC,
+            VALS(tpmi_phase_vals), 0x0c,
+            NULL, HFILL}
+        },
+        { &hf_oran_tpmi_phase_4,
+          { "tpmiPhase4", "oran_fh_cus.tpmiPhase4",
+            FT_UINT8, BASE_DEC,
+            VALS(tpmi_phase_vals), 0x03,
+            NULL, HFILL}
+        },
+        { &hf_oran_tpmi_phase_3,
+          { "tpmiPhase3", "oran_fh_cus.tpmiPhase3",
+            FT_UINT8, BASE_DEC,
+            VALS(tpmi_phase_vals), 0xc0,
+            NULL, HFILL}
+        },
+        { &hf_oran_tpmi_phase_2,
+          { "tpmiPhase2", "oran_fh_cus.tpmiPhase2",
+            FT_UINT8, BASE_DEC,
+            VALS(tpmi_phase_vals), 0x30,
+            NULL, HFILL}
+        },
+        { &hf_oran_tpmi_phase_1,
+          { "tpmiPhase1", "oran_fh_cus.tpmiPhase1",
+            FT_UINT8, BASE_DEC,
+            VALS(tpmi_phase_vals), 0x0c,
+            NULL, HFILL}
+        },
+        { &hf_oran_tpmi_phase_0,
+          { "tpmiPhase0", "oran_fh_cus.tpmiPhase0",
+            FT_UINT8, BASE_DEC,
+            VALS(tpmi_phase_vals), 0x03,
+            NULL, HFILL}
+        },
 
         /* 7.5.3.55 */
         { &hf_oran_ready,
@@ -11798,6 +12045,43 @@ proto_register_oran(void)
             NULL, HFILL}
         },
 
+        /* 7.5.3.80 */
+        { &hf_oran_srsRbgSize,
+          { "srsRbgSize", "oran_fh_cus.srsRbgSize",
+            FT_UINT8, BASE_DEC,
+            VALS(srs_rbg_size_vals), 0xc0,
+            NULL, HFILL}
+        },
+        /* 7.5.3.81 */
+        { &hf_oran_srsNumRbg,
+          { "srsNumRbg", "oran_fh_cus.srsNumRbg",
+            FT_UINT8, BASE_DEC,
+            NULL, 0x0,
+            NULL, HFILL}
+        },
+        /* 7.5.3.82 */
+        { &hf_oran_srsTxComb,
+          { "srsTxComb", "oran_fh_cus.srsTxComb",
+            FT_UINT8, BASE_DEC,
+            VALS(srs_tx_comb_vals), 0xe0,
+            NULL, HFILL}
+        },
+        /* 7.5.3.83 */
+        { &hf_oran_srsSymId,
+          { "srsSymId", "oran_fh_cus.srsSymId",
+            FT_UINT8, BASE_DEC,
+            NULL, 0x0f,
+            NULL, HFILL}
+        },
+        /* 7.5.3.84 */
+        { &hf_oran_srsNumUe,
+          { "srsNumUe", "oran_fh_cus.srsNumUe",
+            FT_UINT8, BASE_DEC,
+            NULL, 0x3f,
+            NULL, HFILL}
+        },
+
+
         { &hf_oran_c_section_common,
           { "Common Section", "oran_fh_cus.c-plane.section.common",
             FT_STRING, BASE_NONE,
@@ -12059,7 +12343,7 @@ proto_register_oran(void)
         { &ei_oran_se12_rb_set, { "oran_fh_cus.se12_rb_set", PI_MALFORMED, PI_WARN, "rb should not be set when SE12 is present", EXPFILL }},
         { &ei_oran_se5_re_mask_bits_not_covered, { "oran_fh_cus.se5_re_mask_bits_not_covered", PI_MALFORMED, PI_WARN, "section reMask bits not covered by SE5 sets", EXPFILL }},
         { &ei_oran_se5_re_mask_bit_repeated, { "oran_fh_cus.se5_re_mask_bits_repeated", PI_MALFORMED, PI_WARN, "SE5 sets repeat bits", EXPFILL }},
-        { &ei_oran_se5_re_mask_bit_not_in_re_mask, { "oran_fh_cus.se5_re_mask_bitnot_in_re_mask", PI_MALFORMED, PI_WARN, "SE5 set has bit not in section reMask", EXPFILL }},
+        { &ei_oran_se5_re_mask_bit_not_in_re_mask, { "oran_fh_cus.se5_re_mask_bit_not_in_re_mask", PI_MALFORMED, PI_WARN, "SE5 set has bit not in section reMask", EXPFILL }},
         { &ei_oran_se5_re_zero_re_mask, { "oran_fh_cus.se5_re_mask_zero", PI_MALFORMED, PI_WARN, "SE5 set has zero reMask", EXPFILL }}
     };
 
