@@ -60652,21 +60652,39 @@ class TestDissectFortinetSso:
             assert count_output(stdout) == 0
 
     def test_fortinet_sso_strings(self, cmd_tshark, capture_file, test_env):
-        '''Host/domain/user, domain/user/version for keep alives, and
-        strings with fewer than the expected "/" separators (the fix:
-        they used to underflow). The Info column shows the string.'''
+        '''Host/domain/user, host and version for keep alives (the word
+        in the middle gets no field of its own), and strings with fewer
+        than the expected "/" separators (the fix: they used to
+        underflow). The Info column shows the message kind and the
+        string.'''
         rows = self.sso_fields(cmd_tshark, capture_file, test_env,
                 'fortinet_sso.host', 'fortinet_sso.domain', 'fortinet_sso.user',
                 'fortinet_sso.version', '_ws.col.info', extra=('-Y', 'fortinet_sso'))
-        assert rows['1'] == ['WS-01', 'CORP', 'alice', '', 'WS-01/CORP/alice']
-        assert rows['3'] == ['', 'CORP', 'KeepAlive', '1.0', 'CORP/KeepAlive/1.0']
-        assert rows['4'] == ['', 'CORP', 'KeepAlive', '2.1', 'CORP/KeepAlive/2.1']
-        assert rows['9'] == ['nouser', '', '', '', 'nouser']
-        assert rows['10'] == ['host', 'domain', '', '', 'host/domain']
-        assert rows['11'] == ['', 'domainonly', '', '', 'domainonly']
-        assert rows['12'] == ['', 'dom', 'user', '', 'dom/user']
-        assert rows['13'] == ['', '', '', '', '//']
-        assert rows['14'] == ['', '', '', '', '/']
+        assert rows['1'] == ['WS-01', 'CORP', 'alice', '', 'Logon with extra data: WS-01/CORP/alice']
+        assert rows['2'] == ['WS-02', 'CORP', 'bob', '', 'DC Agent logon: WS-02/CORP/bob']
+        assert rows['3'] == ['CORP', '', '', '1.0', 'DC Agent keepalive: CORP/KeepAlive/1.0']
+        assert rows['4'] == ['CORP', '', '', '2.1', 'DC Agent keepalive: CORP/KeepAlive/2.1']
+        assert rows['9'] == ['nouser', '', '', '', 'DC Agent logon: nouser']
+        assert rows['10'] == ['host', 'domain', '', '', 'DC Agent logon: host/domain']
+        assert rows['11'] == ['domainonly', '', '', '', 'DC Agent keepalive: domainonly']
+        assert rows['12'] == ['dom', '', '', '', 'DC Agent keepalive: dom/user']
+        assert rows['13'] == ['', '', '', '', 'DC Agent logon: //']
+        assert rows['14'] == ['', '', '', '', 'DC Agent keepalive: /']
+
+    def test_fortinet_sso_kind_and_tsagent(self, cmd_tshark, capture_file, test_env):
+        '''The generated message kind, and the TS Agent fields in front
+        of the port ranges.'''
+        rows = self.sso_fields(cmd_tshark, capture_file, test_env,
+                'fortinet_sso.message_kind', 'fortinet_sso.additional_ip',
+                'fortinet_sso.tsagent.sync_id', 'fortinet_sso.tsagent.event_type',
+                'fortinet_sso.tsagent.length', 'fortinet_sso.tsagent.session_id',
+                '_ws.col.info', extra=('-Y', 'fortinet_sso'))
+        assert [rows[str(i)][0] for i in range(1, 16)] == [
+            '7', '1', '2', '2', '7', '6', '6', '6', '1', '1', '2', '2', '1', '2', '1']
+        assert rows['2'][1:6] == ['', '', '', '', '']
+        assert rows['6'] == ['6', '48.49.50.51,52.53.54.55,56.57.58.59', '0x3c3d3e50',
+                '0x51', '21332', '1616994915',
+                'TS Agent event: TS-01/CORP/dave, session 1616994915']
 
     def test_fortinet_sso_trailer(self, cmd_tshark, capture_file, test_env):
         '''An extra IPv4 address, the 0x2002 form and the TS Agent port
@@ -123386,6 +123404,19 @@ class TestDissectQcdiagLog:
         assert [subs[str(n)] for n in (35, 36, 37)] == ['3', '2', '0']
         assert subs['34'] == '255'
 
+    def test_qcdiag_log_lte_nas_direction(self, cmd_tshark, capture_file, test_env):
+        '''The LTE NAS direction comes from the log code, whose Incoming
+        (even) and Outgoing (odd) codes come in pairs: frames 175-182 carry
+        the same Identity request under 0xB0E0-0xB0E3 and 0xB0EA-0xB0ED.
+        Frames 183-193 are all 0xB0E2 (Incoming), whatever message type they
+        carry. The direction used to be guessed from the message type.'''
+        stdout = self._run(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number >= 175 && frame.number <= 193',
+                '-Tfields', '-eframe.number', '-egsmtap.uplink')
+        uplink = dict(l.split('\t') for l in stdout.splitlines())
+        assert [uplink[str(n)] for n in range(175, 183)] == ['0', '1'] * 4
+        assert [uplink[str(n)] for n in range(183, 194)] == ['0'] * 11
+
     def test_qcdiag_log_frame_time(self, cmd_tshark, capture_file, test_env):
         '''The QCDIAG LOG time stamp is shown as a field (frames 285-287,
         also a huge value) and is not written into the frame time: the
@@ -123452,15 +123483,36 @@ class TestDissectQcdiagLog:
         stdout = self._run(cmd_tshark, capture_file, test_env,
                 '-Y', 'frame.number in {92, 93, 94}', '-Tfields', '-eqcdiag_log.lte_rrc.pdu',
                 '-eqcdiag_log.lte_rrc.earfcn', '-eqcdiag_log.lte_rrc.sfn',
+                '-eqcdiag_log.lte_rrc.subframe', '-egsmtap.frame_nr',
                 '-eqcdiag_log.lte_rrc_rel', '-e_ws.col.info')
+        # SFN/subframe word 0x1234: SFN = bits 4-13 = 291, subframe = 4
         assert stdout.splitlines() == [
-            '5\t1300\t4660\t9.2.0\tRRCConnectionReestablishment',
-            '1\t1300\t4660\t9.2.0\tMasterInformationBlock (SFN=0)',
-            '2\t1300\t4660\t9.2.0\tSystemInformation [ SIB2 ]']
+            '5\t1300\t291\t4\t291\t9.2.0\tRRCConnectionReestablishment',
+            '1\t1300\t291\t4\t291\t9.2.0\tMasterInformationBlock (SFN=0)',
+            '2\t1300\t291\t4\t291\t9.2.0\tSystemInformation [ SIB2 ]']
         stdout = self._run(cmd_tshark, capture_file, test_env,
                 '-Y', 'frame.number in {201, 260}', '-Tfields', '-eqcdiag_log.nr_rrc.ncgi',
                 '-eqcdiag_log.nr_rrc.arfcn', '-eqcdiag_log.nr_rrc_rel')
         assert stdout.splitlines() == ['\t632628\t15.2.0', '4886718345\t632628\t15.2.0']
+
+    def test_qcdiag_log_nr_rrc_sfn(self, cmd_tshark, capture_file, test_env):
+        '''The NR RRC SFN/subframe word is kept raw and decoded where its
+        layout is known: frame 201 (version 9, 4-byte word 0x00123456: SFN
+        bits 16-25 = 18, subframe bits 3-6 = 10) and frames 218, 220, 230
+        (versions 12, 14, 17, 3-byte word 0x123456: SFN bits 9-18 = 282,
+        subframe bits 3-6 = 10). Versions 19 and 20 (frames 240, 242) show
+        only the raw word.'''
+        stdout = self._run(cmd_tshark, capture_file, test_env,
+                '-Y', 'frame.number in {201, 218, 220, 230, 240, 242}',
+                '-Tfields', '-eframe.number', '-eqcdiag_log.nr_rrc.sfn_subframe',
+                '-eqcdiag_log.nr_rrc.sfn', '-eqcdiag_log.nr_rrc.subframe')
+        assert stdout.splitlines() == [
+            '201\t0x00123456\t18\t10',
+            '218\t0x123456\t282\t10',
+            '220\t0x123456\t282\t10',
+            '230\t0x123456\t282\t10',
+            '240\t0x123456\t\t',
+            '242\t0x123456\t\t']
 
 
 class TestDissectQllc:
@@ -176359,3 +176411,36 @@ class TestDissectDhcpOpt140:
                 '-e', '_ws.expert.message',
             ), encoding='utf-8', env=test_env)
         assert 'IPv4 FQDN-MoS: sub-option length exceeds option' in stdout
+
+
+class TestDissectDhcpOpt139:
+    def test_mos_ip(self, cmd_tshark, capture_file, test_env):
+        '''DHCPv4 option 139 (IPv4 Address-MoS) sub-option codes and addresses are decoded correctly.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('dhcpv4_opt139.pcap'),
+                '-Tfields',
+                '-e', 'dhcp.option.mos_ip.subopt_code',
+                '-e', 'dhcp.option.mos_ip',
+            ), encoding='utf-8', env=test_env)
+        assert '1' in stdout            # IS sub-option code
+        assert '3' in stdout            # ES sub-option code
+        assert '192.0.2.1' in stdout
+        assert '192.0.2.3' in stdout
+
+    def test_mos_ip_empty(self, cmd_tshark, capture_file, test_env):
+        '''DHCPv4 option 139 with zero-length data produces an expert item.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('dhcpv4_opt139_empty.pcap'),
+                '-Tfields',
+                '-e', '_ws.expert.message',
+            ), encoding='utf-8', env=test_env)
+        assert 'IPv4 Address-MoS: option is empty' in stdout
+
+    def test_mos_ip_subopt_overflow(self, cmd_tshark, capture_file, test_env):
+        '''DHCPv4 option 139 with a sub-option length that exceeds the option produces an expert item.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('dhcpv4_opt139_overflow.pcap'),
+                '-Tfields',
+                '-e', '_ws.expert.message',
+            ), encoding='utf-8', env=test_env)
+        assert 'IPv4 Address-MoS: sub-option length exceeds option' in stdout

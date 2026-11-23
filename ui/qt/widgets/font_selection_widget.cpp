@@ -40,6 +40,7 @@ struct FamilyEntry {
     QString family;
     bool fixedPitch;
     bool symbol;
+    bool scalable;
 };
 
 struct FamilyCache {
@@ -87,21 +88,42 @@ void ensureFamilyCache()
         const QString name = normalizedFamily(raw);
         const bool fixed = QFontDatabase::isFixedPitch(raw);
         const bool symbol = QFontDatabase::writingSystems(raw).contains(QFontDatabase::Symbol);
+        const bool scalable = QFontDatabase::isSmoothlyScalable(raw);
         bool found = false;
         for (FamilyEntry &entry : cache.entries) {
             if (entry.family == name) {
                 entry.fixedPitch = entry.fixedPitch || fixed;
                 entry.symbol = entry.symbol || symbol;
+                entry.scalable = entry.scalable || scalable;
                 found = true;
                 break;
             }
         }
         if (!found) {
-            cache.entries.append({name, fixed, symbol});
+            cache.entries.append({name, fixed, symbol, scalable});
         }
     }
     cache.filled = true;
     QApplication::restoreOverrideCursor();
+}
+
+// Whether a family is offered in the list. On Windows, the bitmap (raster)
+// fonts such as 8514oem, Fixedsys, Terminal or MS Sans Serif only exist in a
+// few pixel sizes, look blocky when scaled by the zoom or a high DPI display,
+// and only cover a single legacy code page, so that for example the ellipsis
+// of elided text is drawn as a different character. Qt also tries to draw
+// them with DirectWrite on a scaled display, which can't load them, logs a
+// warning for each, and then falls back to GDI. They aren't offered. Bitmap
+// fonts elsewhere, such as Terminus on Linux, are chosen on purpose for
+// the packet panes and stay.
+bool offeredFamily(const FamilyEntry &entry)
+{
+#ifdef Q_OS_WIN
+    return entry.scalable;
+#else
+    Q_UNUSED(entry);
+    return true;
+#endif
 }
 
 const FamilyEntry *findCached(const QString &normalized)
@@ -144,7 +166,6 @@ FontSelectionWidget::FontSelectionWidget(QWidget *parent) :
     ZoomScaling::scaleSizeLimits(ui->styleListWidget);
     ZoomScaling::scaleSizeLimits(ui->sizeSpinBox);
     ZoomScaling::scaleSizeLimits(ui->sizeListWidget);
-    ZoomScaling::scaleSizeLimits(ui->effectsGroupBox);
     setFocusProxy(ui->familyListWidget);
 
     // The pangram spans the alphabet; the hex dump line shows how the packet
@@ -171,10 +192,6 @@ FontSelectionWidget::FontSelectionWidget(QWidget *parent) :
             this, &FontSelectionWidget::sizeSelectionChanged);
     connect(ui->sizeSpinBox, &QDoubleSpinBox::valueChanged,
             this, &FontSelectionWidget::sizeValueChanged);
-    connect(ui->strikeoutCheckBox, &QCheckBox::toggled,
-            this, &FontSelectionWidget::strikeOutToggled);
-    connect(ui->underlineCheckBox, &QCheckBox::toggled,
-            this, &FontSelectionWidget::underlineToggled);
 
     FontManager *fm = FontManager::instance();
     connect(fm, &FontManager::applicationFontChanged, this, &FontSelectionWidget::refreshSample);
@@ -219,7 +236,6 @@ void FontSelectionWidget::setFeatures(Features features)
     features_ = features;
     ui->styleLabel->setVisible(features_.testFlag(StyleFeature));
     ui->styleListWidget->setVisible(features_.testFlag(StyleFeature));
-    ui->effectsGroupBox->setVisible(features_.testFlag(EffectsFeature));
     ui->monospaceCheckBox->setVisible(features_.testFlag(FamilyFilterFeature));
 }
 
@@ -244,13 +260,9 @@ void FontSelectionWidget::resetTo(const QFont &font, const Selection &sel)
     base_ = font;
     sel_ = sel;
     style_ = QFontDatabase::styleString(font);
-    strikeOut_ = font.strikeOut();
-    underline_ = font.underline();
     familyEdited_ = false;
     styleEdited_ = false;
     sizeEdited_ = false;
-    strikeOutEdited_ = false;
-    underlineEdited_ = false;
     refreshAll();
 }
 
@@ -296,12 +308,6 @@ QFont FontSelectionWidget::selectedFont() const
     }
     if (sizeEdited_ && sel_.pointSize > 0) {
         font.setPointSizeF(sel_.pointSize);
-    }
-    if (strikeOutEdited_) {
-        font.setStrikeOut(strikeOut_);
-    }
-    if (underlineEdited_) {
-        font.setUnderline(underline_);
     }
     return font;
 }
@@ -389,6 +395,9 @@ void FontSelectionWidget::fillFamilyList()
             if (filter_ == FamilyFilter::FixedPitchOnly && !entry.fixedPitch) {
                 continue;
             }
+            if (!offeredFamily(entry)) {
+                continue;
+            }
             // Symbol fonts would draw their own name as symbols.
             addFamily(list->count(), entry.family, entry.family, !entry.symbol);
         }
@@ -407,8 +416,10 @@ void FontSelectionWidget::fillFamilyList()
             if (currentRow < 0) {
                 currentRow = defaultAllowed_ ? 1 : 0;
                 if (const FamilyEntry *entry = findCached(normalized)) {
-                    // Installed, but not offered by the filter.
-                    addFamily(currentRow, current, current, !entry->symbol);
+                    // Installed, but not offered by the filter or at all.
+                    // The name of a family that isn't offered is drawn in
+                    // the list's font, not its own.
+                    addFamily(currentRow, current, current, !entry->symbol && offeredFamily(*entry));
                 } else {
                     addFamily(currentRow, tr("%1 (not installed)").arg(current), current, false);
                 }
@@ -558,20 +569,11 @@ void FontSelectionWidget::selectSizeRow()
     list->setCurrentItem(nullptr);
 }
 
-void FontSelectionWidget::updateEffects()
-{
-    QSignalBlocker strikeout_blocker(ui->strikeoutCheckBox);
-    QSignalBlocker underline_blocker(ui->underlineCheckBox);
-    ui->strikeoutCheckBox->setChecked(strikeOut_);
-    ui->underlineCheckBox->setChecked(underline_);
-}
-
 void FontSelectionWidget::refreshAll()
 {
     fillFamilyList();
     fillStyleList();
     fillSizeList();
-    updateEffects();
     refreshSample();
 }
 
@@ -628,22 +630,6 @@ void FontSelectionWidget::sizeValueChanged(double value)
     sel_.pointSize = value;
     sizeEdited_ = true;
     selectSizeRow();
-    refreshSample();
-    emit changed();
-}
-
-void FontSelectionWidget::strikeOutToggled(bool checked)
-{
-    strikeOut_ = checked;
-    strikeOutEdited_ = true;
-    refreshSample();
-    emit changed();
-}
-
-void FontSelectionWidget::underlineToggled(bool checked)
-{
-    underline_ = checked;
-    underlineEdited_ = true;
     refreshSample();
     emit changed();
 }

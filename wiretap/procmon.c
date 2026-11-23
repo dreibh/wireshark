@@ -136,7 +136,9 @@ typedef struct {
     procmon_header_t header;
     uint32_t *event_offsets;
     uint32_t cur_event;
-    const char **string_array;
+    int64_t events_end;             /* End of the last event read sequentially */
+    GStringChunk *string_chunk;     /* Storage for the strings */
+    const char **string_array;      /* Index to the strings, which can be shared */
     size_t string_array_size;
     uint32_t *process_index_map;    /* Map of process index to process array index */
     size_t process_index_map_size;
@@ -161,12 +163,10 @@ void register_procmon(void);
 static void file_info_cleanup(procmon_file_info_t* file_info)
 {
     g_free(file_info->event_offsets);
-    if (file_info->string_array) {
-        for (size_t idx = 0; idx < file_info->string_array_size; idx++) {
-            g_free((char *)file_info->string_array[idx]);
-        }
-        g_free(file_info->string_array);
+    if (file_info->string_chunk) {
+        g_string_chunk_free(file_info->string_chunk);
     }
+    g_free(file_info->string_array);
     g_free(file_info->process_index_map);
     if (file_info->process_array) {
         for (size_t idx = 0; idx < file_info->process_array_size; idx++) {
@@ -175,6 +175,23 @@ static void file_info_cleanup(procmon_file_info_t* file_info)
         g_free(file_info->process_array);
     }
     g_free(file_info);
+}
+
+/* An entry in an array of offsets, for reading them in order of offset */
+typedef struct {
+    uint32_t offset;    /* Offset, relative to the start of the array */
+    uint32_t idx;       /* Index of the entry */
+} procmon_offset_ref_t;
+
+static int compare_offset_refs(const void *a, const void *b)
+{
+    const procmon_offset_ref_t *ref_a = (const procmon_offset_ref_t *)a;
+    const procmon_offset_ref_t *ref_b = (const procmon_offset_ref_t *)b;
+
+    if (ref_a->offset != ref_b->offset) {
+        return ref_a->offset < ref_b->offset ? -1 : 1;
+    }
+    return 0;
 }
 
 static const char *procmon_string(procmon_file_info_t* file_info, uint32_t str_index)
@@ -441,6 +458,22 @@ static bool procmon_read(wtap *wth, wtap_rec *rec,
     *data_offset = file_info->event_offsets[file_info->cur_event];
     ws_noisy("file offset is %" PRId64 " array offset is %" PRId64, file_tell(wth->fh), *data_offset);
 
+    /*
+     * Process Monitor writes the events one after another, and the
+     * offsets in the array are in the same order. Reject an event that
+     * starts before the end of the previous one; otherwise, many entries
+     * pointing to the same large event would make us read and dissect
+     * it again and again, many more bytes than are in the file. (The
+     * extra details of an event can be elsewhere; the end of an event
+     * is the end of the details that immediately follow its header.)
+     */
+    if (*data_offset < file_info->events_end) {
+        *err = WTAP_ERR_BAD_FILE;
+        *err_info = ws_strdup_printf("procmon: event %u at offset %" PRId64 " overlaps the previous event",
+                                     file_info->cur_event, *data_offset);
+        return false;
+    }
+
     if (file_seek(wth->fh, *data_offset, SEEK_SET, err) == -1)
     {
         ws_debug("Failed to seek to event %u at offsets %" PRId64, file_info->cur_event, *data_offset);
@@ -455,7 +488,11 @@ static bool procmon_read(wtap *wth, wtap_rec *rec,
     //     return false;
     // }
 
-    return procmon_read_event(wth->fh, rec, file_info, err, err_info);
+    if (!procmon_read_event(wth->fh, rec, file_info, err, err_info)) {
+        return false;
+    }
+    file_info->events_end = file_tell(wth->fh);
+    return true;
 }
 
 static bool procmon_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
@@ -580,6 +617,7 @@ wtap_open_return_val procmon_open(wtap *wth, int *err, char **err_info)
 
     if (file_seek(wth->fh, header->string_array_offset, SEEK_SET, err) == -1)
     {
+        file_info_cleanup(file_info);
         ws_debug("Failed to locate procmon string data");
         return WTAP_OPEN_NOT_MINE;
     }
@@ -627,31 +665,77 @@ wtap_open_return_val procmon_open(wtap *wth, int *err, char **err_info)
     }
 #endif
 
+    /*
+     * Several entries can point to the same string. Read each string
+     * only once, and have all the entries that point to it share it,
+     * rather than letting a small file make us spend a lot of memory and
+     * time on many copies of one long string. Read the strings in the
+     * order of their offsets, which also means we only seek forward, and
+     * reject a string that starts within the previous one, so that the
+     * strings we store take up no more memory than the file does (give
+     * or take conversion to UTF-8).
+     */
+    procmon_offset_ref_t *str_refs = g_new(procmon_offset_ref_t, num_strings);
+    for (unsigned idx = 0; idx < num_strings; idx++) {
+        str_refs[idx].offset = str_offsets[idx];
+        str_refs[idx].idx = idx;
+    }
+    g_free(str_offsets);
+    qsort(str_refs, num_strings, sizeof(*str_refs), compare_offset_refs);
+
+    file_info->string_chunk = g_string_chunk_new(64 * 1024);
     file_info->string_array_size = num_strings;
     file_info->string_array = g_new0(const char *, num_strings);
     gunichar2 *str_buf = g_new(gunichar2, MAX_PROCMON_STRING_LENGTH);
-    for (unsigned idx = 0; idx < num_strings; idx++) {
-        if (file_seek(wth->fh, header->string_array_offset + str_offsets[idx], SEEK_SET, err) == -1)
+    const char *cur_str = NULL;
+    uint64_t str_end = 0;   // Relative offset of the end of the previous string
+    for (unsigned ref = 0; ref < num_strings; ref++) {
+        unsigned idx = str_refs[ref].idx;
+        uint32_t str_offset = str_refs[ref].offset;
+
+        if (cur_str != NULL && str_offset == str_refs[ref - 1].offset) {
+            file_info->string_array[idx] = cur_str;
+            continue;
+        }
+        if (str_offset < str_end) {
+            /* XXX - It seems unlikely that real procmon files would ever use a
+             * clever scheme of having a string stored within another string of
+             * which it is a suffix. It's hard to allow that without being
+             * vulnerable to amplification. */
+            *err = WTAP_ERR_BAD_FILE;
+            *err_info = ws_strdup_printf("procmon: string %u at offset %u overlaps the previous string",
+                                         idx, str_offset);
+            file_info_cleanup(file_info);
+            g_free(str_refs);
+            g_free(str_buf);
+            return WTAP_OPEN_ERROR;
+        }
+
+        if (file_seek(wth->fh, header->string_array_offset + str_offset, SEEK_SET, err) == -1)
         {
             file_info_cleanup(file_info);
-            g_free(str_offsets);
+            g_free(str_refs);
             g_free(str_buf);
             ws_debug("Failed to locate procmon string %u", idx);
             return WTAP_OPEN_NOT_MINE;
         }
 
-        const char *cur_str = procmon_read_string(wth->fh, str_buf, err, err_info);
-        if (!cur_str) {
+        char *utf8_str = procmon_read_string(wth->fh, str_buf, err, err_info);
+        if (!utf8_str) {
             file_info_cleanup(file_info);
-            g_free(str_offsets);
+            g_free(str_refs);
             g_free(str_buf);
             ws_debug("Failed to read procmon string %u", idx);
             return WTAP_OPEN_NOT_MINE;
         }
+        // procmon_read_string() skips any part of the string it doesn't read.
+        str_end = (uint64_t)(file_tell(wth->fh) - header->string_array_offset);
 
+        cur_str = g_string_chunk_insert(file_info->string_chunk, utf8_str);
+        g_free(utf8_str);
         file_info->string_array[idx] = cur_str;
     }
-    g_free(str_offsets);
+    g_free(str_refs);
     g_free(str_buf);
 
     if (file_seek(wth->fh, header->process_array_offset, SEEK_SET, err) == -1)
@@ -728,13 +812,51 @@ wtap_open_return_val procmon_open(wtap *wth, int *err, char **err_info)
         return WTAP_OPEN_NOT_MINE;
     }
 
+    /*
+     * As with the strings, several entries could point to the same
+     * process, or to processes that overlap, and each process can have
+     * many modules, so a small file could make us use a lot of memory
+     * on copies of the same modules. Read the processes in the order of
+     * their offsets, and reject a process that starts within the
+     * previous one, so that the processes and modules we store take up
+     * no more memory than the file does.
+     *
+     * An entry that points to the same process as the previous one
+     * would have the same process index, and only one entry with a
+     * given process index can be found through the process index map,
+     * so skip it, leaving the entry empty.
+     */
+    procmon_offset_ref_t *proc_refs = g_new(procmon_offset_ref_t, num_processes);
+    for (unsigned idx = 0; idx < num_processes; idx++) {
+        proc_refs[idx].offset = GUINT32_FROM_LE(proc_offsets[idx]);
+        proc_refs[idx].idx = idx;
+    }
+    g_free(proc_offsets);
+    qsort(proc_refs, num_processes, sizeof(*proc_refs), compare_offset_refs);
+
     file_info->process_array = g_new0(procmon_process_t, num_processes);
     file_info->process_array_size = num_processes;
-    for (unsigned idx = 0; idx < num_processes; idx++) {
-        if (file_seek(wth->fh, header->process_array_offset + proc_offsets[idx], SEEK_SET, err) == -1)
+    uint64_t proc_end = 0;  // Relative offset of the end of the previous process
+    for (unsigned ref = 0; ref < num_processes; ref++) {
+        unsigned idx = proc_refs[ref].idx;
+        uint32_t proc_offset = proc_refs[ref].offset;
+
+        if (ref > 0 && proc_offset == proc_refs[ref - 1].offset) {
+            continue;
+        }
+        if (proc_offset < proc_end) {
+            *err = WTAP_ERR_BAD_FILE;
+            *err_info = ws_strdup_printf("procmon: process %u at offset %u overlaps the previous process",
+                                         idx, proc_offset);
+            file_info_cleanup(file_info);
+            g_free(proc_refs);
+            return WTAP_OPEN_ERROR;
+        }
+
+        if (file_seek(wth->fh, header->process_array_offset + proc_offset, SEEK_SET, err) == -1)
         {
             file_info_cleanup(file_info);
-            g_free(proc_offsets);
+            g_free(proc_refs);
             ws_debug("Failed to locate procmon process %u", idx);
             return WTAP_OPEN_NOT_MINE;
         }
@@ -742,7 +864,7 @@ wtap_open_return_val procmon_open(wtap *wth, int *err, char **err_info)
         if (!wtap_read_bytes_or_eof(wth->fh, &cur_raw_process, sizeof(cur_raw_process), err, err_info))
         {
             file_info_cleanup(file_info);
-            g_free(proc_offsets);
+            g_free(proc_refs);
             ws_debug("wtap_read_bytes_or_eof() failed, err = %d.", *err);
             if (*err == 0 || *err == WTAP_ERR_SHORT_READ)
             {
@@ -785,7 +907,7 @@ wtap_open_return_val procmon_open(wtap *wth, int *err, char **err_info)
         if (file_seek(wth->fh, header->system_bitness ? 8 : 4, SEEK_CUR, err) == -1)
         {
             file_info_cleanup(file_info);
-            g_free(proc_offsets);
+            g_free(proc_refs);
             ws_debug("Failed to locate number of modules %u", idx);
             return WTAP_OPEN_NOT_MINE;
         }
@@ -793,7 +915,7 @@ wtap_open_return_val procmon_open(wtap *wth, int *err, char **err_info)
         if (!wtap_read_bytes_or_eof(wth->fh, &num_modules, sizeof(num_modules), err, err_info))
         {
             file_info_cleanup(file_info);
-            g_free(proc_offsets);
+            g_free(proc_refs);
             ws_debug("wtap_read_bytes_or_eof() failed, err = %d.", *err);
             if (*err == 0 || *err == WTAP_ERR_SHORT_READ)
             {
@@ -813,7 +935,7 @@ wtap_open_return_val procmon_open(wtap *wth, int *err, char **err_info)
                 procmon_raw_module_64_t cur_raw_module;
                     if (!wtap_read_bytes_or_eof(wth->fh, &cur_raw_module, sizeof(cur_raw_module), err, err_info)) {
                         file_info_cleanup(file_info);
-                        g_free(proc_offsets);
+                        g_free(proc_refs);
                         ws_debug("wtap_read_bytes_or_eof() failed, err = %d.", *err);
                         if (*err == 0 || *err == WTAP_ERR_SHORT_READ)
                         {
@@ -837,7 +959,7 @@ wtap_open_return_val procmon_open(wtap *wth, int *err, char **err_info)
                     procmon_raw_module_32_t cur_raw_module;
                     if (!wtap_read_bytes_or_eof(wth->fh, &cur_raw_module, sizeof(cur_raw_module), err, err_info)) {
                         file_info_cleanup(file_info);
-                        g_free(proc_offsets);
+                        g_free(proc_refs);
                         ws_debug("wtap_read_bytes_or_eof() failed, err = %d.", *err);
                         if (*err == 0 || *err == WTAP_ERR_SHORT_READ)
                         {
@@ -862,11 +984,13 @@ wtap_open_return_val procmon_open(wtap *wth, int *err, char **err_info)
         } else {
             cur_process->modules = NULL;
         }
+        proc_end = (uint64_t)(file_tell(wth->fh) - header->process_array_offset);
     }
-    g_free(proc_offsets);
+    g_free(proc_refs);
 
     if (file_seek(wth->fh, header->start_events_offset, SEEK_SET, err) == -1)
     {
+        file_info_cleanup(file_info);
         ws_debug("Failed to locate procmon events data");
         return WTAP_OPEN_NOT_MINE;
     }

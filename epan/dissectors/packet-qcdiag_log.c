@@ -232,6 +232,7 @@ static int hf_qcdiag_lte_rrc_pci;
 static int hf_qcdiag_lte_rrc_earfcn_v2;
 static int hf_qcdiag_lte_rrc_earfcn_v8;
 static int hf_qcdiag_lte_rrc_sfn;
+static int hf_qcdiag_lte_rrc_subframe;
 static int hf_qcdiag_lte_rrc_pdu;
 static int hf_qcdiag_lte_rrc_sib;
 
@@ -239,8 +240,12 @@ static int hf_qcdiag_nr_rrc_rb_id;
 static int hf_qcdiag_nr_rrc_pci;
 static int hf_qcdiag_nr_rrc_ncgi;
 static int hf_qcdiag_nr_rrc_arfcn;
+static int hf_qcdiag_nr_rrc_sfn_subframe_v9;
+static int hf_qcdiag_nr_rrc_sfn_subframe;
 static int hf_qcdiag_nr_rrc_sfn_v9;
 static int hf_qcdiag_nr_rrc_sfn;
+static int hf_qcdiag_nr_rrc_subframe_v9;
+static int hf_qcdiag_nr_rrc_subframe;
 static int hf_qcdiag_nr_rrc_pdu_v9;
 static int hf_qcdiag_nr_rrc_pdu_v14;
 static int hf_qcdiag_nr_rrc_pdu_v17;
@@ -2517,8 +2522,11 @@ dissect_qcdiag_log_lte_rrc(tvbuff_t *tvb, uint32_t offset, packet_info *pinfo, p
         offset += 4;
     }
 
-    /* System Frame Number */
+    /* System Frame Number (bits 4-13) and Subframe Number (bits 0-3). The SFN
+     * is 10 bits wide (3GPP TS 36.211); the top 2 bits are not part of it and
+     * are set on some records. */
     proto_tree_add_item_ret_uint(log_tree, hf_qcdiag_lte_rrc_sfn, tvb, offset, 2, ENC_LITTLE_ENDIAN, &sfn);
+    proto_tree_add_item_ret_uint(log_tree, hf_qcdiag_lte_rrc_subframe, tvb, offset, 2, ENC_LITTLE_ENDIAN, &subslot);
     offset += 2;
 
     /* PDU */
@@ -2552,8 +2560,7 @@ dissect_qcdiag_log_lte_rrc(tvbuff_t *tvb, uint32_t offset, packet_info *pinfo, p
     if (direction)
         arfcn = arfcn | GSMTAP_ARFCN_F_UPLINK;
 
-    frame_nr = (sfn & 0xfff0) >> 4;
-    subslot = sfn & 0x000f;
+    frame_nr = sfn;
 
     gsmtap_hdr_tvb = get_gsmtap_hdr_tvb(tvb, pinfo, GSMTAP_TYPE_LTE_RRC, arfcn, frame_nr, subtype, subslot);
     payload_tvb = tvb_new_subset_remaining(tvb, offset);
@@ -2570,14 +2577,21 @@ dissect_qcdiag_log_lte_rrc(tvbuff_t *tvb, uint32_t offset, packet_info *pinfo, p
     try_call_dissector(gsmtap_handle, gsmtap_tvb, pinfo, proto_tree_get_parent_tree(tree));
 }
 
+/*
+ * LTE NAS OTA messages. Each log code names its own direction: the even code of
+ * each pair is the "Incoming" (network to UE) message and the odd code is the
+ * "Outgoing" (UE to network) one, e.g. 0xB0EC EMM Plain OTA Incoming and 0xB0ED
+ * EMM Plain OTA Outgoing. The payload cannot tell us: for ESM the second octet
+ * is the procedure transaction identity, and for a security protected message
+ * it is part of the MAC.
+ */
 static void
-dissect_qcdiag_log_lte_nas(tvbuff_t *tvb, uint32_t offset, packet_info *pinfo, proto_tree *log_tree, proto_tree *tree, bool plain)
+dissect_qcdiag_log_lte_nas(tvbuff_t *tvb, uint32_t offset, packet_info *pinfo, proto_tree *log_tree, proto_tree *tree, bool plain, bool direction)
 {
     tvbuff_t *payload_tvb, *gsmtap_hdr_tvb, *gsmtap_tvb;
     uint16_t arfcn;
-    uint8_t msgtype, number, major, minor;
+    uint8_t number, major, minor;
     wmem_strbuf_t *buf;
-    bool direction;
 
     /* Version */
     proto_tree_add_item(log_tree, hf_qcdiag_log_ver, tvb, offset, 1, ENC_NA);
@@ -2593,20 +2607,6 @@ dissect_qcdiag_log_lte_nas(tvbuff_t *tvb, uint32_t offset, packet_info *pinfo, p
     /* Release Version */
     proto_tree_add_string(log_tree, hf_qcdiag_lte_nas_rel, tvb, offset, 3, wmem_strbuf_get_str(buf));
     offset += 3;
-
-    /* Message Type */
-    msgtype = tvb_get_uint8(tvb, offset+1);
-
-    /* Uplink */
-    direction = (msgtype == 0x41 ||  /* Attach request */
-                 msgtype == 0x45 ||  /* Detach request */
-                 msgtype == 0x48 ||  /* Tracking area update request */
-                 msgtype == 0x4c ||  /* Extended service request */
-                 msgtype == 0x4d ||  /* Control plane service request */
-                 msgtype == 0x52 ||  /* Authentication request */
-                 msgtype == 0x55 ||  /* Identity request */
-                 msgtype == 0x63 ||  /* Uplink NAS transport */
-                 msgtype == 0x69);   /* Uplink generic NAS transport */
 
     arfcn = (direction) ? GSMTAP_ARFCN_F_UPLINK : 0;
 
@@ -2674,12 +2674,36 @@ dissect_qcdiag_log_nr_rrc(tvbuff_t *tvb, uint32_t offset, packet_info *pinfo, pr
     proto_tree_add_item(log_tree, hf_qcdiag_nr_rrc_arfcn, tvb, offset, 4, ENC_LITTLE_ENDIAN);
     offset += 4;
 
-    /* System Frame Number */
+    /* System Frame Number and Subframe Number, packed in one little-endian
+     * word: 4 bytes before version 12, 3 bytes from version 12 on. The
+     * subframe number (1 ms) is in bits 3-6 on both. The 10-bit SFN is in
+     * bits 16-25 of the 4-byte word and in bits 9-18 of the 3-byte word.
+     * The layout was checked against the log timestamps on versions 9, 12,
+     * 14, 17 and 23 (SFN * 10 + subframe advances with the timestamp), and
+     * the SFN only on version 26. Other versions show the raw word. */
     if (version < 12) {
-        proto_tree_add_item(log_tree, hf_qcdiag_nr_rrc_sfn_v9, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+        proto_tree_add_item(log_tree, hf_qcdiag_nr_rrc_sfn_subframe_v9, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+        if (version == 9) {
+            proto_tree_add_item(log_tree, hf_qcdiag_nr_rrc_sfn_v9, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+            proto_tree_add_item(log_tree, hf_qcdiag_nr_rrc_subframe_v9, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+        }
         offset += 4;
     } else {
-        proto_tree_add_item(log_tree, hf_qcdiag_nr_rrc_sfn, tvb, offset, 3, ENC_LITTLE_ENDIAN);
+        proto_tree_add_item(log_tree, hf_qcdiag_nr_rrc_sfn_subframe, tvb, offset, 3, ENC_LITTLE_ENDIAN);
+        switch (version) {
+            case 12:
+            case 14:
+            case 17:
+            case 23:
+                proto_tree_add_item(log_tree, hf_qcdiag_nr_rrc_sfn, tvb, offset, 3, ENC_LITTLE_ENDIAN);
+                proto_tree_add_item(log_tree, hf_qcdiag_nr_rrc_subframe, tvb, offset, 3, ENC_LITTLE_ENDIAN);
+                break;
+            case 26:
+                proto_tree_add_item(log_tree, hf_qcdiag_nr_rrc_sfn, tvb, offset, 3, ENC_LITTLE_ENDIAN);
+                break;
+            default:
+                break;
+        }
         offset += 3;
     }
 
@@ -2940,21 +2964,18 @@ dissect_qcdiag_log(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
     case 0xb0c0:
         dissect_qcdiag_log_lte_rrc(tvb, offset, pinfo, diag_log_tree, tree);
         break;
-    case 0xb0e0:
-    case 0xb0e1:
-        dissect_qcdiag_log_lte_nas(tvb, offset, pinfo, diag_log_tree, tree, false);
+    /* LTE NAS OTA: even code = Incoming (downlink), odd code = Outgoing (uplink) */
+    case 0xb0e0:  /* ESM Security Protected OTA Incoming */
+    case 0xb0e1:  /* ESM Security Protected OTA Outgoing */
+    case 0xb0ea:  /* EMM Security Protected OTA Incoming */
+    case 0xb0eb:  /* EMM Security Protected OTA Outgoing */
+        dissect_qcdiag_log_lte_nas(tvb, offset, pinfo, diag_log_tree, tree, false, (code & 1) != 0);
         break;
-    case 0xb0e2:
-    case 0xb0e3:
-        dissect_qcdiag_log_lte_nas(tvb, offset, pinfo, diag_log_tree, tree, true);
-        break;
-    case 0xb0ea:
-    case 0xb0eb:
-        dissect_qcdiag_log_lte_nas(tvb, offset, pinfo, diag_log_tree, tree, false);
-        break;
-    case 0xb0ec:
-    case 0xb0ed:
-        dissect_qcdiag_log_lte_nas(tvb, offset, pinfo, diag_log_tree, tree, true);
+    case 0xb0e2:  /* ESM Plain OTA Incoming */
+    case 0xb0e3:  /* ESM Plain OTA Outgoing */
+    case 0xb0ec:  /* EMM Plain OTA Incoming */
+    case 0xb0ed:  /* EMM Plain OTA Outgoing */
+        dissect_qcdiag_log_lte_nas(tvb, offset, pinfo, diag_log_tree, tree, true, (code & 1) != 0);
         break;
 
     /* NR - 0xB800 log code base (0xB800 - 0xB9FF ) */
@@ -3272,7 +3293,10 @@ proto_register_qcdiag_log(void)
             FT_UINT32, BASE_DEC, NULL, 0, "EARFCN", HFILL } },
         { &hf_qcdiag_lte_rrc_sfn,
           { "System Frame Number", "qcdiag_log.lte_rrc.sfn",
-            FT_UINT16, BASE_DEC, NULL, 0, "SFN", HFILL } },
+            FT_UINT16, BASE_DEC, NULL, 0x3ff0, "SFN", HFILL } },
+        { &hf_qcdiag_lte_rrc_subframe,
+          { "Subframe Number", "qcdiag_log.lte_rrc.subframe",
+            FT_UINT16, BASE_DEC, NULL, 0x000f, NULL, HFILL } },
         { &hf_qcdiag_lte_rrc_pdu,
           { "PDU Number", "qcdiag_log.lte_rrc.pdu",
             FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL } },
@@ -3301,12 +3325,24 @@ proto_register_qcdiag_log(void)
         { &hf_qcdiag_nr_rrc_arfcn,
           { "Frequency", "qcdiag_log.nr_rrc.arfcn",
             FT_UINT32, BASE_DEC, NULL, 0, "ARFCN", HFILL } },
+        { &hf_qcdiag_nr_rrc_sfn_subframe_v9,
+          { "SFN/Subframe", "qcdiag_log.nr_rrc.sfn_subframe",
+            FT_UINT32, BASE_HEX, NULL, 0, "Packed system frame and subframe number", HFILL } },
+        { &hf_qcdiag_nr_rrc_sfn_subframe,
+          { "SFN/Subframe", "qcdiag_log.nr_rrc.sfn_subframe",
+            FT_UINT24, BASE_HEX, NULL, 0, "Packed system frame and subframe number", HFILL } },
         { &hf_qcdiag_nr_rrc_sfn_v9,
           { "System Frame Number", "qcdiag_log.nr_rrc.sfn",
-            FT_UINT32, BASE_DEC, NULL, 0, "SFN", HFILL } },
+            FT_UINT32, BASE_DEC, NULL, 0x03ff0000, "SFN", HFILL } },
         { &hf_qcdiag_nr_rrc_sfn,
           { "System Frame Number", "qcdiag_log.nr_rrc.sfn",
-            FT_UINT24, BASE_DEC, NULL, 0, "SFN", HFILL } },
+            FT_UINT24, BASE_DEC, NULL, 0x07fe00, "SFN", HFILL } },
+        { &hf_qcdiag_nr_rrc_subframe_v9,
+          { "Subframe Number", "qcdiag_log.nr_rrc.subframe",
+            FT_UINT32, BASE_DEC, NULL, 0x00000078, NULL, HFILL } },
+        { &hf_qcdiag_nr_rrc_subframe,
+          { "Subframe Number", "qcdiag_log.nr_rrc.subframe",
+            FT_UINT24, BASE_DEC, NULL, 0x000078, NULL, HFILL } },
         { &hf_qcdiag_nr_rrc_pdu_v9,
           { "PDU Number", "qcdiag_log.nr_rrc.pdu",
             FT_UINT8, BASE_DEC, VALS(nr_rrc_pdu_type_v9_vals), 0, NULL, HFILL } },

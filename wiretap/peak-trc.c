@@ -20,7 +20,6 @@
 #include <wctype.h>
 #include <string.h>
 #include <stdlib.h>
-#include <errno.h>
 #include <time.h>
 #include "peak-trc.h"
 #include <wsutil/strtoi.h>
@@ -107,6 +106,7 @@ peak_trc_parse(wtap* wth, peak_trc_state_t* state, int64_t* offset, int* err, ch
     bool found_timestamp = false;
     bool found_line = false;
     char line_buffer[PEAK_TRC_MAX_LINE_SIZE];
+    int64_t max_read = INT64_MAX;
 
     /* 1.0 file format does not have version info or column line,
      * so assume that until told otherwise
@@ -127,6 +127,15 @@ peak_trc_parse(wtap* wth, peak_trc_state_t* state, int64_t* offset, int* err, ch
     for (int i = 0; i < Col_Invalid; i++)
         state->column_positions[i] = Col_Invalid;
 
+    /*
+     * On a pipe, read no farther than the I/O routines guarantee we can
+     * seek back over looking for the end of the header; otherwise
+     * neither we nor the open routines tried after us could seek back
+     * to the beginning.
+     */
+    if (wth->ispipe)
+        max_read = file_bufsize(wth->fh);
+
     /* Bail if the end of the file is here and it hasn't been determined it's a PEAK file */
     while (!file_eof(wth->fh))
     {
@@ -134,12 +143,17 @@ peak_trc_parse(wtap* wth, peak_trc_state_t* state, int64_t* offset, int* err, ch
 
         ws_debug("%s: Starting parser at offset %" PRIi64 "\n", G_STRFUNC, seek_off);
 
-        if (file_gets(line_buffer, PEAK_TRC_MAX_LINE_SIZE, wth->fh) == NULL)
+        if (seek_off >= max_read)
+            return WTAP_OPEN_NOT_MINE;
+        if (file_gets(line_buffer, (int)MIN(PEAK_TRC_MAX_LINE_SIZE - 1, max_read - seek_off) + 1, wth->fh) == NULL)
         {
             /* Error reading file, bail out */
-            *err = file_error(wth->fh, err_info);
-            if (*err != 0 && *err != WTAP_ERR_SHORT_READ)
+            int read_err = file_error(wth->fh, NULL);
+            if (read_err != 0 && read_err != WTAP_ERR_SHORT_READ)
+            {
+                *err = file_error(wth->fh, err_info);
                 return WTAP_OPEN_ERROR;
+            }
 
             return WTAP_OPEN_NOT_MINE;
         }
@@ -268,6 +282,7 @@ peak_trc_parse(wtap* wth, peak_trc_state_t* state, int64_t* offset, int* err, ch
             if (parts[1] == NULL)
             {
                 /* At this point, the file is probably a PEAK file that is poorly formatted, so bail with an error */
+                *err = WTAP_ERR_BAD_FILE;
                 *err_info = ws_strdup("peak_trc: unable to parse start time");
                 g_strfreev(parts);
                 return WTAP_OPEN_ERROR;
@@ -280,6 +295,7 @@ peak_trc_parse(wtap* wth, peak_trc_state_t* state, int64_t* offset, int* err, ch
             struct tm* start_tm = gmtime(&ts);
             if (start_tm == NULL) // Extremely unlikely
             {
+                *err = WTAP_ERR_BAD_FILE;
                 *err_info = ws_strdup("peak_trc: unable to convert start time");
                 g_strfreev(parts);
                 return WTAP_OPEN_ERROR;
@@ -298,6 +314,7 @@ peak_trc_parse(wtap* wth, peak_trc_state_t* state, int64_t* offset, int* err, ch
             if (parts[1] == NULL)
             {
                 /* At this point, the file is probably a PEAK file that is poorly formatted, so bail with an error */
+                *err = WTAP_ERR_BAD_FILE;
                 *err_info = ws_strdup("peak_trc: unable to parse column definitions");
                 g_strfreev(parts);
                 return WTAP_OPEN_ERROR;
@@ -309,6 +326,7 @@ peak_trc_parse(wtap* wth, peak_trc_state_t* state, int64_t* offset, int* err, ch
             {
                 size_t col_length = strlen(*iter);
                 if (col_length > 1) {
+                    *err = WTAP_ERR_BAD_FILE;
                     *err_info = ws_strdup_printf("peak_trc: unknown column definition in the $COLUMNS line: '%s'", *iter);
                     g_strfreev(columns);
                     g_strfreev(parts);
@@ -362,6 +380,7 @@ peak_trc_parse(wtap* wth, peak_trc_state_t* state, int64_t* offset, int* err, ch
                                   ws_strtoi(end+1, NULL, &millisecond);
                         if (!ok)
                         {
+                            *err = WTAP_ERR_BAD_FILE;
                             *err_info = ws_strdup("peak_trc: unable to parse start time");
                             return WTAP_OPEN_ERROR;
                         }
@@ -821,12 +840,7 @@ static bool peak_trc_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec, int *
     peak_trc_state_t* state = (peak_trc_state_t*)wtap_socketcan_get_private_data(wth);
 
     if (file_seek(wth->random_fh, seek_off, SEEK_SET, err) == -1)
-    {
-        *err      = errno;
-        *err_info = g_strdup(g_strerror(errno));
-
         return false;
-    }
 
     return peak_trc_read_packet(wth, wth->random_fh, state, rec, err, err_info, NULL);
 }
@@ -871,11 +885,7 @@ peak_trc_open(wtap* wth, int* err, char** err_info)
 
     /* Go to the start of the real packet data since header is now done */
     if (file_seek(wth->fh, data_offset, SEEK_SET, err) == -1)
-    {
-        *err = errno;
-        *err_info = g_strdup(g_strerror(errno));
         return WTAP_OPEN_ERROR;
-    }
 
     wtap_set_as_socketcan(wth, peak_trc_file_type_subtype, WTAP_TSPREC_USEC, trc_state, peak_trc_close);
     wth->subtype_read = peak_trc_read;
