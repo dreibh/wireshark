@@ -144,9 +144,23 @@
     <ComponentGroup Id="CG.RadiusDict" Directory="dirRadius">
       <Files Include="$(var.RadiusDictDir)\**" />
     </ComponentGroup>
-    <!-- MIBs -->
+    <!-- MIBs, PIBs, and YANG modules -->
     <ComponentGroup Id="CG.Plugins.SNMP" Directory="dirSnmpMibs">
       <Files Include="$(var.SnmpMibDir)\**" />
+    </ComponentGroup>
+    <ComponentGroup Id="CG.Plugins.SNMP.Pibs" Directory="dirSnmpPibs">
+      <Files Include="$(var.SnmpPibDir)\**" />
+    </ComponentGroup>
+    <ComponentGroup Id="CG.Plugins.SNMP.Yang" Directory="dirSnmpYang">
+      <Files Include="$(var.SnmpYangDir)\**" />
+    </ComponentGroup>
+    <!-- JSON dictionary files -->
+    <ComponentGroup Id="CG.Json" Directory="dirJson">
+      <Files Include="$(var.JsonDir)\**" />
+    </ComponentGroup>
+    <!-- Configuration profiles -->
+    <ComponentGroup Id="CG.Plugins.ConfigurationProfiles" Directory="dirProfiles">
+      <Files Include="$(var.WiresharkProfiles.Dir)\**" />
     </ComponentGroup>
     <!-- The contents of wsug_html_chunked -->
     <ComponentGroup Id="CG.Documentation" Directory="dirUsersGuide">
@@ -338,38 +352,6 @@
         </ComponentGroup>
     </Fragment>
 
-  <!-- Configuration Profiles -->
-  <Fragment>
-    <DirectoryRef Id="dirProfiles">
-      <Directory Id="dirBluetooth" Name="Bluetooth">
-        <Component Id="cmpBluetooth_coloring_rules">
-          <File Id="filBluetooth_coloring_rules" KeyPath="yes" Source="$(var.Profiles.Dir)\Bluetooth\coloring_rules.jsonc" />
-        </Component>
-        <Component Id="cmpBluetooth_preferences">
-          <File Id="filBluetooth_preferences" KeyPath="yes" Source="$(var.Profiles.Dir)\Bluetooth\preferences" />
-        </Component>
-      </Directory>
-      <Directory Id="dirClassic" Name="Classic">
-        <Component Id="cmpClassic_coloring_rules">
-          <File Id="filClassic_coloring_rules" KeyPath="yes" Source="$(var.Profiles.Dir)\Classic\coloring_rules.jsonc" />
-        </Component>
-      </Directory>
-      <Directory Id="dirNoReassembly" Name="No Reassembly">
-        <Component Id="cmpNoReassembly_preferences">
-          <File Id="filNoReassembly_preferences" KeyPath="yes" Source="$(var.Profiles.Dir)\No Reassembly\preferences" />
-        </Component>
-      </Directory>
-    </DirectoryRef>
-  </Fragment>
-  <Fragment>
-    <ComponentGroup Id="CG.Plugins.ConfigurationProfiles">
-      <ComponentRef Id="cmpBluetooth_coloring_rules" />
-      <ComponentRef Id="cmpBluetooth_preferences" />
-      <ComponentRef Id="cmpClassic_coloring_rules" />
-      <ComponentRef Id="cmpNoReassembly_preferences" />
-    </ComponentGroup>
-  </Fragment>
-
   <!-- Editcap -->
   <Fragment>
       <DirectoryRef Id="INSTALLFOLDER">
@@ -556,7 +538,7 @@
   <Fragment>
     <DirectoryRef Id="dirExtcap">
       <Component Id="cmpAndroiddump_exe">
-        <File Id="filAndroiddump_exe" KeyPath="yes" Source="$(var.Extcap.Dir)\androiddump.exe" />
+        <File Id="filAndroiddump_exe" KeyPath="yes" Source="$(var.WiresharkExtcap.Dir)\androiddump.exe" />
       </Component>
     </DirectoryRef>
     <DirectoryRef Id="INSTALLFOLDER">
@@ -576,7 +558,7 @@
   <Fragment>
     <DirectoryRef Id="dirExtcap">
       <Component Id="cmpRandpktdump_exe">
-        <File Id="filRandpktdump_exe" KeyPath="yes" Source="$(var.Extcap.Dir)\randpktdump.exe" />
+        <File Id="filRandpktdump_exe" KeyPath="yes" Source="$(var.WiresharkExtcap.Dir)\randpktdump.exe" />
       </Component>
     </DirectoryRef>
     <DirectoryRef Id="INSTALLFOLDER">
@@ -596,7 +578,7 @@
   <Fragment>
     <DirectoryRef Id="dirExtcap">
       <Component Id="cmpEtwdump_exe">
-        <File Id="filEtwdump_exe" KeyPath="yes" Source="$(var.Extcap.Dir)\etwdump.exe" />
+        <File Id="filEtwdump_exe" KeyPath="yes" Source="$(var.WiresharkExtcap.Dir)\etwdump.exe" />
       </Component>
     </DirectoryRef>
     <DirectoryRef Id="INSTALLFOLDER">
@@ -616,7 +598,7 @@
   <Fragment>
     <DirectoryRef Id="dirExtcap">
       <Component Id="cmpSshdump_exe">
-        <File Id="filSshdump_exe" KeyPath="yes" Source="$(var.Extcap.Dir)\sshdump.exe" />
+        <File Id="filSshdump_exe" KeyPath="yes" Source="$(var.WiresharkExtcap.Dir)\sshdump.exe" />
       </Component>
     </DirectoryRef>
     <DirectoryRef Id="INSTALLFOLDER">
@@ -626,7 +608,7 @@
     </DirectoryRef>
     <DirectoryRef Id="dirExtcap">
       <Component Id="cmpCiscodump_exe">
-        <File Id="filCiscodump_exe" KeyPath="yes" Source="$(var.Extcap.Dir)\Ciscodump.exe" />
+        <File Id="filCiscodump_exe" KeyPath="yes" Source="$(var.WiresharkExtcap.Dir)\Ciscodump.exe" />
       </Component>
     </DirectoryRef>
     <DirectoryRef Id="INSTALLFOLDER">
@@ -636,7 +618,7 @@
     </DirectoryRef>
     <DirectoryRef Id="dirExtcap">
       <Component Id="cmpWifidump_exe">
-        <File Id="filWifidump_exe" KeyPath="yes" Source="$(var.Extcap.Dir)\wifidump.exe" />
+        <File Id="filWifidump_exe" KeyPath="yes" Source="$(var.WiresharkExtcap.Dir)\wifidump.exe" />
       </Component>
     </DirectoryRef>
     <DirectoryRef Id="INSTALLFOLDER">
@@ -660,7 +642,7 @@
   <Fragment>
     <DirectoryRef Id="dirExtcap">
       <Component Id="cmpUdpdump_exe">
-        <File Id="filUdpdump_exe" KeyPath="yes" Source="$(var.Extcap.Dir)\Udpdump.exe" />
+        <File Id="filUdpdump_exe" KeyPath="yes" Source="$(var.WiresharkExtcap.Dir)\Udpdump.exe" />
       </Component>
     </DirectoryRef>
     <DirectoryRef Id="INSTALLFOLDER">

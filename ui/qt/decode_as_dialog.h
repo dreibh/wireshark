@@ -21,6 +21,8 @@
 #include <QAbstractButton>
 
 class QComboBox;
+class CopyFromProfileButton;
+class ProfileInheritComboBox;
 
 namespace Ui {
 class DecodeAsDialog;
@@ -57,6 +59,22 @@ private:
     /** Delegate for rendering and editing rule entries in the view. */
     DecodeAsDelegate* delegate_;
 
+    /** Button copying entries from another profile. */
+    CopyFromProfileButton *copy_button_;
+
+    /** Selects where the entries come from. */
+    ProfileInheritComboBox *inherit_combo_;
+
+    /**
+     * @brief Updates the path label for the selected source of the entries.
+     */
+    void updatePathLabel();
+
+    /**
+     * @brief Updates the buttons for the current row and the source of the entries.
+     */
+    void updateWidgets();
+
     /**
      * @brief Adds a new "Decode As" record to the model.
      * @param copy_from_current True to copy the currently selected record's values, false for a blank record.
@@ -67,6 +85,9 @@ private:
      * @brief Applies the changes made in the dialog to the underlying Wireshark core.
      */
     void applyChanges();
+
+    /** @brief Applies the entries and saves them in the profile, without closing the dialog. @return true on success. */
+    bool saveEntries();
 
     /**
      * @brief Fills the table model with the current "Decode As" rules.
@@ -92,31 +113,36 @@ private slots:
     void copyFromProfile(QString filename);
 
     /**
+     * @brief Slot triggered when another source of the entries is selected.
+     * @param mode The inherit mode.
+     */
+    void inheritModeChanged(profile_inherit_e mode);
+
+    /**
      * @brief Slot triggered when the current item in the tree view changes.
      * @param current The newly selected model index.
      * @param previous The previously selected model index.
      */
-    void on_decodeAsTreeView_currentItemChanged(const QModelIndex &current, const QModelIndex &previous);
 
     /**
      * @brief Slot triggered when the "New" tool button is clicked.
      */
-    void on_newToolButton_clicked();
+    void newClicked();
 
     /**
      * @brief Slot triggered when the "Delete" tool button is clicked.
      */
-    void on_deleteToolButton_clicked();
+    void deleteClicked();
 
     /**
      * @brief Slot triggered when the "Copy" tool button is clicked.
      */
-    void on_copyToolButton_clicked();
+    void copyClicked();
 
     /**
      * @brief Slot triggered when the "Clear" tool button is clicked.
      */
-    void on_clearToolButton_clicked();
+    void clearClicked();
 
     /**
      * @brief Slot triggered when a button in the dialog's button box is clicked.

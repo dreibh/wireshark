@@ -1,4 +1,4 @@
-﻿<Include xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Include xmlns="http://wixtoolset.org/schemas/v4/wxs">
 
   <!-- Basic directory structure -->
   <Fragment><!-- "Special" directory, required for the root drive -->
@@ -9,30 +9,24 @@
       <!-- "Special" directory, required for the Program Files folder -->
       <StandardDirectory Id="$(var.PlatformProgramFilesFolder)">
         <!-- These directories follow the typical hierarchical structure -->
-        <Directory Id="INSTALLFOLDER" Name="$(var.WiresharkName)">
+        <Directory Id="INSTALLFOLDER" Name="$(var.StratosharkName)">
           <Directory Id="dirDtds" Name="dtds" />
           <Directory Id="dirDiameter" Name="diameter" />
           <Directory Id="dirExtcap" Name="extcap" />
-          <Directory Id="dirHelp" Name="help" />
           <Directory Id="dirRadius" Name="radius" />
           <Directory Id="dirPlugins" Name="plugins">
             <Directory Id="dirPluginsVersion" Name="$(var.WiresharkMajorVersion).$(var.WiresharkMinorVersion)">
               <Directory Id="dirPluginsVersionEpan" Name="epan" />
-              <Directory Id="dirPluginsVersionWtap" Name="wiretap" />
-              <Directory Id="dirPluginsVersionCodecs" Name="codecs" />
             </Directory>
+            <Directory Id="dirPluginsFalco" Name="falco" />
           </Directory>
-          <Directory Id="dirUsersGuide" Name="Wireshark User's Guide" />
           <Directory Id="dirProfiles" Name="profiles" />
           <Directory Id="dirSnmp" Name="snmp">
             <Directory Id="dirSnmpMibs" Name="mibs" />
           </Directory>
           <Directory Id="dirTpncp" Name="tpncp" />
           <Directory Id="dirTranslations" Name="translations" />
-          <Directory Id="dirTrdp" Name="trdp" />
-          <Directory Id="dirWimaxasncp" Name="wimaxasncp" />
           <Directory Id="dirProtobuf" Name="protobuf" />
-          <Directory Id="dirQualcomm" Name="qualcomm" />
         </Directory>
       </StandardDirectory>
 

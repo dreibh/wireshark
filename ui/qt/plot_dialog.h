@@ -14,6 +14,8 @@
 #define PLOT_DIALOG_H
 
 #include <config.h>
+
+#include <wsutil/profile_inherit.h>
 #include "plot.h"
 
 #include <ui/qt/models/uat_model.h>
@@ -29,6 +31,7 @@
 #include <vector>
 
 class CopyFromProfileButton;
+class ProfileInheritComboBox;
 class QAbstractButton;
 class QCPAxisRect;
 class QCPGraph;
@@ -427,6 +430,10 @@ private:
     Ui::PlotDialog *ui;                     /**< UI elements generated from the .ui file. */
     QPushButton *copy_bt_;                  /**< "Copy" button in the button box. */
     CopyFromProfileButton *copy_profile_bt_; /**< Button for copying settings from another profile. */
+    ProfileInheritComboBox *inherit_combo_ = nullptr; /**< Selects where the plots come from. */
+
+    /** @brief Updates the buttons for the selected rows and the source of the plots. */
+    void updateInheritWidgets();
 
     // Model and delegate chosen over UatFrame to allow custom button layout.
     UatDelegate *uat_delegate_;     /**< Item delegate providing in-place editors for UAT fields. */
@@ -472,6 +479,12 @@ private slots:
      * @param filename Path of the profile file to import.
      */
     void copyFromProfile(const QString &filename);
+
+    /**
+     * @brief Selects where the plots come from, and saves the selection.
+     * @param mode The inherit mode.
+     */
+    void inheritModeChanged(profile_inherit_e mode);
 
     /** @brief Copy all plot data to the clipboard as CSV text. */
     void copyAsCsvClicked();
@@ -566,17 +579,13 @@ private slots:
     void on_actionGoToPacket_triggered();
 
     /** @brief Add a new default plot row to the UAT. */
-    void on_newToolButton_clicked();
+    void newClicked();
     /** @brief Delete the currently selected plot row from the UAT. */
-    void on_deleteToolButton_clicked();
+    void deleteClicked();
     /** @brief Duplicate the currently selected plot row. */
-    void on_copyToolButton_clicked();
+    void copyClicked();
     /** @brief Remove all plot rows from the UAT. */
-    void on_clearToolButton_clicked();
-    /** @brief Move the selected plot row one position up in the UAT. */
-    void on_moveUpwardsToolButton_clicked();
-    /** @brief Move the selected plot row one position down in the UAT. */
-    void on_moveDownwardsToolButton_clicked();
+    void clearClicked();
 
     /** @brief Open the dialog help page. */
     void on_leftButtonBox_helpRequested();

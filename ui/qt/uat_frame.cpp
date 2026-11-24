@@ -24,6 +24,10 @@
 #include <app/application_flavor.h>
 
 #include <QLineEdit>
+#include <ui/qt/utils/inherit_selection.h>
+#include <ui/qt/utils/hide_overridden_rows.h>
+#include <ui/qt/widgets/list_edit_buttons.h>
+
 #include <QKeyEvent>
 #include <QTreeWidgetItemIterator>
 #include <QUrl>
@@ -39,20 +43,22 @@ UatFrame::UatFrame(QWidget *parent) :
 {
     ui->setupUi(this);
 
-    ui->newToolButton->setIcon(ThemedIcon("list-add"));
-    ui->deleteToolButton->setIcon(ThemedIcon("list-remove"));
-    ui->copyToolButton->setIcon(ThemedIcon("list-copy"));
-    ui->moveUpToolButton->setIcon(ThemedIcon("list-move-up"));
-    ui->moveDownToolButton->setIcon(ThemedIcon("list-move-down"));
-    ui->clearToolButton->setIcon(ThemedIcon("list-clear"));
+    ListEditButtons::ToolTips tool_tips;
+    tool_tips.add = tr("Create a new entry.");
+    tool_tips.remove = tr("Remove the selected entries.");
+    tool_tips.copy = tr("Copy the selected entries.");
+    tool_tips.moveUp = tr("Move the selected entries up.");
+    tool_tips.moveDown = tr("Move the selected entries down.");
+    tool_tips.clear = tr("Clear all entries.");
+    ui->editButtons->setToolTips(tool_tips);
+    connect(ui->editButtons, &ListEditButtons::newClicked, this, &UatFrame::newClicked);
+    connect(ui->editButtons, &ListEditButtons::deleteClicked, this, &UatFrame::deleteClicked);
+    connect(ui->editButtons, &ListEditButtons::copyClicked, this, &UatFrame::copyClicked);
+    connect(ui->editButtons, &ListEditButtons::moveUpClicked, ui->uatTreeView, &RowMoveTreeView::moveSelectedRowsUp);
+    connect(ui->editButtons, &ListEditButtons::moveDownClicked, ui->uatTreeView, &RowMoveTreeView::moveSelectedRowsDown);
+    connect(ui->editButtons, &ListEditButtons::clearClicked, this, &UatFrame::clearClicked);
 
 #ifdef Q_OS_MACOS
-    ui->newToolButton->setAttribute(Qt::WA_MacSmallSize, true);
-    ui->deleteToolButton->setAttribute(Qt::WA_MacSmallSize, true);
-    ui->copyToolButton->setAttribute(Qt::WA_MacSmallSize, true);
-    ui->moveUpToolButton->setAttribute(Qt::WA_MacSmallSize, true);
-    ui->moveDownToolButton->setAttribute(Qt::WA_MacSmallSize, true);
-    ui->clearToolButton->setAttribute(Qt::WA_MacSmallSize, true);
     ui->pathLabel->setAttribute(Qt::WA_MacSmallSize, true);
 #endif
 
@@ -92,31 +98,42 @@ void UatFrame::setUat(epan_uat *uat)
         }
 
         if (uat->from_profile) {
-            ui->copyFromProfileButton->setFilename(uat->filename);
-            connect(ui->copyFromProfileButton, &CopyFromProfileButton::copyProfile, this, &UatFrame::copyFromProfile);
-        }
+            // The dialog shows the button while this page is current
+            if (!copy_button_) {
+                copy_button_ = new CopyFromProfileButton(this);
+                addPageButton(copy_button_);
+                connect(copy_button_, &CopyFromProfileButton::copyProfile, this, &UatFrame::copyFromProfile);
+            }
+            copy_button_->setFilename(uat->filename);
 
-        QString abs_path = gchar_free_to_qstring(uat_get_actual_filename(uat_, false, application_configuration_environment_prefix()));
-        if (abs_path.length() > 0) {
-            ui->pathLabel->setText(abs_path);
-            ui->pathLabel->setUrl(QUrl::fromLocalFile(abs_path).toString());
-            ui->pathLabel->setToolTip(tr("Open ") + uat->filename);
+            // Where the records come from
+            ui->inheritComboBox->setFilename(uat->filename);
+            ui->inheritComboBox->syncMode(uat_get_inherit_mode(uat_));
+            connect(ui->inheritComboBox, &ProfileInheritComboBox::modeChanged, this, &UatFrame::inheritModeChanged);
+            ui->inheritComboBox->setUnsavedChangesCheck([this]() { return uat_model_ && uat_model_->hasUnsavedOwn(); },
+                                                        [this]() { return saveRecords(); });
         } else {
-            ui->pathLabel->setText(uat_->filename);
+            ui->inheritComboBox->setFilename(QString());
         }
-        ui->pathLabel->setEnabled(true);
 
         uat_model_ = new UatModel(NULL, uat);
         uat_delegate_ = new UatDelegate;
         ui->uatTreeView->setModel(uat_model_);
         ui->uatTreeView->setItemDelegate(uat_delegate_);
-        ui->uatTreeView->setSelectionMode(QAbstractItemView::ContiguousSelection);
+
+        if (uat->from_profile) {
+            // Not used records can be hidden, which is not stored
+            addHideNotUsedCheckBox(this, ui->horizontalLayout, ui->inheritComboBox, ui->uatTreeView, uat_model_, uat->enabled_field);
+        }
         resizeColumns();
-        ui->clearToolButton->setEnabled(uat_model_->rowCount() != 0);
+        updatePathLabel();
+        followInheritedProfiles(uat_model_, this, &UatFrame::updatePathLabel);
+        updateWidgets();
 
         connect(uat_model_, &UatModel::dataChanged, this, &UatFrame::modelDataChanged);
         connect(uat_model_, &UatModel::rowsRemoved,this, &UatFrame::modelRowsRemoved);
         connect(uat_model_, &UatModel::modelReset, this, &UatFrame::modelRowsReset);
+        connect(uat_model_, &UatModel::rowsMoved, this, &UatFrame::updateWidgets);
 
         connect(ui->uatTreeView->selectionModel(), &QItemSelectionModel::selectionChanged,
                 this, &UatFrame::uatTreeViewSelectionChanged);
@@ -126,12 +143,55 @@ void UatFrame::setUat(epan_uat *uat)
     ui->uatGroupBox->setTitle(title);
 }
 
+void UatFrame::updatePathLabel()
+{
+    bool own_used =  ui->inheritComboBox->mode() != PROFILE_INHERIT_PARENT_ONLY;
+    QString abs_path = own_used ? gchar_free_to_qstring(uat_get_actual_filename(uat_, false, application_configuration_environment_prefix())) : QString();
+    QString own_text = !own_used ? QString() : abs_path.length() > 0 ? abs_path : QString(uat_->filename);
+
+    ui->inheritComboBox->setPathText(ui->pathLabel, own_text, inheritedProfiles(uat_model_));
+    ui->pathLabel->setUrl(abs_path.length() > 0 ? QUrl::fromLocalFile(abs_path).toString() : QString());
+    ui->pathLabel->setToolTip(abs_path.length() > 0 ? tr("Open ") + uat_->filename : QString());
+    ui->pathLabel->setEnabled(own_used);
+}
+
+void UatFrame::updateWidgets()
+{
+    if (!uat_model_)
+        return;
+
+    QModelIndexList selectedRows = ui->uatTreeView->selectionModel() ?
+                ui->uatTreeView->selectionModel()->selectedRows() : QModelIndexList();
+    InheritSelection sel = inheritSelection(uat_model_, selectedRows, ui->uatTreeView);
+
+    // Inherited entries can be copied into the own entries, but not changed
+    ui->editButtons->setSelection(sel);
+    if (copy_button_) {
+        copy_button_->setOwnEntriesUsed(sel.own_used);
+    }
+}
+
+void UatFrame::inheritModeChanged(profile_inherit_e mode)
+{
+    if (!uat_model_)
+        return;
+
+    QString error;
+    if (!uat_model_->setInheritMode(mode, error)) {
+        report_failure("%s", qPrintable(error));
+    }
+    resizeColumns();
+    updatePathLabel();
+    updateWidgets();
+}
+
 void UatFrame::copyFromProfile(QString filename)
 {
     char *err = NULL;
     if (uat_load(uat_, filename.toUtf8().constData(), application_configuration_environment_prefix(), &err)) {
         uat_->changed = true;
         uat_model_->reloadUat();
+        uat_model_->markOwnChanged();
     } else {
         report_failure("Error while loading %s: %s", uat_->name, err);
         g_free(err);
@@ -139,13 +199,6 @@ void UatFrame::copyFromProfile(QString filename)
         // validation), so the model must follow the records.
         uat_model_->reloadUat();
     }
-}
-
-void UatFrame::showEvent(QShowEvent *)
-{
-#ifndef Q_OS_MACOS
-    ui->copyFromProfileButton->setFixedHeight(ui->copyToolButton->geometry().height());
-#endif
 }
 
 void UatFrame::applyChanges()
@@ -162,15 +215,38 @@ void UatFrame::applyChanges()
     }
 }
 
+bool UatFrame::saveRecords()
+{
+    if (!uat_model_) return true;
+
+    QString error;
+    bool applied = uat_model_->applyChanges(error);
+    if (!error.isEmpty()) {
+        report_failure("%s", qPrintable(error));
+        return false;
+    }
+    if (applied) {
+        applyChanges();
+    }
+    return true;
+}
+
 void UatFrame::acceptChanges()
 {
     if (!uat_model_) return;
 
     QString error;
-    if (uat_model_->applyChanges(error)) {
-        if (!error.isEmpty()) {
-            report_failure("%s", qPrintable(error));
+    bool applied = uat_model_->applyChanges(error);
+    if (!error.isEmpty()) {
+        report_failure("%s", qPrintable(error));
+    } else {
+        // The mode is only kept with the records saved for it
+        QString mode_error;
+        if (!ui->inheritComboBox->saveMode(mode_error)) {
+            report_failure("%s", qPrintable(mode_error));
         }
+    }
+    if (applied) {
         applyChanges();
     }
 }
@@ -198,12 +274,14 @@ void UatFrame::addRecord(bool copy_from_current)
     if (copy_from_current) {
         new_index = uat_model_->copyRow(current);
     }  else {
+        // New records go after the own records, before the inherited records
+        int row = uat_model_->ownRowCount();
         // should not fail, but you never know.
-        if (!uat_model_->insertRows(uat_model_->rowCount(), 1)) {
+        if (!uat_model_->insertRows(row, 1)) {
             qDebug() << "Failed to add a new record";
             return;
         }
-        new_index = uat_model_->index(uat_model_->rowCount() - 1, 0);
+        new_index = uat_model_->index(row, 0);
     }
 
     // due to an EditTrigger, this will also start editing.
@@ -214,31 +292,14 @@ void UatFrame::addRecord(bool copy_from_current)
 
 void UatFrame::uatTreeViewSelectionChanged(const QItemSelection&, const QItemSelection&)
 {
-    QModelIndexList selectedRows = ui->uatTreeView->selectionModel()->selectedRows();
-    qsizetype num_selected = selectedRows.size();
-    if (num_selected > 0) {
-        std::sort(selectedRows.begin(), selectedRows.end());
-        ui->deleteToolButton->setEnabled(true);
-        ui->copyToolButton->setEnabled(true);
-        ui->moveUpToolButton->setEnabled(selectedRows.first().row() > 0);
-        ui->moveDownToolButton->setEnabled(selectedRows.last().row() < uat_model_->rowCount() - 1);
-    } else {
-        ui->deleteToolButton->setEnabled(false);
-        ui->copyToolButton->setEnabled(false);
-        ui->moveUpToolButton->setEnabled(false);
-        ui->moveDownToolButton->setEnabled(false);
-    }
+    updateWidgets();
 }
 
 // Invoked when a different field is selected. Note: when selecting a different
 // field after editing, this event is triggered after modelDataChanged.
 void UatFrame::on_uatTreeView_currentItemChanged(const QModelIndex &current, const QModelIndex &previous)
 {
-    if (current.isValid()) {
-        ui->clearToolButton->setEnabled(true);
-    } else {
-        ui->clearToolButton->setEnabled(false);
-    }
+    updateWidgets();
 
     checkForErrorHint(current, previous);
 }
@@ -257,25 +318,14 @@ void UatFrame::modelRowsRemoved()
 
     // Because currentItemChanged() is called before the row is removed from the model
     // we also need to check for button enabling here.
-    if (current.isValid()) {
-        ui->moveUpToolButton->setEnabled(current.row() != 0);
-        ui->moveDownToolButton->setEnabled(current.row() != (uat_model_->rowCount() - 1));
-    } else {
-        ui->moveUpToolButton->setEnabled(false);
-        ui->moveDownToolButton->setEnabled(false);
-    }
-    ui->clearToolButton->setEnabled(uat_model_->rowCount() != 0);
+    updateWidgets();
 
     checkForErrorHint(current, QModelIndex());
 }
 
 void UatFrame::modelRowsReset()
 {
-    ui->deleteToolButton->setEnabled(false);
-    ui->clearToolButton->setEnabled(uat_model_->rowCount() != 0);
-    ui->copyToolButton->setEnabled(false);
-    ui->moveUpToolButton->setEnabled(false);
-    ui->moveDownToolButton->setEnabled(false);
+    updateWidgets();
 }
 
 // If the current field has errors, show them.
@@ -322,28 +372,25 @@ bool UatFrame::trySetErrorHintFromField(const QModelIndex &index)
     return false;
 }
 
-void UatFrame::on_newToolButton_clicked()
+void UatFrame::newClicked()
 {
     addRecord();
 }
 
-void UatFrame::on_deleteToolButton_clicked()
+void UatFrame::deleteClicked()
 {
     if (uat_model_ == nullptr) {
         return;
     }
 
-    for (const auto &range : ui->uatTreeView->selectionModel()->selection()) {
-        // Each QItemSelectionRange is contiguous
-        if (!range.isEmpty()) {
-            if (!uat_model_->removeRows(range.top(), range.bottom() - range.top() + 1)) {
-                qDebug() << "Failed to remove rows" << range.top() << "to" << range.bottom();
-            }
+    for (int row : rowsLastFirst(ui->uatTreeView->selectionModel()->selectedRows())) {
+        if (!uat_model_->removeRows(row, 1)) {
+            qDebug() << "Failed to remove row" << row;
         }
     }
 }
 
-void UatFrame::on_copyToolButton_clicked()
+void UatFrame::copyClicked()
 {
     if (uat_model_ == nullptr) {
         return;
@@ -370,52 +417,10 @@ void UatFrame::on_copyToolButton_clicked()
 
 }
 
-void UatFrame::on_moveUpToolButton_clicked()
-{
-    if (uat_model_ == nullptr) {
-        return;
-    }
-
-    for (const auto &range : ui->uatTreeView->selectionModel()->selection()) {
-        // Each QItemSelectionRange is contiguous
-        if (!range.isEmpty() && range.top() > 0) {
-            // Swap range of rows with the row above the top
-            if (! uat_model_->moveRows(QModelIndex(), range.top(), range.bottom() - range.top() + 1, QModelIndex(), range.top() - 1)) {
-                qDebug() << "Failed to move up rows" << range.top() << "to" << range.bottom();
-            }
-            // Our moveRows implementation calls begin/endMoveRows(), so
-            // range.top() already has the new row number.
-            ui->moveUpToolButton->setEnabled(range.top() > 0);
-            ui->moveDownToolButton->setEnabled(true);
-        }
-    }
-}
-
-void UatFrame::on_moveDownToolButton_clicked()
-{
-    if (uat_model_ == nullptr) {
-        return;
-    }
-
-    for (const auto &range : ui->uatTreeView->selectionModel()->selection()) {
-        // Each QItemSelectionRange is contiguous
-        if (!range.isEmpty() && range.bottom() + 1 < uat_model_->rowCount()) {
-            // Swap range of rows with the row below the top
-            if (! uat_model_->moveRows(QModelIndex(), range.top(), range.bottom() - range.top() + 1, QModelIndex(), range.bottom() + 1)) {
-                qDebug() << "Failed to move down rows" << range.top() << "to" << range.bottom();
-            }
-            // Our moveRows implementation calls begin/endMoveRows, so
-            // range.bottom() already has the new row number.
-            ui->moveUpToolButton->setEnabled(true);
-            ui->moveDownToolButton->setEnabled(range.bottom() < uat_model_->rowCount() - 1);
-        }
-    }
-}
-
-void UatFrame::on_clearToolButton_clicked()
+void UatFrame::clearClicked()
 {
     if (uat_model_) {
-        uat_model_->clearAll();
+        removeVisibleOwnRows(ui->uatTreeView, uat_model_);
     }
 }
 
@@ -423,8 +428,5 @@ void UatFrame::resizeColumns()
 {
     for (int i = 0; i < uat_model_->columnCount(); i++) {
         ui->uatTreeView->resizeColumnToContents(i);
-        if (i == 0) {
-            ui->uatTreeView->setColumnWidth(i, ui->uatTreeView->columnWidth(i)+ui->uatTreeView->indentation());
-        }
     }
 }

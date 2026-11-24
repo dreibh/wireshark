@@ -11,12 +11,17 @@
 #define UAT_FRAME_H
 
 #include <QFrame>
+#include <QPointer>
+
+#include <wsutil/profile_inherit.h>
 
 #include <ui/qt/geometry_state_dialog.h>
+#include <ui/qt/preferences_page_buttons.h>
 #include <ui/qt/models/uat_model.h>
 #include <ui/qt/models/uat_delegate.h>
 
 class QItemSelection;
+class CopyFromProfileButton;
 
 namespace Ui {
 class UatFrame;
@@ -25,7 +30,7 @@ class UatFrame;
 /**
  * @brief UI frame for editing User Accessible Tables (UAT).
  */
-class UatFrame : public QFrame
+class UatFrame : public QFrame, public PreferencesPageButtons
 {
     Q_OBJECT
 
@@ -52,16 +57,13 @@ public:
      */
     void acceptChanges();
 
+    /** @brief Saves the records without closing the dialog. @return true on success. */
+    bool saveRecords();
+
     /**
      * @brief Rejects and discards the pending changes.
      */
     void rejectChanges();
-
-protected:
-    /**
-     * @brief Handles the show event for the frame.
-     */
-    void showEvent(QShowEvent *) override;
 
 private:
     /** @brief Pointer to the UI object for this frame. */
@@ -75,6 +77,15 @@ private:
 
     /** @brief Pointer to the underlying UAT structure. */
     struct epan_uat *uat_;
+
+    /** @brief Copies the entries from another profile, shown in the dialog's button bar. */
+    QPointer<CopyFromProfileButton> copy_button_;
+
+    /** @brief Updates the path label for the selected source of the records. */
+    void updatePathLabel();
+
+    /** @brief Updates the buttons for the selected rows and the source of the records. */
+    void updateWidgets();
 
     /**
      * @brief Checks and displays an error hint based on item changes.
@@ -146,32 +157,28 @@ private slots:
     /**
      * @brief Handles clicks on the "New" tool button.
      */
-    void on_newToolButton_clicked();
+    void newClicked();
 
     /**
      * @brief Handles clicks on the "Delete" tool button.
      */
-    void on_deleteToolButton_clicked();
+    void deleteClicked();
 
     /**
      * @brief Handles clicks on the "Copy" tool button.
      */
-    void on_copyToolButton_clicked();
-
-    /**
-     * @brief Handles clicks on the "Move Up" tool button.
-     */
-    void on_moveUpToolButton_clicked();
-
-    /**
-     * @brief Handles clicks on the "Move Down" tool button.
-     */
-    void on_moveDownToolButton_clicked();
+    void copyClicked();
 
     /**
      * @brief Handles clicks on the "Clear" tool button.
      */
-    void on_clearToolButton_clicked();
+    void clearClicked();
+
+    /**
+     * @brief Slot triggered when another source of the records is selected.
+     * @param mode The inherit mode.
+     */
+    void inheritModeChanged(profile_inherit_e mode);
 };
 
 #endif // UAT_FRAME_H

@@ -33,6 +33,10 @@
 #include <ui/qt/widgets/qcp_string_legend_item.h>
 #include <ui/qt/widgets/qcp_axis_ticker_si.h>
 #include <ui/qt/widgets/copy_from_profile_button.h>
+#include <ui/qt/utils/hide_overridden_rows.h>
+#include <ui/qt/widgets/profile_inherit_combo_box.h>
+#include <ui/qt/utils/inherit_selection.h>
+#include <ui/qt/widgets/list_edit_buttons.h>
 #include <ui/qt/widgets/wireshark_file_dialog.h>
 #include <ui/qt/main_window.h>
 
@@ -91,6 +95,8 @@ const value_string moving_avg_vs[] = {
 static io_graph_settings_t *iog_settings_;
 static unsigned num_io_graphs_;
 static uat_t *iog_uat_;
+// The configuration file of the graphs
+static const char *const iog_uat_filename_ = "io_graphs";
 // XXX - Multiple UatModels with the same uat can crash if one is
 // edited, because the underlying uat_t* data changes but the
 // record_errors and dirty_records lists do not.
@@ -234,6 +240,21 @@ IOGraphDialog::IOGraphDialog(QWidget &parent, CaptureFile &cf, const char* type_
     datetime_ticker_(new QCPAxisTickerDateTime)
 {
     ui->setupUi(this);
+
+    ListEditButtons::ToolTips tool_tips;
+    tool_tips.add = tr("Add a new graph.");
+    tool_tips.remove = tr("Remove the selected graphs.");
+    tool_tips.copy = tr("Duplicate the selected graphs.");
+    tool_tips.moveUp = tr("Move the selected graphs upwards.");
+    tool_tips.moveDown = tr("Move the selected graphs downwards.");
+    tool_tips.clear = tr("Clear all graphs.");
+    ui->editButtons->setToolTips(tool_tips);
+    connect(ui->editButtons, &ListEditButtons::newClicked, this, &IOGraphDialog::newClicked);
+    connect(ui->editButtons, &ListEditButtons::deleteClicked, this, &IOGraphDialog::deleteClicked);
+    connect(ui->editButtons, &ListEditButtons::copyClicked, this, &IOGraphDialog::copyClicked);
+    connect(ui->editButtons, &ListEditButtons::moveUpClicked, ui->graphUat, &RowMoveTreeView::moveSelectedRowsUp);
+    connect(ui->editButtons, &ListEditButtons::moveDownClicked, ui->graphUat, &RowMoveTreeView::moveSelectedRowsDown);
+    connect(ui->editButtons, &ListEditButtons::clearClicked, this, &IOGraphDialog::clearClicked);
     ui->hintLabel->setSmallText();
     loadGeometry();
 
@@ -241,31 +262,23 @@ IOGraphDialog::IOGraphDialog(QWidget &parent, CaptureFile &cf, const char* type_
     setAttribute(Qt::WA_DeleteOnClose, true);
     QCustomPlot *iop = ui->ioPlot;
 
-    ui->newToolButton->setIcon(ThemedIcon("list-add"));
-    ui->deleteToolButton->setIcon(ThemedIcon("list-remove"));
-    ui->copyToolButton->setIcon(ThemedIcon("list-copy"));
-    ui->clearToolButton->setIcon(ThemedIcon("list-clear"));
-    ui->moveUpwardsToolButton->setIcon(ThemedIcon("list-move-up"));
-    ui->moveDownwardsToolButton->setIcon(ThemedIcon("list-move-down"));
-
-#ifdef Q_OS_MACOS
-    ui->newToolButton->setAttribute(Qt::WA_MacSmallSize, true);
-    ui->deleteToolButton->setAttribute(Qt::WA_MacSmallSize, true);
-    ui->copyToolButton->setAttribute(Qt::WA_MacSmallSize, true);
-    ui->clearToolButton->setAttribute(Qt::WA_MacSmallSize, true);
-    ui->moveUpwardsToolButton->setAttribute(Qt::WA_MacSmallSize, true);
-    ui->moveDownwardsToolButton->setAttribute(Qt::WA_MacSmallSize, true);
-#endif
-
     QPushButton *save_bt = ui->buttonBox->button(QDialogButtonBox::Save);
     save_bt->setText(tr("Save As…"));
 
     QPushButton *copy_bt = ui->buttonBox->addButton(tr("Copy"), QDialogButtonBox::ActionRole);
     connect (copy_bt, SIGNAL(clicked()), this, SLOT(copyAsCsvClicked()));
 
-    copy_profile_bt_ = new CopyFromProfileButton(this, "io_graphs", tr("Copy graphs from another profile."));
+    copy_profile_bt_ = new CopyFromProfileButton(this, iog_uat_filename_, tr("Copy graphs from another profile."));
     ui->buttonBox->addButton(copy_profile_bt_, QDialogButtonBox::ActionRole);
     connect(copy_profile_bt_, &CopyFromProfileButton::copyProfile, this, &IOGraphDialog::copyFromProfile);
+
+    // Where the graphs come from, next to the button clearing them
+    inherit_combo_ = ProfileInheritComboBox::addNextTo(this, ui->horizontalLayout, ui->editButtons, iog_uat_filename_,
+                                                    [this]() { return uat_model_ && uat_model_->hasUnsavedOwn(); },
+                                                    []() { applyChanges(); return true; });
+    if (iog_uat_)
+        inherit_combo_->syncMode(uat_get_inherit_mode(iog_uat_));
+    connect(inherit_combo_, &ProfileInheritComboBox::modeChanged, this, &IOGraphDialog::inheritModeChanged);
 
     QPushButton *close_bt = ui->buttonBox->button(QDialogButtonBox::Close);
     if (close_bt) {
@@ -393,7 +406,7 @@ void IOGraphDialog::initialize(QWidget& parent, uat_field_t* io_graph_fields, QS
                     filterExists = true;
                 }
             }
-        } else {
+        } else if (uat_model_->inheritMode() != PROFILE_INHERIT_PARENT_ONLY) {
             /* No existing graphs, insert default ones */
             insertGraph(true);
             insertGraph(true);
@@ -413,7 +426,7 @@ void IOGraphDialog::initialize(QWidget& parent, uat_field_t* io_graph_fields, QS
                 createIOGraph(i);
             }
         }
-        else {
+        else if (uat_model_->inheritMode() != PROFILE_INHERIT_PARENT_ONLY) {
             /* No existing graphs, insert default ones */
             insertGraph(true);
             insertGraph(true);
@@ -434,7 +447,7 @@ void IOGraphDialog::initialize(QWidget& parent, uat_field_t* io_graph_fields, QS
 
     iop->rescaleAxes();
 
-    ui->clearToolButton->setEnabled(uat_model_->rowCount() != 0);
+    updateInheritWidgets();
 
     ui->splitter->setStretchFactor(0, 95);
     ui->splitter->setStretchFactor(1, 5);
@@ -471,6 +484,41 @@ IOGraphDialog::~IOGraphDialog()
     ui = NULL;
 }
 
+void IOGraphDialog::updateInheritWidgets()
+{
+    if (uat_model_ == nullptr)
+        return;
+
+    QModelIndexList selectedRows = ui->graphUat->selectionModel() ?
+                ui->graphUat->selectionModel()->selectedRows() : QModelIndexList();
+    InheritSelection sel = inheritSelection(uat_model_.data(), selectedRows, ui->graphUat);
+
+    // Inherited entries can be copied into the own entries, but not changed
+    ui->editButtons->setSelection(sel);
+    if (copy_profile_bt_) {
+        copy_profile_bt_->setEnabled(sel.own_used && copy_profile_bt_->menu() != nullptr);
+        ProfileInheritComboBox::setOwnEntriesUsed(copy_profile_bt_, sel.own_used);
+    }
+}
+
+void IOGraphDialog::inheritModeChanged(profile_inherit_e mode)
+{
+    if (!uat_model_)
+        return;
+
+    // This dialog saves as it goes, so the selection is saved as well,
+    // also if reading the inherited records failed
+    QString error;
+    if (!uat_model_->setInheritMode(mode, error)) {
+        report_failure("%s", qPrintable(error));
+    }
+    error.clear();
+    if (!inherit_combo_->saveMode(error)) {
+        report_failure("%s", qPrintable(error));
+    }
+    updateInheritWidgets();
+}
+
 void IOGraphDialog::copyFromProfile(QString filename)
 {
     if (uat_model_ == nullptr)
@@ -483,6 +531,7 @@ void IOGraphDialog::copyFromProfile(QString filename)
     // just add the new rows instead of resetting the information.
     if (uat_load(iog_uat_, filename.toUtf8().constData(), application_configuration_environment_prefix(), &err)) {
         iog_uat_->changed = true;
+        uat_model_->markOwnChanged();
         // uat_load calls the post update cb, which reloads the Uat.
         //uat_model_->reloadUat();
     } else {
@@ -519,6 +568,9 @@ void IOGraphDialog::addGraph(bool checked, bool asAOT, QString name, QString dfi
 {
     if (uat_model_ == nullptr)
         return;
+
+        // A requested graph is an own one, which needs the own graphs in use
+    inherit_combo_->useOwnEntries();
 
     const QColor color = newGraphColor();
     QVariantList newRowData;
@@ -582,7 +634,8 @@ void IOGraphDialog::addGraph(bool copy_from_current)
         ui->graphUat->setCurrentIndex(copyIdx);
     } else {
         insertGraph(false);
-        copyIdx = uat_model_->index(uat_model_->rowCount() - 1, 0);
+        // The new graph is the last own graph, before the inherited graphs
+        copyIdx = uat_model_->index(uat_model_->ownRowCount() - 1, 0);
     }
 
     ui->graphUat->setCurrentIndex(copyIdx);
@@ -722,9 +775,10 @@ void IOGraphDialog::reloadFields()
 void IOGraphDialog::captureFileClosing()
 {
     // The other buttons will be disabled when the model is set to null.
-    ui->newToolButton->setEnabled(false);
+    ui->editButtons->newButton()->setEnabled(false);
     ui->intervalComboBox->setEnabled(false);
     copy_profile_bt_->setEnabled(false);
+    inherit_combo_->setEnabled(false);
     if (uat_model_) {
         applyChanges();
         disconnect(uat_model_, nullptr, this, nullptr);
@@ -951,6 +1005,9 @@ IOGraph *IOGraphDialog::currentActiveGraph() const
 bool IOGraphDialog::graphIsEnabled(int row) const
 {
     if (uat_model_) {
+        // An inherited graph is always enabled, and shows a lock instead of the check box
+        if (uat_model_->isInherited(row))
+            return true;
         Qt::CheckState state = static_cast<Qt::CheckState>(uat_model_->data(uat_model_->index(row, colEnabled), Qt::CheckStateRole).toInt());
         return state == Qt::Checked;
     } else {
@@ -1444,7 +1501,7 @@ void IOGraphDialog::loadProfileGraphs(uat_field_t* io_graph_fields)
     if (iog_uat_ == NULL) {
         iog_uat_ = uat_new("I/O Graphs",
                            sizeof(io_graph_settings_t),
-                           "io_graphs",
+                           iog_uat_filename_,
                            true,
                            &iog_settings_,
                            &num_io_graphs_,
@@ -1458,6 +1515,12 @@ void IOGraphDialog::loadProfileGraphs(uat_field_t* io_graph_fields)
                            io_graph_fields);
 
         uat_set_default_values(iog_uat_, iog_uat_defaults_);
+
+        // A graph from a parent profile is identified by its name, and is
+        // not inherited if disabled there
+        const unsigned key_fields[] = { colName };
+        uat_set_key_fields(iog_uat_, key_fields, 1);
+        uat_set_enabled_field(iog_uat_, colEnabled);
 
         char* err = NULL;
         if (!uat_load(iog_uat_, NULL, application_configuration_environment_prefix(), &err)) {
@@ -1483,7 +1546,9 @@ void IOGraphDialog::loadProfileGraphs(uat_field_t* io_graph_fields)
     uat_delegate_ = new UatDelegate(ui->graphUat);
     ui->graphUat->setModel(uat_model_);
     ui->graphUat->setItemDelegate(uat_delegate_);
-    ui->graphUat->setSelectionMode(QAbstractItemView::ContiguousSelection);
+
+    // Not used graphs can be hidden, which is not stored
+    addHideNotUsedCheckBox(this, ui->horizontalLayout, inherit_combo_, ui->graphUat, uat_model_.data(), colEnabled);
 
     ui->graphUat->setHeader(new ResizeHeaderView(Qt::Horizontal, ui->graphUat));
 
@@ -1499,6 +1564,7 @@ void IOGraphDialog::loadProfileGraphs(uat_field_t* io_graph_fields)
     connect(uat_model_, &UatModel::rowsInserted, this, &IOGraphDialog::modelRowsInserted);
     connect(uat_model_, &UatModel::rowsRemoved, this, &IOGraphDialog::modelRowsRemoved);
     connect(uat_model_, &UatModel::rowsMoved, this, &IOGraphDialog::modelRowsMoved);
+    connect(uat_model_, &UatModel::rowsMoved, this, &IOGraphDialog::updateInheritWidgets);
 
     connect(ui->graphUat->selectionModel(), &QItemSelectionModel::selectionChanged, this, &IOGraphDialog::graphUatSelectionChanged);
 }
@@ -1547,6 +1613,10 @@ void IOGraphDialog::on_intervalComboBox_currentIndexChanged(int)
 
 void IOGraphDialog::modelRowsReset()
 {
+    // The model is shared with other I/O Graph dialogs, which may change the mode
+    if (inherit_combo_ && uat_model_)
+        inherit_combo_->syncMode(uat_model_->inheritMode());
+
     foreach(IOGraph* iog, ioGraphs_) {
         delete iog;
     }
@@ -1555,9 +1625,7 @@ void IOGraphDialog::modelRowsReset()
     for (int i = 0; i < uat_model_->rowCount(); i++) {
         createIOGraph(i);
     }
-    ui->deleteToolButton->setEnabled(false);
-    ui->copyToolButton->setEnabled(false);
-    ui->clearToolButton->setEnabled(uat_model_->rowCount() != 0);
+    updateInheritWidgets();
 }
 
 void IOGraphDialog::modelRowsInserted(const QModelIndex &, int first, int last)
@@ -1608,34 +1676,19 @@ void IOGraphDialog::modelRowsMoved(const QModelIndex &source, int sourceStart, i
 
 void IOGraphDialog::graphUatSelectionChanged(const QItemSelection&, const QItemSelection&)
 {
-    QModelIndexList selectedRows = ui->graphUat->selectionModel()->selectedRows();
-    qsizetype num_selected = selectedRows.size();
-    if (num_selected > 0) {
-        std::sort(selectedRows.begin(), selectedRows.end());
-        ui->deleteToolButton->setEnabled(true);
-        ui->copyToolButton->setEnabled(true);
-        ui->moveUpwardsToolButton->setEnabled(selectedRows.first().row() > 0);
-        ui->moveDownwardsToolButton->setEnabled(selectedRows.last().row() < uat_model_->rowCount() - 1);
-    } else {
-        ui->deleteToolButton->setEnabled(false);
-        ui->copyToolButton->setEnabled(false);
-        ui->moveUpwardsToolButton->setEnabled(false);
-        ui->moveDownwardsToolButton->setEnabled(false);
-    }
+    updateInheritWidgets();
 }
 
 void IOGraphDialog::on_graphUat_currentItemChanged(const QModelIndex &current, const QModelIndex&)
 {
+    updateInheritWidgets();
     if (current.isValid()) {
-        ui->clearToolButton->setEnabled(true);
         if (graphIsEnabled(current.row())) {
             // Try to set the tracer to the new current graph.
             // If it's not enabled, don't try to switch from the
             // old graph to the one in the first row.
             getGraphInfo();
         }
-    } else {
-        ui->clearToolButton->setEnabled(false);
     }
 }
 
@@ -1664,23 +1717,20 @@ void IOGraphDialog::modelDataChanged(const QModelIndex &topLeft, const QModelInd
     }
 }
 
-void IOGraphDialog::on_newToolButton_clicked()
+void IOGraphDialog::newClicked()
 {
     addGraph();
 }
 
-void IOGraphDialog::on_deleteToolButton_clicked()
+void IOGraphDialog::deleteClicked()
 {
     if (uat_model_ == nullptr) {
         return;
     }
 
-    for (const auto &range : ui->graphUat->selectionModel()->selection()) {
-        // Each QItemSelectionRange is contiguous
-        if (!range.isEmpty()) {
-            if (!uat_model_->removeRows(range.top(), range.bottom() - range.top() + 1)) {
-                qDebug() << "Failed to remove rows" << range.top() << "to" << range.bottom();
-            }
+    for (int row : rowsLastFirst(ui->graphUat->selectionModel()->selectedRows())) {
+        if (!uat_model_->removeRows(row, 1)) {
+            qDebug() << "Failed to remove row" << row;
         }
     }
 
@@ -1689,7 +1739,7 @@ void IOGraphDialog::on_deleteToolButton_clicked()
     updateHint();
 }
 
-void IOGraphDialog::on_copyToolButton_clicked()
+void IOGraphDialog::copyClicked()
 {
     if (uat_model_ == nullptr) {
         return;
@@ -1712,56 +1762,14 @@ void IOGraphDialog::on_copyToolButton_clicked()
     }
 }
 
-void IOGraphDialog::on_clearToolButton_clicked()
+void IOGraphDialog::clearClicked()
 {
     if (uat_model_) {
-        uat_model_->clearAll();
+        removeVisibleOwnRows(ui->graphUat, uat_model_.data());
     }
 
     hint_err_.clear();
     updateHint();
-}
-
-void IOGraphDialog::on_moveUpwardsToolButton_clicked()
-{
-    if (uat_model_ == nullptr) {
-        return;
-    }
-
-    for (const auto &range : ui->graphUat->selectionModel()->selection()) {
-        // Each QItemSelectionRange is contiguous
-        if (!range.isEmpty() && range.top() > 0) {
-            // Swap range of rows with the row above the top
-            if (! uat_model_->moveRows(QModelIndex(), range.top(), range.bottom() - range.top() + 1, QModelIndex(), range.top() - 1)) {
-                qDebug() << "Failed to move up rows" << range.top() << "to" << range.bottom();
-            }
-            // Our moveRows implementation calls begin/endMoveRows(), so
-            // range.top() already has the new row number.
-            ui->moveUpwardsToolButton->setEnabled(range.top() > 0);
-            ui->moveDownwardsToolButton->setEnabled(true);
-        }
-    }
-}
-
-void IOGraphDialog::on_moveDownwardsToolButton_clicked()
-{
-    if (uat_model_ == nullptr) {
-        return;
-    }
-
-    for (const auto &range : ui->graphUat->selectionModel()->selection()) {
-        // Each QItemSelectionRange is contiguous
-        if (!range.isEmpty() && range.bottom() + 1 < uat_model_->rowCount()) {
-            // Swap range of rows with the row below the top
-            if (! uat_model_->moveRows(QModelIndex(), range.top(), range.bottom() - range.top() + 1, QModelIndex(), range.bottom() + 1)) {
-                qDebug() << "Failed to move down rows" << range.top() << "to" << range.bottom();
-            }
-            // Our moveRows implementation calls begin/endMoveRows, so
-            // range.bottom() already has the new row number.
-            ui->moveUpwardsToolButton->setEnabled(true);
-            ui->moveDownwardsToolButton->setEnabled(range.bottom() < uat_model_->rowCount() - 1);
-        }
-    }
 }
 
 void IOGraphDialog::on_dragRadioButton_toggled(bool checked)

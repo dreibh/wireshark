@@ -27,10 +27,15 @@
 #include "ui/qt/utils/qt_ui_utils.h"
 #include <ui/qt/utils/themes/themed_icon.h>
 #include "ui/qt/widgets/copy_from_profile_button.h"
+#include "ui/qt/widgets/profile_inherit_combo_box.h"
+#include "ui/qt/utils/inherit_selection.h"
+#include <ui/qt/utils/hide_overridden_rows.h>
+#include <ui/qt/widgets/list_edit_buttons.h>
 #include "ui/qt/widgets/wireshark_file_dialog.h"
 
 #include <QAbstractButton>
 #include <QPushButton>
+#include <QSet>
 #include <QUrl>
 
 TaggingRulesDialog::TaggingRulesDialog(QWidget *parent) :
@@ -38,11 +43,28 @@ TaggingRulesDialog::TaggingRulesDialog(QWidget *parent) :
     ui(new Ui::TaggingRulesDialog),
     import_button_(nullptr),
     export_button_(nullptr),
+    copy_button_(nullptr),
+    inherit_combo_(nullptr),
     profilePath_(),
     tagRuleModel_(this),
     tagRuleDelegate_(this)
 {
     ui->setupUi(this);
+
+    ListEditButtons::ToolTips tool_tips;
+    tool_tips.add = tr("Add a new tagging rule.");
+    tool_tips.remove = tr("Delete the selected tagging rules.");
+    tool_tips.copy = tr("Duplicate this tagging rule.");
+    tool_tips.moveUp = tr("Move the selected tagging rules up.");
+    tool_tips.moveDown = tr("Move the selected tagging rules down.");
+    tool_tips.clear = tr("Clear all tagging rules.");
+    ui->editButtons->setToolTips(tool_tips);
+    connect(ui->editButtons, &ListEditButtons::newClicked, this, &TaggingRulesDialog::newClicked);
+    connect(ui->editButtons, &ListEditButtons::deleteClicked, this, &TaggingRulesDialog::deleteClicked);
+    connect(ui->editButtons, &ListEditButtons::copyClicked, this, &TaggingRulesDialog::copyClicked);
+    connect(ui->editButtons, &ListEditButtons::clearClicked, this, &TaggingRulesDialog::clearClicked);
+    connect(ui->editButtons, &ListEditButtons::moveUpClicked, ui->taggingRulesTreeView, &RowMoveTreeView::moveSelectedRowsUp);
+    connect(ui->editButtons, &ListEditButtons::moveDownClicked, ui->taggingRulesTreeView, &RowMoveTreeView::moveSelectedRowsDown);
     ui->buttonBox->button(QDialogButtonBox::Help)->setFocusPolicy(Qt::NoFocus);
     if (parent) loadGeometry(parent->width() * 2 / 3, parent->height() * 4 / 5);
 
@@ -50,22 +72,12 @@ TaggingRulesDialog::TaggingRulesDialog(QWidget *parent) :
 
     ui->taggingRulesTreeView->setModel(&tagRuleModel_);
     ui->taggingRulesTreeView->setItemDelegate(&tagRuleDelegate_);
-    ui->taggingRulesTreeView->viewport()->setAcceptDrops(true);
 
     for (int i = 0; i < tagRuleModel_.columnCount(); i++) {
         ui->taggingRulesTreeView->resizeColumnToContents(i);
     }
 
-    ui->newToolButton->setIcon(ThemedIcon("list-add"));
-    ui->deleteToolButton->setIcon(ThemedIcon("list-remove"));
-    ui->copyToolButton->setIcon(ThemedIcon("list-copy"));
-    ui->clearToolButton->setIcon(ThemedIcon("list-clear"));
-
 #ifdef Q_OS_MACOS
-    ui->newToolButton->setAttribute(Qt::WA_MacSmallSize, true);
-    ui->deleteToolButton->setAttribute(Qt::WA_MacSmallSize, true);
-    ui->copyToolButton->setAttribute(Qt::WA_MacSmallSize, true);
-    ui->clearToolButton->setAttribute(Qt::WA_MacSmallSize, true);
     ui->pathLabel->setAttribute(Qt::WA_MacSmallSize, true);
 #endif
 
@@ -76,7 +88,17 @@ TaggingRulesDialog::TaggingRulesDialog(QWidget *parent) :
     connect(ui->taggingRulesTreeView, &QTreeView::clicked, this, &TaggingRulesDialog::treeItemClicked);
     connect(&tagRuleModel_, &TaggingRulesModel::rowsInserted, this, &TaggingRulesDialog::rowCountChanged);
     connect(&tagRuleModel_, &TaggingRulesModel::rowsRemoved, this, &TaggingRulesDialog::rowCountChanged);
-    rowCountChanged();
+    connect(&tagRuleModel_, &TaggingRulesModel::rowsMoved, this, &TaggingRulesDialog::updateWidgets);
+    connect(&tagRuleModel_, &TaggingRulesModel::modelReset, this, &TaggingRulesDialog::rowCountChanged);
+
+    // Where the rules come from, next to the button clearing them
+    inherit_combo_ = ProfileInheritComboBox::addNextTo(this, ui->horizontalLayout, ui->editButtons, TAGRULES_FILE_NAME,
+                                                    [this]() { return tagRuleModel_.hasUnsavedOwn(); },
+                                                    [this]() { return saveRules(); });
+    connect(inherit_combo_, &ProfileInheritComboBox::modeChanged, this, &TaggingRulesDialog::inheritModeChanged);
+
+    // Not used entries can be hidden, which is not stored
+    addHideNotUsedCheckBox(this, ui->horizontalLayout, inherit_combo_, ui->taggingRulesTreeView, &tagRuleModel_);
 
     // Load prefs and wire up the prefs widgets.
     originalPrefs_ = tag_rules_get_prefs();
@@ -118,10 +140,10 @@ TaggingRulesDialog::TaggingRulesDialog(QWidget *parent) :
     export_button_ = ui->buttonBox->addButton(tr("Export…"), QDialogButtonBox::ApplyRole);
     export_button_->setToolTip(tr("Save rules to a file."));
 
-    CopyFromProfileButton *copy_button = new CopyFromProfileButton(this, TAGRULES_FILE_NAME,
-                                                                   tr("Copy tagging rules from another profile."));
-    ui->buttonBox->addButton(copy_button, QDialogButtonBox::ActionRole);
-    connect(copy_button, &CopyFromProfileButton::copyProfile, this, &TaggingRulesDialog::copyFromProfile);
+    copy_button_ = new CopyFromProfileButton(this, TAGRULES_FILE_NAME,
+                                             tr("Copy tagging rules from another profile."));
+    ui->buttonBox->addButton(copy_button_, QDialogButtonBox::ActionRole);
+    connect(copy_button_, &CopyFromProfileButton::copyProfile, this, &TaggingRulesDialog::copyFromProfile);
 
     // Initial path: editing the current active profile's file only
     char *pp = get_persconffile_path(TAGRULES_FILE_NAME, true,
@@ -135,15 +157,9 @@ TaggingRulesDialog::TaggingRulesDialog(QWidget *parent) :
         tagRuleModel_.loadFromPath(profilePath_, err);
     }
 
-    if (file_exists(profilePath_.toUtf8().constData())) {
-        ui->pathLabel->setText(profilePath_);
-        ui->pathLabel->setUrl(QUrl::fromLocalFile(profilePath_).toString());
-        ui->pathLabel->setToolTip(tr("Open ") + TAGRULES_FILE_NAME);
-        ui->pathLabel->setEnabled(true);
-    } else {
-        ui->pathLabel->setText(tr("(no tagrules.jsonc file yet — will be created on save)"));
-        ui->pathLabel->setEnabled(false);
-    }
+    updatePathLabel();
+    followInheritedProfiles(&tagRuleModel_, this, &TaggingRulesDialog::updatePathLabel);
+    updateWidgets();
 
     ui->taggingRulesTreeView->setCurrentIndex(QModelIndex());
     updateHint();
@@ -174,24 +190,56 @@ void TaggingRulesDialog::copyFromProfile(QString filename)
 
 void TaggingRulesDialog::rowCountChanged()
 {
-    ui->clearToolButton->setEnabled(tagRuleModel_.rowCount() > 0);
+    updateWidgets();
+}
+
+void TaggingRulesDialog::updatePathLabel()
+{
+    bool own_used = inherit_combo_->mode() != PROFILE_INHERIT_PARENT_ONLY;
+    bool exists = own_used && file_exists(profilePath_.toUtf8().constData());
+    // The hint about a missing file only matters when using the own rules only
+    QString own_text = exists ? profilePath_ :
+                       inherit_combo_->mode() == PROFILE_INHERIT_PROFILE_ONLY ?
+                       tr("(no tagrules.jsonc file yet — will be created on save)") : QString();
+
+    inherit_combo_->setPathText(ui->pathLabel, own_text, inheritedProfiles(&tagRuleModel_));
+    ui->pathLabel->setUrl(exists ? QUrl::fromLocalFile(profilePath_).toString() : QString());
+    ui->pathLabel->setToolTip(exists ? tr("Open ") + TAGRULES_FILE_NAME : QString());
+    ui->pathLabel->setEnabled(exists);
+}
+
+void TaggingRulesDialog::updateWidgets()
+{
+    if (!inherit_combo_)
+        return;
+
+    InheritSelection sel = inheritSelection(&tagRuleModel_, ui->taggingRulesTreeView->selectionModel()->selectedIndexes(), ui->taggingRulesTreeView);
+
+    // Inherited rules can be copied into the own rules, but not changed
+    ui->editButtons->setSelection(sel);
+    if (copy_button_) {
+        copy_button_->setOwnEntriesUsed(sel.own_used);
+    }
+
+    ui->copyToColoringRuleButton->setEnabled(sel.selected_count == 1);
+    ProfileInheritComboBox::setOwnEntriesUsed(import_button_, sel.own_used);
+    if (import_button_)
+        import_button_->setEnabled(sel.own_used);
+}
+
+void TaggingRulesDialog::inheritModeChanged(profile_inherit_e mode)
+{
+    tagRuleModel_.setInheritMode(mode);
+    for (int i = 0; i < tagRuleModel_.columnCount(); i++) {
+        ui->taggingRulesTreeView->resizeColumnToContents(i);
+    }
+    updatePathLabel();
+    updateWidgets();
 }
 
 void TaggingRulesDialog::tagRuleSelectionChanged(const QItemSelection &, const QItemSelection &)
 {
-    QModelIndexList selectedList = ui->taggingRulesTreeView->selectionModel()->selectedIndexes();
-
-    QHash<int, QModelIndex> selectedRows;
-    foreach (const QModelIndex &index, selectedList) {
-        selectedRows.insert(index.row(), index);
-    }
-
-    qsizetype num_selected = selectedRows.count();
-
-    ui->copyToolButton->setEnabled(num_selected == 1);
-    ui->deleteToolButton->setEnabled(num_selected > 0);
-
-    ui->copyToColoringRuleButton->setEnabled(num_selected == 1);
+    updateWidgets();
 }
 
 void TaggingRulesDialog::treeItemClicked(const QModelIndex &index)
@@ -290,53 +338,53 @@ void TaggingRulesDialog::addRule(bool copy_from_current)
     const QModelIndex &current = ui->taggingRulesTreeView->currentIndex();
     if (copy_from_current && !current.isValid()) return;
 
+    /* Take the source values first: a copy of an inherited rule hides that rule */
+    QVariantList src_values;
+    QVariant src_check = Qt::Checked;
+    if (copy_from_current) {
+        for (int col = 0; col < tagRuleModel_.columnCount(); col++) {
+            src_values << tagRuleModel_.data(tagRuleModel_.index(current.row(), col), Qt::EditRole);
+        }
+        /* An inherited rule is always enabled, and shows no check box */
+        if (!tagRuleModel_.isInherited(current.row()))
+            src_check = tagRuleModel_.data(tagRuleModel_.index(current.row(), TaggingRulesModel::colName), Qt::CheckStateRole);
+    }
+
     if (!tagRuleModel_.insertRows(0, 1)) return;
 
     QModelIndex dstName = tagRuleModel_.index(0, TaggingRulesModel::colName);
 
     if (copy_from_current) {
-        /* Copy all editable columns from the source row (now shifted to row+1) */
-        for (int col = 0; col < tagRuleModel_.columnCount(); col++) {
-            QModelIndex srcIdx = tagRuleModel_.index(current.row() + 1, col);
-            QModelIndex dstIdx = tagRuleModel_.index(0, col);
-            tagRuleModel_.setData(dstIdx, tagRuleModel_.data(srcIdx, Qt::EditRole), Qt::EditRole);
+        /* Copy all editable columns from the source row */
+        for (int col = 0; col < src_values.count(); col++) {
+            tagRuleModel_.setData(tagRuleModel_.index(0, col), src_values[col], Qt::EditRole);
         }
-        QModelIndex srcName = tagRuleModel_.index(current.row() + 1, TaggingRulesModel::colName);
-        tagRuleModel_.setData(dstName, tagRuleModel_.data(srcName, Qt::CheckStateRole), Qt::CheckStateRole);
+        tagRuleModel_.setData(dstName, src_check, Qt::CheckStateRole);
     }
 
     ui->taggingRulesTreeView->setCurrentIndex(tagRuleModel_.index(0, 0));
     ui->taggingRulesTreeView->edit(tagRuleModel_.index(0, TaggingRulesModel::colFilter));
 }
 
-void TaggingRulesDialog::on_newToolButton_clicked()
+void TaggingRulesDialog::newClicked()
 {
     addRule(false);
 }
 
-void TaggingRulesDialog::on_deleteToolButton_clicked()
+void TaggingRulesDialog::deleteClicked()
 {
-    QModelIndexList selectedList = ui->taggingRulesTreeView->selectionModel()->selectedIndexes();
-    qsizetype num_selected = selectedList.count() / tagRuleModel_.columnCount();
-    if (num_selected > 0) {
-        std::sort(selectedList.begin(), selectedList.end());
-        for (int i = static_cast<int>(selectedList.count()) - 1; i >= 0; i--) {
-            QModelIndex deleteIndex = selectedList[i];
-            if (deleteIndex.isValid() && deleteIndex.column() == 0) {
-                tagRuleModel_.removeRows(deleteIndex.row(), 1);
-            }
-        }
-    }
+    for (int row : rowsLastFirst(ui->taggingRulesTreeView->selectionModel()->selectedRows()))
+        tagRuleModel_.removeRows(row, 1);
 }
 
-void TaggingRulesDialog::on_copyToolButton_clicked()
+void TaggingRulesDialog::copyClicked()
 {
     addRule(true);
 }
 
-void TaggingRulesDialog::on_clearToolButton_clicked()
+void TaggingRulesDialog::clearClicked()
 {
-    tagRuleModel_.removeRows(0, tagRuleModel_.rowCount());
+    removeVisibleOwnRows(ui->taggingRulesTreeView, &tagRuleModel_);
 }
 
 void TaggingRulesDialog::on_buttonBox_clicked(QAbstractButton *button)
@@ -367,15 +415,38 @@ void TaggingRulesDialog::on_buttonBox_clicked(QAbstractButton *button)
     }
 }
 
+bool TaggingRulesDialog::prefsChanged(const tag_prefs_t &prefs) const
+{
+    return prefs.separator != originalPrefs_.separator || prefs.emoji_size != originalPrefs_.emoji_size ||
+           prefs.link_click != originalPrefs_.link_click;
+}
+
+bool TaggingRulesDialog::saveRules()
+{
+    QString err;
+    tag_prefs_t p = tag_rules_get_prefs();
+
+    if (!tagRuleModel_.writeToPath(profilePath_, &p, prefsChanged(p), err)) {
+        simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK, "%s", err.toUtf8().constData());
+        return false;
+    }
+    return true;
+}
+
 void TaggingRulesDialog::on_buttonBox_accepted()
 {
     QString err;
     tag_prefs_t p = tag_rules_get_prefs();
 
-    if (!tagRuleModel_.writeToPath(profilePath_, &p, err)) {
+    if (!tagRuleModel_.writeToPath(profilePath_, &p, prefsChanged(p), err)) {
         simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK, "%s", err.toUtf8().constData());
         done(QDialog::Rejected);
         return;
+    }
+
+    // The mode is only kept with the rules written for it, and before reloading them
+    if (!inherit_combo_->saveMode(err)) {
+        simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK, "%s", err.toUtf8().constData());
     }
 
     // Reload the active list so packet list picks up changes
@@ -423,11 +494,17 @@ void TaggingRulesDialog::on_copyToColoringRuleButton_clicked()
     QString name   = tagRuleModel_.data(nameIdx,   Qt::DisplayRole).toString();
     QString filter = tagRuleModel_.data(filterIdx, Qt::DisplayRole).toString();
 
-    // Save tagging rules (same as clicking OK)
-    if (!tagRuleModel_.writeTags()) {
-        simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK, "Failed to write tagging rules.");
+    // Save tagging rules (same as clicking OK), for the mode selected here
+    QString err;
+    tag_prefs_t p = tag_rules_get_prefs();
+    if (!tagRuleModel_.writeToPath(profilePath_, &p, prefsChanged(p), err)) {
+        simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK, "%s", err.toUtf8().constData());
         return;
     }
+    if (!inherit_combo_->saveMode(err)) {
+        simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK, "%s", err.toUtf8().constData());
+    }
+    tag_rules_reload();
 
     // Open coloring rules dialog with name and filter pre-filled.
     // Connect its accepted signal to the callback registered by the main window

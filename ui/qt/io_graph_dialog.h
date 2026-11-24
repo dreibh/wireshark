@@ -18,6 +18,7 @@
 #include <epan/uat.h>
 
 #include <wsutil/str_util.h>
+#include <wsutil/profile_inherit.h>
 
 #include <ui/preference_utils.h>
 #include <ui/io_graph_item.h>
@@ -37,6 +38,7 @@ class QRubberBand;
 class QTimer;
 class QAbstractButton;
 class CopyFromProfileButton;
+class ProfileInheritComboBox;
 
 class QCPGraph;
 class QCPItemTracer;
@@ -457,6 +459,10 @@ protected:
 private:
     Ui::IOGraphDialog *ui;
     CopyFromProfileButton *copy_profile_bt_; /**< Button that copies graph settings from another profile. */
+    ProfileInheritComboBox *inherit_combo_ = nullptr; /**< Selects where the graphs come from. */
+
+    /** @brief Updates the buttons for the selected rows and the source of the graphs. */
+    void updateInheritWidgets();
 
     // Model and delegate chosen over UatFrame to allow custom button layout.
     UatDelegate *uat_delegate_;     /**< Item delegate providing in-place editors for UAT fields. */
@@ -569,6 +575,12 @@ private slots:
      */
     void copyFromProfile(QString filename);
 
+    /**
+     * @brief Selects where the graphs come from, and saves the selection.
+     * @param mode The inherit mode.
+     */
+    void inheritModeChanged(profile_inherit_e mode);
+
     /** @brief Refresh enabled/disabled state of all toolbar and dialog widgets. */
     void updateWidgets() override;
 
@@ -671,17 +683,13 @@ private slots:
     void on_automaticUpdateCheckBox_toggled(bool checked);
 
     /** @brief Add a new default graph row to the UAT. */
-    void on_newToolButton_clicked();
+    void newClicked();
     /** @brief Delete the currently selected graph row from the UAT. */
-    void on_deleteToolButton_clicked();
+    void deleteClicked();
     /** @brief Duplicate the currently selected graph row. */
-    void on_copyToolButton_clicked();
+    void copyClicked();
     /** @brief Remove all graph rows from the UAT. */
-    void on_clearToolButton_clicked();
-    /** @brief Move the selected graph row one position up in the UAT. */
-    void on_moveUpwardsToolButton_clicked();
-    /** @brief Move the selected graph row one position down in the UAT. */
-    void on_moveDownwardsToolButton_clicked();
+    void clearClicked();
 
     /**
      * @brief Switch the plot to drag/pan interaction mode.

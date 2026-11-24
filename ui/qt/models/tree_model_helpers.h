@@ -85,6 +85,16 @@ public:
     }
 
     /**
+     * @brief Removes the child item at the specified row without deleting it.
+     * @param row The row index of the child to take.
+     * @return Pointer to the child item, now owned by the caller.
+     */
+    Item* takeChild(int row)
+    {
+        return VariantPointer<Item>::asPtr(childItems_.takeAt(row));
+    }
+
+    /**
      * @brief Retrieves the child item at the specified row.
      * @param row The row index of the child to retrieve.
      * @return Pointer to the child item.
@@ -122,6 +132,12 @@ public:
      * @return Pointer to the parent item.
      */
     Item* parentItem() {return parent_; }
+
+    /**
+     * @brief Sets the parent item, e.g. for a copy of an item of another tree.
+     * @param parent The new parent item.
+     */
+    void setParentItem(Item *parent) { parent_ = parent; }
 
 protected:
     /** Pointer to the parent item. */

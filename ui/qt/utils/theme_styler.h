@@ -63,7 +63,10 @@ public:
      * bezel instead of the square one. The macOS style also gives OK and Cancel
      * buttons a fixed width whatever their font, so on the macOS base style a
      * non-flat push button is widened until its title rect holds the content.
-     * The limits are queried from the base style. On all other styles and
+     * A text-only toolbar button with a menu that does not pop up from a
+     * separate menu button is widened by the menu arrow that
+     * drawComplexControl() draws for it. The limits are queried from the
+     * base style. On all other styles and
      * controls the base result is returned unchanged.
      *
      * @param type The contents type.
@@ -104,6 +107,13 @@ public:
      * Draw a control through the base style, with adjustments on macOS
      * and for the windows11 style.
      *
+     * The native style draws the label of a pressed text-only tool button
+     * in a toolbar with a dark drop shadow and in the menu highlight text
+     * color. Those labels (CE_ToolButtonLabel) are drawn as for a
+     * released button; drawComplexControl() shows the press instead.
+     * drawComplexControl() clears State_On on toolbar buttons, so the
+     * label of a checked button gets State_On back.
+     *
      * The native style erases top toolbars in a main window's unified
      * title and toolbar area to transparent, so the system content
      * border shows instead of the palette. When the active theme sets
@@ -131,6 +141,22 @@ public:
         QPainter *painter, const QWidget *widget = nullptr) const override;
 
     /**
+     * Draw a complex control through the base style. On macOS, the
+     * macOS style draws a tool button in a toolbar without background
+     * unless it is checked, so hover and press show nothing, and it cuts
+     * off the bottom corners of the checked background square. A checked
+     * toolbar button, and an enabled one that is hovered or pressed, is
+     * filled with a translucent window text color in a rect with all four
+     * corners rounded, before the base style draws it with State_On
+     * cleared, so it skips its own checked background. The macOS style
+     * draws the menu arrow of a toolbar button only when the button shows
+     * an icon; for text-only buttons with a menu it is drawn here, in the
+     * same place.
+     */
+    void drawComplexControl(ComplexControl control, const QStyleOptionComplex *option,
+        QPainter *painter, const QWidget *widget = nullptr) const override;
+
+    /**
      * Polish a widget through the base style. On macOS, toolbars also
      * get this style as event filter, so the separator below the last
      * toolbar row moves when a toolbar is shown, hidden or moved.
@@ -145,6 +171,24 @@ public:
     // either this proxy or a QStyleSheetStyle wrapping it, neither of which
     // has a useful objectName().
     static QString baseStyleName();
+
+    /**
+     * Let the menus created in a widget switch submenus as the mouse moves.
+     *
+     * The macOS style keeps an open submenu while the mouse seems to head
+     * toward it, and ignores the other items meanwhile, so moving to a
+     * neighbouring item with a submenu can keep the old submenu for up to a
+     * second. Qt also assumes the submenu is on the trailing side, which makes
+     * this more frequent for a submenu opened on the other side. Menus whose
+     * parent is the widget, or a descendant of it, select the item under the
+     * mouse and open its submenu as on the other styles.
+     *
+     * Qt reads these style hints when a menu is created, so call this before
+     * creating the menus.
+     *
+     * @param widget The widget the menus are created in.
+     */
+    static void setPlainSubMenus(QWidget *widget);
 
     /**
      * Style sheet for a filled push button.

@@ -24,7 +24,11 @@
      </property>
      <layout class="QVBoxLayout" name="uatLayout">
       <item>
-       <widget class="RowMoveTreeView" name="uatTreeView"/>
+       <widget class="RowMoveTreeView" name="uatTreeView">
+        <property name="rootIsDecorated">
+         <bool>false</bool>
+        </property>
+       </widget>
       </item>
       <item>
        <widget class="QLabel" name="hintLabel">
@@ -43,79 +47,13 @@
        </widget>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout" stretch="0,0,0,0,0,0,0,1">
+       <layout class="QHBoxLayout" name="horizontalLayout" stretch="0,0,1">
         <item>
-         <widget class="QToolButton" name="newToolButton">
-          <property name="toolTip">
-           <string>Create a new entry.</string>
-          </property>
-          <property name="text">
-           <string/>
-          </property>
+         <widget class="ListEditButtons" name="editButtons">
          </widget>
         </item>
         <item>
-         <widget class="QToolButton" name="deleteToolButton">
-          <property name="enabled">
-           <bool>false</bool>
-          </property>
-          <property name="toolTip">
-           <string>Remove the selected entry(ies).</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QToolButton" name="copyToolButton">
-          <property name="enabled">
-           <bool>false</bool>
-          </property>
-          <property name="toolTip">
-           <string>Copy the selected entry(ies).</string>
-          </property>
-          <property name="text">
-           <string/>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QToolButton" name="moveUpToolButton">
-          <property name="toolTip">
-           <string>Move the selected entry(ies) up.</string>
-          </property>
-          <property name="text">
-           <string/>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QToolButton" name="moveDownToolButton">
-          <property name="toolTip">
-           <string>Move the selected entry(ies) down.</string>
-          </property>
-          <property name="text">
-           <string/>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QToolButton" name="clearToolButton">
-          <property name="toolTip">
-           <string>Clear all entries.</string>
-          </property>
-          <property name="text">
-           <string/>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="CopyFromProfileButton" name="copyFromProfileButton">
-          <property name="toolTip">
-           <string>Copy entries from another profile.</string>
-          </property>
-          <property name="text">
-           <string>Copy from</string>
-          </property>
-         </widget>
+         <widget class="ProfileInheritComboBox" name="inheritComboBox"/>
         </item>
         <item>
          <widget class="ElidedLabel" name="pathLabel">
@@ -145,6 +83,11 @@
  </widget>
  <customwidgets>
   <customwidget>
+   <class>ListEditButtons</class>
+   <extends>QWidget</extends>
+   <header>widgets/list_edit_buttons.h</header>
+  </customwidget>
+  <customwidget>
    <class>ElidedLabel</class>
    <extends>QLabel</extends>
    <header>widgets/elided_label.h</header>
@@ -155,9 +98,9 @@
    <header>widgets/rowmove_tree_view.h</header>
   </customwidget>
   <customwidget>
-   <class>CopyFromProfileButton</class>
-   <extends>QPushButton</extends>
-   <header>widgets/copy_from_profile_button.h</header>
+   <class>ProfileInheritComboBox</class>
+   <extends>QComboBox</extends>
+   <header>widgets/profile_inherit_combo_box.h</header>
   </customwidget>
  </customwidgets>
  <resources/>

@@ -19,6 +19,8 @@
 #include <QMap>
 
 class QAbstractButton;
+class CopyFromProfileButton;
+class ProfileInheritComboBox;
 
 namespace Ui {
 class ColoringRulesDialog;
@@ -99,22 +101,22 @@ private slots:
     /**
      * @brief Slot triggered when the new rule tool button is clicked.
      */
-    void on_newToolButton_clicked();
+    void newClicked();
 
     /**
      * @brief Slot triggered when the delete rule tool button is clicked.
      */
-    void on_deleteToolButton_clicked();
+    void deleteClicked();
 
     /**
      * @brief Slot triggered when the copy rule tool button is clicked.
      */
-    void on_copyToolButton_clicked();
+    void copyClicked();
 
     /**
      * @brief Slot triggered when the clear tool button is clicked.
      */
-    void on_clearToolButton_clicked();
+    void clearClicked();
 
     /**
      * @brief Slot triggered when a button in the button box is clicked.
@@ -126,6 +128,9 @@ private slots:
      * @brief Slot triggered when the dialog is accepted.
      */
     void on_buttonBox_accepted();
+
+    /** @brief Saves the rules without closing the dialog. @return true on success. */
+    bool saveRules();
 
     /**
      * @brief Slot triggered when help is requested from the button box.
@@ -156,6 +161,12 @@ private slots:
      */
     void treeItemClicked(const QModelIndex &index);
 
+    /**
+     * @brief Slot triggered when another source of the rules is selected.
+     * @param mode The inherit mode.
+     */
+    void inheritModeChanged(profile_inherit_e mode);
+
 private:
     /** Pointer to the generated UI elements. */
     Ui::ColoringRulesDialog *ui;
@@ -165,6 +176,18 @@ private:
 
     /** Pointer to the export push button. */
     QPushButton *export_button_;
+
+    /** Button copying rules from another profile. */
+    CopyFromProfileButton *copy_button_;
+
+    /** Selects where the rules come from. */
+    ProfileInheritComboBox *inherit_combo_;
+
+    /** Updates the path label for the selected source of the rules. */
+    void updatePathLabel();
+
+    /** Updates the buttons for the selected rows and the source of the rules. */
+    void updateWidgets();
 
     /** The model managing the coloring rules. */
     ColoringRulesModel colorRuleModel_;
