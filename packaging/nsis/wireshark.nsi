@@ -1232,6 +1232,11 @@ WriteRegDWORD HKEY_LOCAL_MACHINE "${UNINSTALL_PATH}" "EstimatedSize" "$0"
 SectionEnd
 
 Function .onInit
+  ; Use the 32-bit registry view, where the uninstall key has always been.
+  ; The default view follows the architecture of the installer: 64-bit for
+  ; amd64 installers, such as the ones MSYS2's makensis builds.
+  SetRegView 32
+
   Call PlatformCheck
 
   !insertmacro IsWiresharkRunning
@@ -1385,6 +1390,11 @@ Function .onInit
   !insertmacro INSTALLOPTIONS_EXTRACT "CertificationPage.ini"
   !insertmacro INSTALLOPTIONS_EXTRACT "NpcapPage.ini"
   !insertmacro INSTALLOPTIONS_EXTRACT "USBPcapPage.ini"
+FunctionEnd
+
+Function un.onInit
+  ; The registry view of the installer, which wrote the uninstall key.
+  SetRegView 32
 FunctionEnd
 
 ; ============================================================================
@@ -1576,6 +1586,12 @@ Delete "$INSTDIR\dtd_gen.lua"
 Delete "$INSTDIR\init.lua"
 Delete "$INSTDIR\release-notes.html"
 Delete "$INSTDIR\Wireshark Release Notes.html"
+
+; The shortcuts that the installer created. .onInit checks whether they
+; exist, to keep the user's choices across upgrades, before it runs this
+; uninstaller.
+Delete "$SMPROGRAMS\${PROGRAM_NAME}.lnk"
+Delete "$DESKTOP\${PROGRAM_NAME}.lnk"
 
 RMDir "$INSTDIR\accessible"
 RMDir "$INSTDIR\audio"
