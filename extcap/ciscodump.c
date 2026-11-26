@@ -626,14 +626,14 @@ static int parse_line_ios(uint8_t* packet, unsigned* offset, char* line, int sta
 		struct tm tm;
 		/* Date without msec, with timezone */
 		char* d1 = g_strdup_printf("%s %s %s", *(parts+1), *(parts+3), *(parts+4));
-		/* Date without msec, without timezone */
-		char* d2 = g_strdup_printf("%s %s", *(parts+1), *(parts+4));
 
 		memset(&tm, 0x0, sizeof(struct tm));
 
 		cp = ws_strptime_p(d1, "%H:%M:%S %Z %b %d %Y", &tm);
 		if (!cp || (*cp != '\0')) {
 			/* Time zone parse failed */
+			/* Date without msec, without timezone */
+			char* d2 = g_strdup_printf("%s %s", *(parts+1), *(parts+4));
 			cp = ws_strptime_p(d2, "%H:%M:%S %b %d %Y", &tm);
 			if (!cp || (*cp != '\0')) {
 				/* Time parse failed, use now */
@@ -644,11 +644,13 @@ static int parse_line_ios(uint8_t* packet, unsigned* offset, char* line, int sta
 				tm2 = localtime(&t);
 				memcpy(&tm, tm2, sizeof(struct tm));
 			}
+			g_free(d2);
 		}
 		ws_strtou32(*(parts+2), NULL, pkt_usec);
 		*pkt_usec *= 1000;
 		*pkt_time = mktime(&tm);
 
+		g_free(d1);
 		g_strfreev(parts);
 		return CISCODUMP_PARSER_IN_HEADER;
 	}
@@ -1665,18 +1667,13 @@ static bool run_capture_ios(ssh_channel channel, const char* iface, const char* 
 			goto error;
 		}
 
+		g_free(wscp_str);
 		g_free(cmdline);
 		cmdline = NULL;
 	}
 
-	wscp_cnt = 1;
-	for (str = iface_copy; ; str = NULL) {
-		iface_one = strtok(str, ",");
-		if (iface_one == NULL)
-			break;
-
-		wscp_str = g_strdup_printf("%s_%d", WIRESHARK_CAPTURE_POINT, wscp_cnt);
-		wscp_cnt++;
+	for (int i = 1; i < wscp_cnt; i++) {
+		wscp_str = g_strdup_printf("%s_%d", WIRESHARK_CAPTURE_POINT, i);
 
 		if (ssh_channel_printf(channel, "monitor capture point start %s\n", wscp_str) == EXIT_FAILURE)
 			goto error;
@@ -1687,7 +1684,6 @@ static bool run_capture_ios(ssh_channel channel, const char* iface, const char* 
 		}
 
 		g_free(wscp_str);
-		wscp_str = NULL;
 	}
 
 	g_free(iface_copy);
@@ -2056,13 +2052,18 @@ static bool run_capture_asa(ssh_channel channel, const char* iface, const char* 
 		while((chr = g_strstr_len(start, strlen(start), ",")) != NULL) {
 			chr[0] = '\0';
 			ws_debug("Splitting filter into multiline");
-			if (ssh_channel_printf(channel, "access-list %s %s\n", WIRESHARK_CAPTURE_ACCESSLIST, start) == EXIT_FAILURE)
+			if (ssh_channel_printf(channel, "access-list %s %s\n", WIRESHARK_CAPTURE_ACCESSLIST, start) == EXIT_FAILURE) {
+				g_free(multiline_filter);
 				goto error;
+			}
 			start = chr+1;
 		}
 
-		if (ssh_channel_printf(channel, "access-list %s %s\n", WIRESHARK_CAPTURE_ACCESSLIST, start) == EXIT_FAILURE)
+		if (ssh_channel_printf(channel, "access-list %s %s\n", WIRESHARK_CAPTURE_ACCESSLIST, start) == EXIT_FAILURE) {
+			g_free(multiline_filter);
 			goto error;
+		}
+		g_free(multiline_filter);
 
 		if (ssh_channel_printf(channel, "\nend\n") == EXIT_FAILURE)
 			goto error;
