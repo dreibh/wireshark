@@ -24,8 +24,6 @@
 #include <QBoxLayout>
 #include <QFontMetrics>
 #include <QHash>
-#include <QMessageBox>
-#include <QPushButton>
 #include <QColor>
 #include <QPainter>
 #include <QPixmap>
@@ -35,8 +33,7 @@
 #include <QWheelEvent>
 
 ProfileInheritComboBox::ProfileInheritComboBox(QWidget *parent, const QString &filename) :
-    QComboBox(parent),
-    last_mode_(PROFILE_INHERIT_PROFILE_ONLY)
+    QComboBox(parent)
 {
     addItem(tr("Profile only"), PROFILE_INHERIT_PROFILE_ONLY);
     addItem(tr("Profile and Parent"), PROFILE_INHERIT_PROFILE_AND_PARENT);
@@ -54,12 +51,9 @@ ProfileInheritComboBox::ProfileInheritComboBox(QWidget *parent, const QString &f
 }
 
 ProfileInheritComboBox *ProfileInheritComboBox::addNextTo(QWidget *parent, QBoxLayout *layout, ListEditButtons *edit_buttons,
-                                                          const QString &filename,
-                                                          std::function<bool()> has_unsaved_changes,
-                                                          std::function<bool()> save_changes)
+                                                          const QString &filename)
 {
     ProfileInheritComboBox *combo = new ProfileInheritComboBox(parent, filename);
-    combo->setUnsavedChangesCheck(has_unsaved_changes, save_changes);
     layout->insertWidget(layout->indexOf(edit_buttons) + 1, combo);
     QWidget::setTabOrder(edit_buttons->clearButton(), combo);
     return combo;
@@ -120,7 +114,6 @@ void ProfileInheritComboBox::syncMode(profile_inherit_e mode)
 {
     QSignalBlocker blocker(this);
     setCurrentIndex(findData(mode));
-    last_mode_ = mode;
 }
 
 bool ProfileInheritComboBox::saveMode(QString &err)
@@ -165,12 +158,16 @@ void ProfileInheritComboBox::setPathText(ElidedLabel *label, const QString &own_
         names << QStringLiteral("'%1'").arg(profile);
     QString profiles = names.join(QStringLiteral(", "));
 
+    // Only the own path is linked; the profiles follow as plain text
     if (profiles.isEmpty()) {
         label->setText(own_path);
+        label->setSuffix(QString());
     } else if (mode() == PROFILE_INHERIT_PARENT_ONLY || own_path.isEmpty()) {
-        label->setText(tr("From %1").arg(profiles));
+        label->setText(QString());
+        label->setSuffix(tr("From %1").arg(profiles));
     } else {
-        label->setText(own_path + tr(" + from %1").arg(profiles));
+        label->setText(own_path);
+        label->setSuffix(tr(" + from %1").arg(profiles));
     }
 }
 
@@ -266,13 +263,14 @@ QIcon ProfileInheritComboBox::inheritedPlaceholderIcon()
     return icons.value(size);
 }
 
-QSize ProfileInheritComboBox::inheritedSizeHint(QStyleOptionViewItem opt, QSize size, bool check_box)
+QSize ProfileInheritComboBox::inheritedSizeHint(const QStyleOptionViewItem &option, QSize size, bool check_box)
 {
-    if (!(opt.features & QStyleOptionViewItem::HasDecoration) ||
-        opt.decorationSize.height() > inherited_icon_size()) {
+    if (!(option.features & QStyleOptionViewItem::HasDecoration) ||
+        option.decorationSize.height() > inherited_icon_size()) {
         return size;
     }
 
+    QStyleOptionViewItem opt(option);
     opt.features &= ~QStyleOptionViewItem::HasDecoration;
     if (check_box) {
         opt.features |= QStyleOptionViewItem::HasCheckIndicator;
@@ -321,33 +319,11 @@ void ProfileInheritComboBox::updateToolTips()
                 Qt::ToolTipRole);
     setItemData(findData(PROFILE_INHERIT_PARENT_ONLY),
                 tr("Use only the entries from '%1' and its parents. "
-                   "The entries of this profile are kept, but not used. "
-                   "Changes to them that are not saved are discarded.").arg(parent),
+                   "The entries of this profile are kept, but not used.").arg(parent),
                 Qt::ToolTipRole);
 }
 
 void ProfileInheritComboBox::indexChanged(int)
 {
-    if (mode() == PROFILE_INHERIT_PARENT_ONLY && has_unsaved_ && has_unsaved_()) {
-        // The entries of this profile are dropped, and read again for another mode
-        QMessageBox box(QMessageBox::Question, tr("Parent only"),
-                        tr("The entries of this profile have changes that are not saved. "
-                           "Only the entries of the parent profile are used, and the changes are discarded.%1")
-                        .arg(save_ ? tr("\n\nSave and Continue writes the file now; closing the dialog with Cancel does not undo that.") : QString()),
-                        QMessageBox::NoButton, this);
-        QPushButton *save_button = save_ ? box.addButton(tr("Save and Continue"), QMessageBox::AcceptRole) : nullptr;
-        QPushButton *discard_button = box.addButton(tr("Discard and Continue"), QMessageBox::DestructiveRole);
-        QPushButton *cancel_button = box.addButton(QMessageBox::Cancel);
-        box.setDefaultButton(cancel_button);
-        box.exec();
-
-        QAbstractButton *clicked = box.clickedButton();
-        bool proceed = clicked == discard_button || (clicked == save_button && save_());
-        if (!proceed) {
-            syncMode(last_mode_);
-            return;
-        }
-    }
-    last_mode_ = mode();
     emit modeChanged(mode());
 }

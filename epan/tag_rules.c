@@ -56,7 +56,8 @@
 static GSList *tag_rule_list;
 
 /* Display preferences for the active profile */
-static tag_prefs_t tag_prefs = { '\0', 0, TAG_LINK_CLICK_CTRL };
+#define DEFAULT_TAG_PREFS { '\0', 0, TAG_LINK_CLICK_CTRL }
+static tag_prefs_t tag_prefs = DEFAULT_TAG_PREFS;
 
 tag_prefs_t
 tag_rules_get_prefs(void)
@@ -422,7 +423,7 @@ read_layer_tagrules(const profile_inherit_layer_t *layer, const char *path, cons
     for (GSList *item = layer_list; item; item = g_slist_next(item)) {
         tag_rule_t *rule = (tag_rule_t *)item->data;
 
-        if (profile_inherit_seen_check(seen, rule->rule_name) || rule->disabled) {
+        if (profile_inherit_seen_check(seen, rule->rule_name, rule->filter_text) || rule->disabled) {
             tag_rule_delete(rule);
             continue;
         }
@@ -436,7 +437,7 @@ read_layer_tagrules(const profile_inherit_layer_t *layer, const char *path, cons
 
 /*
  * Read the rules inherited from the parent profile layers, nearest parent
- * first, appending them to *list. A rule is skipped if its name
+ * first, appending them to *list. A rule is skipped if its name or filter
  * was seen in a nearer profile, or if it is disabled. A disabled rule
  * still hides the same rule from profiles further up. Rules duplicating a
  * rule in own_list, which may be NULL, are not inherited.
@@ -450,7 +451,7 @@ read_inherited_tagrules(profile_inherit_e mode, GSList *own_list, GSList **list)
     /* The profile's own rules come first, and win over duplicates from parents */
     for (GSList *item = own_list; item; item = g_slist_next(item)) {
         const tag_rule_t *rule = (const tag_rule_t *)item->data;
-        profile_inherit_seen_check(seen, rule->rule_name);
+        profile_inherit_seen_check(seen, rule->rule_name, rule->filter_text);
     }
     profile_inherit_seen_next(seen);
 
@@ -479,6 +480,8 @@ tag_rules_init(void)
     profile_inherit_e mode = profile_get_inherit(NULL, NULL, TAGRULES_FILE_NAME);
 
     tag_rule_list_delete(&tag_rule_list);
+    /* A profile without the preferences uses the defaults */
+    tag_prefs = (tag_prefs_t)DEFAULT_TAG_PREFS;
 
     /* Load current-profile rules from the profile directory */
     path = get_persconffile_path(TAGRULES_FILE_NAME, true, NULL);

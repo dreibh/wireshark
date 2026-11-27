@@ -141,8 +141,8 @@ void FilterListModel::loadOwn()
     }
 
     if (inherit_mode_ == PROFILE_INHERIT_PARENT_ONLY) {
-        // The own filters are not in use
-        qDeleteAll(rules);
+        // The own filters are not in use, but are kept and written as they are
+        hidden_own_rules_ << rules;
     } else {
         for (FilterListItem *rule : rules) {
             rule->setParentItem(root_);
@@ -159,6 +159,8 @@ void FilterListModel::reload()
     beginResetModel();
     delete root_;
     root_ = new FilterListItem(QString(), QString(), nullptr);
+    qDeleteAll(hidden_own_rules_);
+    hidden_own_rules_.clear();
     qDeleteAll(default_rules_);
     default_rules_.clear();
     loadOwn();
@@ -183,6 +185,7 @@ FilterListModel::FilterListType FilterListModel::filterType() const
 
 /* The data of profile_inherit_read_layers() reading the filters of the parent profiles */
 struct FilterListReadLayer {
+    bool macros;
     QList<FilterListItem *> rules;
 };
 
@@ -200,8 +203,9 @@ filter_list_read_layer(const profile_inherit_layer_t *layer, const char *path, c
 
     for (const FilterListModel::FilterListValue &value : values) {
         QByteArray name = value.name.toUtf8();
+        QByteArray expression = value.expression.toUtf8();
         // A macro is found by its name, a filter also by its expression
-        if (profile_inherit_seen_check(seen, name.constData()))
+        if (profile_inherit_seen_check(seen, name.constData(), data->macros ? NULL : expression.constData()))
             continue;
         data->rules << new FilterListItem(value.name, value.expression, nullptr, QString::fromUtf8(layer->source));
     }
@@ -213,6 +217,7 @@ QList<FilterListItem *> FilterListModel::readInherited(profile_inherit_e mode)
     // The own filters are not seen here: an own filter hides an inherited
     // filter only while it is there, see refreshInherited()
     FilterListReadLayer data;
+    data.macros = type_ == DisplayMacro;
     profile_inherit_seen_t *seen = profile_inherit_seen_new();
     char *err = NULL;
     if (!profile_inherit_read_layers(application_configuration_environment_prefix(), fileName(type_), NULL, true,
@@ -221,17 +226,6 @@ QList<FilterListItem *> FilterListModel::readInherited(profile_inherit_e mode)
     }
     profile_inherit_seen_free(seen);
     return data.rules;
-}
-
-QList<FilterListItem *> FilterListModel::readOwnRows()
-{
-    QList<FilterListItem *> rules;
-    QString path = gchar_free_to_qstring(get_persconffile_path(fileName(type_), true, application_configuration_environment_prefix()));
-    if (path.length() > 0 && QFileInfo::exists(path)) {
-        for (const FilterListValue &value : readFile(path))
-            rules << new FilterListItem(value.name, value.expression, nullptr);
-    }
-    return rules;
 }
 
 void FilterListModel::leavingInheritMode(profile_inherit_e mode)
@@ -253,6 +247,12 @@ void FilterListModel::enteredInheritMode(profile_inherit_e mode)
         own_from_globals_ = true;
         own_edited_ = false;
     }
+}
+
+bool FilterListModel::keyedByFilter() const
+{
+    // Macros are found by their names only
+    return type_ != DisplayMacro;
 }
 
 int FilterListModel::columnCount(const QModelIndex &/* parent */) const
@@ -474,13 +474,15 @@ QString FilterListModel::ownFilePath() const
 
 void FilterListModel::saveList()
 {
-    // The profile's file is left as it is when only the parent's filters are used
-    if (inherit_mode_ == PROFILE_INHERIT_PARENT_ONLY)
-        return;
-
+    // The profile's own filters are kept, but not used, when only the
+    // parent's filters are used. Inherited filters are not written.
     QList<FilterListItem *> rules;
-    for (int row = 0; row < ownRowCount(); row++)
-        rules << root_->child(row);
+    if (inherit_mode_ == PROFILE_INHERIT_PARENT_ONLY) {
+        rules = hidden_own_rules_;
+    } else {
+        for (int row = 0; row < ownRowCount(); row++)
+            rules << root_->child(row);
+    }
 
     QString filename = ownFilePath();
 
@@ -508,7 +510,6 @@ void FilterListModel::saveList()
 
     file.close();
     own_file_exists_ = true;
-    ownSaved();
 }
 
 Qt::DropActions FilterListModel::supportedDropActions() const

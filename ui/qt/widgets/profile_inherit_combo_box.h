@@ -15,7 +15,6 @@
 #include <wsutil/profile_inherit.h>
 
 #include <QComboBox>
-#include <functional>
 
 class ElidedLabel;
 class ListEditButtons;
@@ -52,24 +51,7 @@ public:
      * @return The combo box.
      */
     static ProfileInheritComboBox *addNextTo(QWidget *parent, QBoxLayout *layout, ListEditButtons *edit_buttons,
-                                             const QString &filename,
-                                             std::function<bool()> has_unsaved_changes = nullptr,
-                                             std::function<bool()> save_changes = nullptr);
-
-    /**
-     * @brief Sets how to tell that the entries of this profile have changes not saved.
-     *
-     * "Parent only" drops the entries of this profile, and reads them again for
-     * another mode, so choosing it asks first if there are such changes: to
-     * save them, to discard them, or to keep the mode.
-     * @param has_unsaved_changes Returns true if there are changes not saved.
-     * @param save_changes Saves the changes without closing the dialog and returns true on success; without it the question has no save button.
-     */
-    void setUnsavedChangesCheck(std::function<bool()> has_unsaved_changes, std::function<bool()> save_changes = nullptr)
-    {
-        has_unsaved_ = has_unsaved_changes;
-        save_ = save_changes;
-    }
+                                             const QString &filename);
 
     /**
      * @brief Sets the configuration file name and selects its saved inherit mode.
@@ -184,12 +166,12 @@ public:
      * a row of text only. The height is the one of the item without the icon, or with
      * a check box when the column has check boxes, which the lock replaces.
      * For use in QStyledItemDelegate::sizeHint().
-     * @param opt The style options of the item, set up by QStyledItemDelegate::initStyleOption().
+     * @param option The style options of the item, set up by QStyledItemDelegate::initStyleOption().
      * @param size The size from QStyledItemDelegate::sizeHint().
      * @param check_box True if the column has check boxes, also when no row shows one.
      * @return The size.
      */
-    static QSize inheritedSizeHint(QStyleOptionViewItem opt, QSize size, bool check_box);
+    static QSize inheritedSizeHint(const QStyleOptionViewItem &option, QSize size, bool check_box);
 
     /**
      * @brief The description of an entry inherited from a parent profile, e.g. for its tool tip.
@@ -217,15 +199,6 @@ signals:
 
 private:
     QString filename_;
-
-    /** The mode before the last change, to go back to if the change is not confirmed. */
-    profile_inherit_e last_mode_;
-
-    /** Tells if the entries of this profile have changes not saved. */
-    std::function<bool()> has_unsaved_;
-
-    /** Saves the entries of this profile without closing the dialog. */
-    std::function<bool()> save_;
 
     bool canInherit() const;
     profile_inherit_e savedMode() const;
